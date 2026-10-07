@@ -33,8 +33,8 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
     case 'not-loaded':
       return (
         <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button">
-          <Text style={styles.text}>Part of this area hasn&apos;t loaded</Text>
-          <Text style={styles.action}>Retry</Text>
+          <Text style={styles.text}>Some areas haven&apos;t loaded yet</Text>
+          <Text style={styles.action}>Try again</Text>
         </Pressable>
       );
     case 'location-off':

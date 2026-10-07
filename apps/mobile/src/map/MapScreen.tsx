@@ -71,11 +71,11 @@ const HOUR_MS = 60 * 60 * 1000;
 /** Loaded/not-loaded status is only worked out while the view spans at most this many cells. */
 const MAX_VIEW_CELLS = 400;
 /**
- * Cells the server reports as pending are retried after this delay, up to MAX_PENDING_RETRIES
- * times. The server fills them in the background about every 3.5 s (2 s politeness + the call).
+ * Delays before re-requesting cells the server reports as pending (it fills them in the
+ * background, roughly one Street Library call every 3.5 s). Waiting is normal when zoomed out,
+ * so the app shows "Updating libraries…" throughout and only offers "Try again" after the last.
  */
-const PENDING_RETRY_MS = 4000;
-const MAX_PENDING_RETRIES = 3;
+const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000];
 /** "No libraries here" is only worth saying at street-level zoom. */
 const MIN_EMPTY_AREA_ZOOM = 13;
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
@@ -121,8 +121,12 @@ export default function MapScreen() {
   const regionCellRef = useRef<string | null>(null);
   const inFlightCellsRef = useRef(new Set<string>());
   const retryAttemptsRef = useRef(new Map<string, number>());
+  /** Retries scheduled but not yet sent; counts as "updating" for the status pill. */
+  const [retriesScheduled, setRetriesScheduled] = useState(0);
+  /** Cells that ran out of retries while still pending. */
+  const [gaveUpCells, setGaveUpCells] = useState<Set<string>>(new Set());
   const syncCellsRef = useRef<((database: Db, cells: string[]) => Promise<void>) | null>(null);
-  const syncing = inFlightCount > 0;
+  const syncing = inFlightCount > 0 || retriesScheduled > 0;
 
   const location: LatLng | null = position;
   const locationGranted = permission?.status === 'granted';
@@ -156,13 +160,20 @@ export default function MapScreen() {
       if (updated) setLibraries(await getAllLibraries(database));
       setLoadedCells(await getLoadedCells(database));
       setFailedCells((failed) => (failed && failed.some((c) => cells.includes(c)) ? null : failed));
-      // The server fills a few cells per request (it paces calls to Street Library); retry the
-      // rest shortly, a few times, so a zoomed-out view fills in without the user panning.
+      // The server fills a few cells per request (it paces calls to Street Library); keep
+      // re-requesting the rest with growing gaps so a zoomed-out view fills in by itself.
       const attempts = retryAttemptsRef.current;
-      const retry = pending.filter((c) => (attempts.get(c) ?? 0) < MAX_PENDING_RETRIES);
+      const retry = pending.filter((c) => (attempts.get(c) ?? 0) < PENDING_RETRY_DELAYS_MS.length);
+      const exhausted = pending.filter((c) => (attempts.get(c) ?? 0) >= PENDING_RETRY_DELAYS_MS.length);
+      if (exhausted.length > 0) setGaveUpCells((prev) => new Set([...prev, ...exhausted]));
       if (retry.length > 0) {
+        const delay = PENDING_RETRY_DELAYS_MS[Math.max(...retry.map((c) => attempts.get(c) ?? 0))];
         retry.forEach((c) => attempts.set(c, (attempts.get(c) ?? 0) + 1));
-        setTimeout(() => syncCellsRef.current?.(database, retry), PENDING_RETRY_MS);
+        setRetriesScheduled((n) => n + 1);
+        setTimeout(() => {
+          setRetriesScheduled((n) => n - 1);
+          syncCellsRef.current?.(database, retry);
+        }, delay);
       }
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
@@ -350,6 +361,9 @@ export default function MapScreen() {
     const key = [...cells].sort().join(',');
     if (key === regionCellRef.current) return;
     regionCellRef.current = key;
+    // A new pan gives these cells a fresh set of retries.
+    cells.forEach((c) => retryAttemptsRef.current.delete(c));
+    setGaveUpCells((prev) => (cells.some((c) => prev.has(c)) ? new Set([...prev].filter((c) => !cells.includes(c))) : prev));
     syncCells(db, cells);
   };
 
@@ -367,6 +381,7 @@ export default function MapScreen() {
     // Clear the error now so the tap visibly does something ("Updating libraries…"); it comes
     // back if this attempt fails too.
     setFailedCells(null);
+    setGaveUpCells(new Set());
     retryAttemptsRef.current.clear();
     const userCell = location ? [cellFor(location.latitude, location.longitude)] : [];
     const cells = Array.from(new Set([...(failedCells ?? []), ...cellsToLoadForView(), ...userCell]));
@@ -405,9 +420,8 @@ export default function MapScreen() {
   const needsZoomIn =
     !!region && region.zoom < MIN_SYNC_ZOOM && inServiceArea &&
     (viewCells === null ? !centreLoaded : unloadedCells.length > 0);
-  // Close enough to load, but cells panning should have loaded (the ones nearest the centre)
-  // still haven't: server busy or gave up. Edges of a zoomed-out view load as you pan, so they
-  // only get the veil, not the pill.
+  // Close enough to load, and cells panning should have loaded (the ones nearest the centre)
+  // ran out of retries. Edges of a zoomed-out view load as you pan, so they only get the veil.
   const unloadedNearCentre = useMemo(() => {
     if (!region || region.zoom < MIN_SYNC_ZOOM) return [];
     return geohashesNearCenter(region.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST).filter((c) => {
@@ -415,7 +429,7 @@ export default function MapScreen() {
       return isInServiceArea(centre.latitude, centre.longitude) && !loadedCells.has(c);
     });
   }, [region, loadedCells]);
-  const partlyLoaded = !syncing && unloadedNearCentre.length > 0;
+  const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpCells.has(c));
   // Everything in view has loaded and there's nothing here.
   const emptyArea =
     !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && unloadedCells.length === 0 && librariesInView === false;
