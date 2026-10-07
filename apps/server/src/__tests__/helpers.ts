@@ -14,7 +14,10 @@ export function createTestD1(): D1Database {
   const statement = (sql: string, params: unknown[] = []) => ({
     sql,
     params,
-    bind: (...args: unknown[]) => statement(sql, args),
+    bind: (...args: unknown[]) => {
+      if (args.length > 100) throw new Error(`D1 allows at most 100 bound parameters (got ${args.length})`);
+      return statement(sql, args);
+    },
     async first<T>() {
       return (sqlite.prepare(sql).get(...(params as never[])) ?? null) as T | null;
     },

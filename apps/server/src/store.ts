@@ -22,13 +22,15 @@ export type LibraryRow = {
   removed_at: number | null;
 };
 
-const placeholders = (n: number) => Array.from({ length: n }, () => '?').join(', ');
+// D1 allows at most 100 bound parameters per query, and one fill can touch thousands of
+// cells, so lists are passed as a single JSON array and expanded with json_each.
+const jsonList = (values: string[]) => JSON.stringify(values);
 
 export async function getCells(db: D1Database, cells: string[]): Promise<Map<string, CellRow>> {
   if (cells.length === 0) return new Map();
   const { results } = await db
-    .prepare(`SELECT * FROM cells WHERE geohash IN (${placeholders(cells.length)})`)
-    .bind(...cells)
+    .prepare('SELECT * FROM cells WHERE geohash IN (SELECT value FROM json_each(?))')
+    .bind(jsonList(cells))
     .all<CellRow>();
   return new Map(results.map((row) => [row.geohash, row]));
 }
@@ -85,16 +87,15 @@ export async function markCellsFetched(
   now: number,
   truncatedCell: string | null
 ): Promise<void> {
-  await db.batch(
-    cells.map((cell) =>
-      db
-        .prepare(
-          `INSERT INTO cells (geohash, fetched_at, truncated) VALUES (?, ?, ?)
-           ON CONFLICT(geohash) DO UPDATE SET fetched_at = excluded.fetched_at, truncated = excluded.truncated`
-        )
-        .bind(cell, now, cell === truncatedCell ? 1 : 0)
+  if (cells.length === 0) return;
+  await db
+    .prepare(
+      `INSERT INTO cells (geohash, fetched_at, truncated)
+       SELECT value, ?, CASE WHEN value = ? THEN 1 ELSE 0 END FROM json_each(?) WHERE true
+       ON CONFLICT(geohash) DO UPDATE SET fetched_at = excluded.fetched_at, truncated = excluded.truncated`
     )
-  );
+    .bind(now, truncatedCell ?? '', jsonList(cells))
+    .run();
 }
 
 export async function upsertLibraries(db: D1Database, libraries: Library[], now: number): Promise<void> {
@@ -129,16 +130,16 @@ export async function upsertLibraries(db: D1Database, libraries: Library[], now:
 export async function markRemoved(db: D1Database, ids: string[], now: number): Promise<void> {
   if (ids.length === 0) return;
   await db
-    .prepare(`UPDATE libraries SET removed_at = ? WHERE removed_at IS NULL AND id IN (${placeholders(ids.length)})`)
-    .bind(now, ...ids)
+    .prepare('UPDATE libraries SET removed_at = ? WHERE removed_at IS NULL AND id IN (SELECT value FROM json_each(?))')
+    .bind(now, jsonList(ids))
     .run();
 }
 
 export async function librariesInCells(db: D1Database, cells: string[]): Promise<LibraryRow[]> {
   if (cells.length === 0) return [];
   const { results } = await db
-    .prepare(`SELECT * FROM libraries WHERE cell IN (${placeholders(cells.length)}) ORDER BY id`)
-    .bind(...cells)
+    .prepare('SELECT * FROM libraries WHERE cell IN (SELECT value FROM json_each(?)) ORDER BY id')
+    .bind(jsonList(cells))
     .all<LibraryRow>();
   return results;
 }

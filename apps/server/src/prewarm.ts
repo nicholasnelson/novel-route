@@ -1,4 +1,4 @@
-import { CELL_PRECISION, encodeGeohash, geohashCenter, geohashesForBounds } from '@novel-route/shared';
+import { CELL_PRECISION, encodeGeohash } from '@novel-route/shared';
 import { CELL_MAX_AGE_MS, fillCell } from './cache';
 
 /**
@@ -38,16 +38,6 @@ export const SEED_POINTS: [number, number][] = [
   [-43.5321, 172.6362], // Christchurch
 ];
 
-/** Neighbouring cells a fill may also cover (about 5 x 5 cells around the filled one). */
-function neighbourhood(cell: string): string[] {
-  const c = geohashCenter(cell);
-  return geohashesForBounds(
-    { south: c.latitude - 0.1, north: c.latitude + 0.1, west: c.longitude - 0.12, east: c.longitude + 0.12 },
-    CELL_PRECISION,
-    64
-  );
-}
-
 /** The next cell worth filling, or null if everything known is fresh. */
 export async function nextCellToWarm(db: D1Database, now: number): Promise<string | null> {
   const unfilled = await db
@@ -77,9 +67,9 @@ export async function nextCellToWarm(db: D1Database, now: number): Promise<strin
   return null;
 }
 
-/** One warming step: fill the next cell (and whatever neighbours that call covers). */
+/** One warming step: fill the next cell (and every cell inside the results' radius). */
 export async function prewarm(db: D1Database, now: number): Promise<string[] | null> {
   const cell = await nextCellToWarm(db, now);
   if (!cell) return null;
-  return fillCell(db, cell, neighbourhood(cell), now);
+  return fillCell(db, cell, [], now);
 }

@@ -29,7 +29,7 @@ The upstream returns the **200 nearest libraries** to a point, with no radius pa
 1. Cells are geohash precision 5 (~4.9 × 4.9 km).
 2. To fill a cell, query upstream at the cell centre.
 3. **Coverage radius:** with a full page (200 results) the results are only complete out to the 200th library; with fewer, at least out to the farthest result and the cell's far corner.
-4. Every **requested** cell whose far corner lies inside the coverage radius is marked filled by that one call. In Adelaide's CBD the 200th library is ~12 km out, so one call fills every cell on screen.
+4. **Every cell lying wholly inside the coverage circle** is marked filled by that one call, whether or not anyone asked for it (nearest first, up to 2,000 cells; enumeration capped at 150 km). In Adelaide's CBD the 200th library is ~12 km out (≈11 cells); a sparse area with results reaching 50 km marks ≈360 cells. Cell lists go to D1 as one JSON parameter (`json_each`), since D1 allows at most 100 bound parameters per query.
 5. All returned libraries are stored, wherever they are.
 6. If the radius doesn't reach the filled cell's own far corner (very dense area), the cell is flagged `truncated`. Splitting such cells into precision-6 children is deferred; no Australian area seen so far comes close.
 
@@ -37,7 +37,8 @@ Freshness and politeness:
 - A cell is fresh for **24 hours** after a successful fill.
 - **Single-flight per cell:** a lock (`cells.refreshing_until`, 30 s) taken with an atomic conditional update.
 - **Global upstream limit:** at most 1 call every 2 seconds across the whole server (atomic compare-and-set on `meta.upstream_last_call`). A request that can't get a slot isn't queued; its cells come back `pending` and the app retries on its next sync.
-- Stale cells are served immediately from the database; one is refreshed in the background (`waitUntil`). Never-filled cells are filled synchronously, at most 2 upstream calls per client request.
+- A request waits for at most **one** upstream call (never-filled cells); remaining unfilled cells (up to 3 more calls) and one stale cell are filled in the background (`waitUntil`), paced by the 2 s interval. The app retries `pending` cells every 4 s (up to 3 times).
+- **Pre-warming** (Cron Trigger, every 2 minutes, `src/prewarm.ts`): fills one cell per run — never-filled cells holding known libraries first, then the stalest, then seed cities — so most user requests are answered from the cache (~0.4 s).
 - Nonce cached server-side; on nonce expiry refresh and retry once.
 - If a library previously seen inside the coverage radius is missing from a refresh, set `removed_at` instead of deleting it (it stays in users' visit history). The API returns it with `removed: true`; the app hides it from the map.
 
