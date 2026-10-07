@@ -36,9 +36,10 @@
 
     <h2>The short version</h2>
     <ul>
-      <li>There are no accounts, ads or analytics, and we don't sell or share your data.</li>
+      <li>There are no accounts, ads or analytics, and we don't sell your data.</li>
       <li>Your location and visit history stay on your phone.</li>
       <li>To show libraries and the map, the app sends the <em>approximate area</em> you're looking at to the library data service and the map provider. It doesn't send your exact position.</li>
+      <li>If the app crashes, a crash report (with no location and no IP address) is sent to our error-tracking service so we can fix it.</li>
     </ul>
 
     <h2>Location</h2>
@@ -83,6 +84,11 @@
             <td>To draw the map. Mapbox usage telemetry is turned off in the app.</td>
           </tr>
           <tr>
+            <td><a href="https://sentry.io/privacy/">Sentry</a> (crash reporting, data stored in the EU)</td>
+            <td>Only when something goes wrong: the error and where it happened in our code, app version, device model and operating system version. Location data is removed on your phone before sending, and Sentry is set not to store IP addresses.</td>
+            <td>To find and fix bugs. Crash reports are kept for up to 90 days.</td>
+          </tr>
+          <tr>
             <td>Your maps app (for example Google Maps)</td>
             <td>The library's location, only when you tap “Navigate to library”</td>
             <td>To give you directions. That app's own privacy policy applies.</td>
@@ -100,7 +106,7 @@
     <h2>What we don't do</h2>
     <ul>
       <li>We don't require or offer accounts.</li>
-      <li>We don't include advertising or analytics.</li>
+      <li>We don't include advertising or analytics. Crash reports are the only diagnostics we collect.</li>
       <li>We don't sell, rent or trade personal information.</li>
       <li>We don't collect information in the background.</li>
     </ul>

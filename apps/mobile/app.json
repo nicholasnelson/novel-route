@@ -43,7 +43,15 @@
       "expo-sqlite",
       "@rnmapbox/maps",
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "@sentry/react-native",
+        {
+          "url": "https://de.sentry.io/",
+          "organization": "nelson-9e",
+          "project": "novel-route-mobile"
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"

@@ -2,8 +2,11 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MapScreen from './src/map/MapScreen';
 import ErrorBoundary from './src/ui/ErrorBoundary';
+import { initMonitoring, wrapApp } from './src/monitoring/sentry';
 
-export default function App() {
+initMonitoring();
+
+function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
@@ -13,3 +16,5 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+export default wrapApp(App);

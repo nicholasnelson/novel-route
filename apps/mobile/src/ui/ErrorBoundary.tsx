@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { reportError } from '../monitoring/sentry';
 
 type State = { error: Error | null };
 
@@ -12,8 +13,8 @@ export default class ErrorBoundary extends React.Component<React.PropsWithChildr
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Hook crash reporting in here once added (see docs/release-plan.md).
     console.error('Unhandled render error:', error, info.componentStack);
+    reportError(error, info.componentStack ?? undefined);
   }
 
   render() {

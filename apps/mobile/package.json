@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
+    "@novel-route/shared": "*",
     "@react-native-community/datetimepicker": "9.1.0",
     "@rnmapbox/maps": "^10.3.7",
+    "@sentry/react-native": "~7.11.0",
     "@types/jest": "29.5.14",
     "eslint-config-expo": "~57.0.2",
     "expo": "~57.0.27",
@@ -31,8 +33,7 @@
     "jest-expo": "~57.0.5",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0",
-    "@novel-route/shared": "*"
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

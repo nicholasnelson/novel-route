@@ -79,7 +79,15 @@ Content to cover (must match the Data safety form):
 - The app sends the visible map area (approximate location) to our server to load libraries. State what the server logs (IP, request) and for how long.
 - Visit history is stored only on the device.
 - Mapbox receives map tile requests (IP, approximate viewed area) and, unless telemetry is disabled in-app, SDK telemetry. Name Mapbox and link its privacy policy.
-- No accounts, no ads, no analytics (update if crash reporting is added — Sentry collects device/crash data).
+- No accounts, no ads, no analytics. Crash reports go to Sentry (EU): error, stack trace, app version, device model, OS version; no IP (Sentry setting), location scrubbed on device (`apps/mobile/src/monitoring/scrub.ts`).
+
+Data safety form (Play Console) answers to give:
+- **Location — approximate**: collected, shared with service providers (library data service, Mapbox) for app functionality; not stored by us; not optional for the core feature.
+- **Location — precise**: used on device only, not collected (never leaves the device).
+- **App activity — visit history**: stays on device; not collected.
+- **App info and performance — crash logs and diagnostics**: collected (Sentry) for app functionality/analytics of crashes; not shared for advertising.
+- **Device or other IDs**: not collected (Sentry has `sendDefaultPii` off and IP storage disabled).
+- Data encrypted in transit: yes (HTTPS). Users can request deletion: crash reports via the contact address.
 
 ## D10 — Closed testing (the long pole)
 
@@ -118,7 +126,8 @@ Plan:
 - [x] Strip/decode HTML in excerpts (`<br />`, entities)
 - [x] Fetch hardening: `res.ok`, timeouts, user-visible offline/error state
 - [x] Error boundary
-- [ ] Crash reporting (optional: Sentry)
+- [x] Crash reporting: Sentry (EU region, errors only, no IPs/PII, location scrubbed on device, disabled in dev builds)
+- [ ] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
 - [ ] "About" screen: privacy policy link, data source disclaimer (Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)
