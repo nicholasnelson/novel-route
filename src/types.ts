@@ -7,12 +7,12 @@ export type Library = {
   permalink?: string;
 };
 
-export type VisitSource = 'manual' | 'nearby_prompt' | 'migrated';
+export type VisitSource = 'manual' | 'nearby_prompt';
 
 export type Visit = {
   id: string;
   libraryId: string;
-  visitedAt: number; // epoch ms; for 'migrated' visits this is the migration time, not the real visit date
+  visitedAt: number; // epoch ms
   source: VisitSource;
   note?: string;
 };
@@ -21,9 +21,8 @@ export type VisitSummary = {
   libraryId: string;
   visitCount: number;
   lastVisitedAt: number;
-  lastVisitDateKnown: boolean; // false when every visit is 'migrated'
 };
 
-export type Freshness = 'never' | 'fresh' | 'recent' | 'old' | 'unknown';
+export type Freshness = 'never' | 'fresh' | 'recent' | 'old';
 
 export type LatLng = { latitude: number; longitude: number };

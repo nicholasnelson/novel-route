@@ -27,11 +27,9 @@ type Props = {
 const SOURCE_LABELS: Record<Visit['source'], string> = {
   manual: '',
   nearby_prompt: 'logged when nearby',
-  migrated: 'from an earlier version, date unknown',
 };
 
 function formatVisitDate(visit: Visit): string {
-  if (visit.source === 'migrated') return 'Visited';
   return new Date(visit.visitedAt).toLocaleString(undefined, {
     day: 'numeric',
     month: 'short',

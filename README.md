@@ -58,7 +58,7 @@ npm test
 src/
 ├── api/               # Street Library API client, HTML clean-up
 ├── data/              # Cache refresh (one geohash cell at a time)
-├── db/                # SQLite open/migrations, one-time AsyncStorage import
+├── db/                # SQLite open and schema migrations
 ├── geo/               # Geohash cells, Haversine distance
 ├── location/          # Location permissions and GPS watch
 ├── map/

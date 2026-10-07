@@ -13,12 +13,10 @@ export const FRESHNESS_COLORS: Record<Freshness, { fill: string; stroke: string 
   fresh: { fill: '#16a34a', stroke: '#14532d' },
   recent: { fill: '#4ade80', stroke: '#166534' },
   old: { fill: '#bbf7d0', stroke: '#4d7c0f' },
-  unknown: { fill: '#4ade80', stroke: '#166534' },
 };
 
 export function freshnessFor(summary: VisitSummary | undefined, now: number): Freshness {
   if (!summary || summary.visitCount === 0) return 'never';
-  if (!summary.lastVisitDateKnown) return 'unknown';
 
   const ageDays = (now - summary.lastVisitedAt) / DAY_MS;
   if (ageDays < FRESHNESS_THRESHOLDS.freshDays) return 'fresh';
@@ -29,7 +27,6 @@ export function freshnessFor(summary: VisitSummary | undefined, now: number): Fr
 /** Human-readable status for the library detail sheet. */
 export function describeVisits(summary: VisitSummary | undefined, now: number): string {
   if (!summary || summary.visitCount === 0) return 'Never visited';
-  if (!summary.lastVisitDateKnown) return 'Visited (date unknown)';
 
   const days = Math.floor((now - summary.lastVisitedAt) / DAY_MS);
   const when =

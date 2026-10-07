@@ -106,7 +106,7 @@ Plan:
 - [ ] Rename the GitHub repo (optional)
 - [x] Upgrade to the current stable Expo SDK (57)
 - [x] Fix `start` script (`expo start`); add `typecheck`, lint (`eslint-config-expo`), tests (`jest-expo`)
-- [x] `expo-sqlite` storage layer; migrate existing AsyncStorage data
+- [x] `expo-sqlite` storage layer (no import of pre-SQLite data: the app ID changed, so old installs are a separate app)
 - [x] Visit log (visit-log.md), including migration of existing visited IDs and `sl:` ID prefix
 - [ ] Mapbox account, dedicated public token (EAS env var, not in git), usage alerts (maps.md)
 - [ ] Map spike: ~3,000 points, freshness colours, clustering, taps, on a mid-range Android phone

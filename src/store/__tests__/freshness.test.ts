@@ -9,7 +9,6 @@ function summary(daysAgo: number, overrides: Partial<VisitSummary> = {}): VisitS
     libraryId: 'sl:1',
     visitCount: 1,
     lastVisitedAt: NOW - daysAgo * DAY,
-    lastVisitDateKnown: true,
     ...overrides,
   };
 }
@@ -26,16 +25,11 @@ describe('freshnessFor', () => {
     expect(freshnessFor(summary(181.9), NOW)).toBe('recent');
     expect(freshnessFor(summary(182), NOW)).toBe('old');
   });
-
-  it('is unknown when only migrated visits exist', () => {
-    expect(freshnessFor(summary(0, { lastVisitDateKnown: false }), NOW)).toBe('unknown');
-  });
 });
 
 describe('describeVisits', () => {
   it('describes each state', () => {
     expect(describeVisits(undefined, NOW)).toBe('Never visited');
-    expect(describeVisits(summary(0, { lastVisitDateKnown: false }), NOW)).toBe('Visited (date unknown)');
     expect(describeVisits(summary(0), NOW)).toBe('Last visited today · 1 visit');
     expect(describeVisits(summary(1, { visitCount: 3 }), NOW)).toBe('Last visited yesterday · 3 visits');
     expect(describeVisits(summary(12), NOW)).toBe('Last visited 12 days ago · 1 visit');

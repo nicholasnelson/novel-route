@@ -1,8 +1,6 @@
 import * as SQLite from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Db } from './db';
 import { migrateSchema } from './schema';
-import { migrateLegacyStorage } from './legacyMigration';
 
 const DATABASE_NAME = 'novelroute.db';
 
@@ -12,7 +10,6 @@ async function open(): Promise<Db> {
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
   await db.execAsync('PRAGMA journal_mode = WAL');
   await migrateSchema(db);
-  await migrateLegacyStorage(db, AsyncStorage);
   return db;
 }
 

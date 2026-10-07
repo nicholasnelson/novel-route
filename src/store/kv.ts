@@ -2,7 +2,6 @@ import { Db } from '../db/db';
 
 export const KV_KEYS = {
   nonce: 'street_library_nonce',
-  legacyMigrated: 'legacy_async_storage_migrated',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {

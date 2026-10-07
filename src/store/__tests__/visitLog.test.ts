@@ -42,26 +42,9 @@ describe('visitLog', () => {
       libraryId: 'sl:1',
       visitCount: 2,
       lastVisitedAt: T0 + 5 * MINUTE,
-      lastVisitDateKnown: true,
     });
     expect(summaries.get('sl:2')?.visitCount).toBe(1);
     expect(summaries.has('sl:3')).toBe(false);
-  });
-
-  it('prefers known visit dates over migrated ones', async () => {
-    const db = await createTestDb();
-    await db.runAsync(
-      `INSERT INTO visits (id, library_id, visited_at, source) VALUES ('m', 'sl:1', ?, 'migrated')`,
-      [T0 + 60 * MINUTE]
-    );
-    expect((await getVisitSummaries(db)).get('sl:1')?.lastVisitDateKnown).toBe(false);
-
-    await logVisit(db, 'sl:1', 'manual', T0);
-    expect((await getVisitSummaries(db)).get('sl:1')).toMatchObject({
-      visitCount: 2,
-      lastVisitedAt: T0,
-      lastVisitDateKnown: true,
-    });
   });
 
   it('deletes, restores and clears visits', async () => {

@@ -59,7 +59,7 @@ type LibraryMapProps = {
 
 Rendering:
 - One `ShapeSource` of libraries as GeoJSON points, with `cluster: true`.
-- Each feature carries a precomputed `freshness` property (`never` | `fresh` | `recent` | `old` | `unknown`) and `selected` flag.
+- Each feature carries a precomputed `freshness` property (`never` | `fresh` | `recent` | `old`) and `selected` flag.
 - Unclustered points: `CircleLayer` with `circle-color` from a `match` on `freshness`; larger radius / stroke when `selected`.
 - Clusters: `CircleLayer` sized by `point_count` + `SymbolLayer` for the count.
 - Tap: `onPress` on the source. A cluster tap zooms in to the cluster's expansion zoom; a point tap calls `onLibraryPress`.

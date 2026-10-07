@@ -24,7 +24,6 @@ const visited = (id: string, daysAgo: number): VisitSummary => ({
   libraryId: id,
   visitCount: 1,
   lastVisitedAt: NOW - daysAgo * DAY,
-  lastVisitDateKnown: true,
 });
 
 describe('isPromptEligible', () => {
