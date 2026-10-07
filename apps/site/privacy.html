@@ -74,9 +74,9 @@
         </thead>
         <tbody>
           <tr>
-            <td>Library data service: currently the <a href="https://streetlibrary.org.au/">Street Library Australia</a> website, later a Novel Route server run by us</td>
-            <td>The centre point of the area being loaded (a grid square about 5&nbsp;km across, not your exact position)</td>
-            <td>To list the street libraries in that area. Areas are refreshed at most once a day.</td>
+            <td>The Novel Route server, run by us on <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a></td>
+            <td>The map areas being loaded (grid squares about 5&nbsp;km across, not your exact position)</td>
+            <td>To list the street libraries in those areas. Each area is refreshed at most once a day. Our server gets the library listings from <a href="https://streetlibrary.org.au/">Street Library Australia</a>; your phone doesn't contact them.</td>
           </tr>
           <tr>
             <td><a href="https://www.mapbox.com/legal/privacy">Mapbox</a></td>
@@ -97,10 +97,10 @@
       </table>
     </div>
     <p>
-      When the Novel Route server replaces the Street Library website as the data source, it will
-      receive the same approximate area. Its request logs (IP address and the area requested) are
-      kept for no more than 7 days, for running and protecting the service. They aren't
-      linked to you or used for anything else. We'll update this policy when that change ships.
+      Our server doesn't store anything about you: no IP addresses, and no record of which areas
+      anyone looked at. Cloudflare keeps short-lived request logs (including IP addresses) for
+      running and protecting the service; we don't use them for anything else, and they're
+      deleted within 7 days.
     </p>
 
     <h2>What we don't do</h2>

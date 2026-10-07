@@ -127,7 +127,7 @@ Plan:
 - [x] Fetch hardening: `res.ok`, timeouts, user-visible offline/error state
 - [x] Error boundary
 - [x] Crash reporting: Sentry (EU region, errors only, no IPs/PII, location scrubbed on device, disabled in dev builds)
-- [ ] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
+- [x] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
 - [ ] "About" screen: privacy policy link, data source disclaimer (Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)
@@ -146,8 +146,9 @@ Plan:
 - [x] Build MVP server (server.md): Hono on Workers + D1, tested locally against the real Street Library endpoint
 - [x] App uses the server when `EXPO_PUBLIC_API_URL` is set; direct Street Library client otherwise (dev)
 - [x] CI: typecheck, lint, tests and Worker bundle on every push (`.github/workflows/ci.yml`)
-- [ ] Deploy (apps/server/README.md) and confirm Street Library accepts requests from Cloudflare (datacenter IPs can be blocked)
-- [ ] Set `EXPO_PUBLIC_API_URL` in EAS preview/production; update the privacy policy
+- [x] Deployed to `https://novel-route-api.novel-route-server.workers.dev`; Street Library accepts requests from Cloudflare
+- [x] Privacy policy updated for the server as data source
+- [x] `EXPO_PUBLIC_API_URL` set in EAS preview/production
 - [ ] Ship server-backed build to the closed test track
 
 ### Phase 4 — Production
