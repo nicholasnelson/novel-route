@@ -1,10 +1,10 @@
-import { Library } from '../types';
+import { Library } from './types';
 import { htmlToText } from './html';
 
 /**
- * Direct client for the Street Library WordPress endpoint.
- * Temporary: once our own server exists (docs/server.md) the app will talk to it instead,
- * and this client will only be used behind a development flag.
+ * Client for the Street Library WordPress endpoint. The Novel Route server uses it to fill its
+ * cache; the app only uses it directly when no API URL is configured (development).
+ * Works anywhere with fetch + FormData (React Native, Cloudflare Workers, Node 18+).
  */
 
 const API_URL = 'https://streetlibrary.org.au/wp-admin/admin-ajax.php';

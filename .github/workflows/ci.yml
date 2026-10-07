@@ -1,0 +1,29 @@
+# Type-check, lint and test every workspace (app, server, shared) on each push and PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Tests use node:sqlite (Node 22.5+).
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Server bundles for Workers
+        run: npx wrangler deploy --dry-run --outdir dist
+        working-directory: apps/server

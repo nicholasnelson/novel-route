@@ -1,0 +1,25 @@
+{
+  "name": "@novel-route/server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Novel Route API: caches Street Library data and serves it to the app (docs/server.md)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply novel-route --local",
+    "db:migrate:remote": "wrangler d1 migrations apply novel-route --remote",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@novel-route/shared": "*",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261007.1",
+    "@types/node": "^22",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.148.0"
+  }
+}

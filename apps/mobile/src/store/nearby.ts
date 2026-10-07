@@ -1,5 +1,5 @@
 import { Db } from '../db/db';
-import { distanceMeters } from '../geo/distance';
+import { distanceMeters } from '@novel-route/shared';
 import { bearingDegrees } from '../geo/bearing';
 import { LatLng, Library, VisitSummary } from '../types';
 

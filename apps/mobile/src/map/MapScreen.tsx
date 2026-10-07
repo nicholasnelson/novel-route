@@ -16,7 +16,14 @@ import {
 import { MapControls, StatusPill, StatusPillKind } from './overlays/chrome';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
-import { cellFor, isInServiceArea, refreshCellIfStale } from '../data/librarySync';
+import {
+  CELL_PRECISION,
+  distanceMeters,
+  geohashesForBounds,
+  isInServiceArea,
+  MAX_CELLS_PER_REQUEST,
+} from '@novel-route/shared';
+import { cellFor, refreshCells } from '../data/librarySync';
 import { getAllLibraries } from '../store/libraryStore';
 import {
   clearVisits,
@@ -30,7 +37,6 @@ import {
 import { freshnessFor } from '../store/freshness';
 import { getPromptedToday, markPrompted, nearbyCardState } from '../store/nearby';
 import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
-import { distanceMeters } from '../geo/distance';
 import { formatDistance } from '../geo/bearing';
 import {
   getCurrentPosition,
@@ -93,7 +99,7 @@ export default function MapScreen() {
   const [bottomHeight, setBottomHeight] = useState(0);
 
   const [inFlightCount, setInFlightCount] = useState(0);
-  const [failedCell, setFailedCell] = useState<string | null>(null);
+  const [failedCells, setFailedCells] = useState<string[] | null>(null);
   const [dbFailed, setDbFailed] = useState(false);
   const userCellRef = useRef<string | null>(null);
   const regionCellRef = useRef<string | null>(null);
@@ -122,19 +128,20 @@ export default function MapScreen() {
     setSelectedVisits(libraryId ? await getVisits(database, libraryId) : []);
   }, []);
 
-  const syncCell = useCallback(async (database: Db, cell: string) => {
-    if (inFlightCellsRef.current.has(cell)) return;
-    inFlightCellsRef.current.add(cell);
+  const syncCells = useCallback(async (database: Db, requested: string[]) => {
+    const cells = requested.filter((c) => !inFlightCellsRef.current.has(c));
+    if (cells.length === 0) return;
+    cells.forEach((c) => inFlightCellsRef.current.add(c));
     setInFlightCount((n) => n + 1);
     try {
-      const updated = await refreshCellIfStale(database, cell);
+      const updated = await refreshCells(database, cells);
       if (updated) setLibraries(await getAllLibraries(database));
-      setFailedCell((failed) => (failed === cell ? null : failed));
+      setFailedCells((failed) => (failed && failed.some((c) => cells.includes(c)) ? null : failed));
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
-      setFailedCell(cell);
+      setFailedCells(cells);
     } finally {
-      inFlightCellsRef.current.delete(cell);
+      cells.forEach((c) => inFlightCellsRef.current.delete(c));
       setInFlightCount((n) => n - 1);
     }
   }, []);
@@ -203,8 +210,8 @@ export default function MapScreen() {
     const cell = cellFor(location.latitude, location.longitude);
     if (cell === userCellRef.current) return;
     userCellRef.current = cell;
-    syncCell(db, cell);
-  }, [db, location, syncCell]);
+    syncCells(db, [cell]);
+  }, [db, location, syncCells]);
 
   const askForLocation = async () => {
     if (permission?.status === 'denied' && !permission.canAskAgain) {
@@ -307,10 +314,14 @@ export default function MapScreen() {
   const handleRegionChange = (next: MapRegion) => {
     setRegion(next);
     if (!db || next.zoom < MIN_SYNC_ZOOM) return;
-    const cell = cellFor(next.center.latitude, next.center.longitude);
-    if (cell === regionCellRef.current) return;
-    regionCellRef.current = cell;
-    syncCell(db, cell);
+    // Centre cell first: in direct (development) mode only the first stale cell is fetched.
+    const centre = cellFor(next.center.latitude, next.center.longitude);
+    const visible = geohashesForBounds(next.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST);
+    const cells = [centre, ...visible.filter((c) => c !== centre)];
+    const key = [...cells].sort().join(',');
+    if (key === regionCellRef.current) return;
+    regionCellRef.current = key;
+    syncCells(db, cells);
   };
 
   const focusLibrary = (library: Library) => {
@@ -320,8 +331,8 @@ export default function MapScreen() {
 
   const retrySync = () => {
     if (!db) return;
-    const cell = failedCell ?? (location ? cellFor(location.latitude, location.longitude) : null);
-    if (cell) syncCell(db, cell);
+    const cells = failedCells ?? (location ? [cellFor(location.latitude, location.longitude)] : null);
+    if (cells) syncCells(db, cells);
   };
 
   // --- Status pill (top) ---
@@ -342,7 +353,7 @@ export default function MapScreen() {
   const emptyArea = !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && librariesInView === false;
 
   let pill: StatusPillKind | null = null;
-  if (failedCell || dbFailed) pill = 'error';
+  if (failedCells || dbFailed) pill = 'error';
   else if (syncing) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';

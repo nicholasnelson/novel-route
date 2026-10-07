@@ -133,9 +133,12 @@ Plan:
 - [ ] Closed test track live with ≥12 opted-in testers
 
 ### Phase 3 — Server (in parallel with Phase 2)
-- [ ] Spike: confirm the Street Library endpoint works from the chosen host (datacenter IPs can be blocked)
-- [ ] Build MVP server (server.md)
-- [ ] App switches to the server; direct Street Library client kept behind a dev flag
+- [x] Monorepo: `apps/mobile`, `apps/server`, `apps/site`, `packages/shared`
+- [x] Build MVP server (server.md): Hono on Workers + D1, tested locally against the real Street Library endpoint
+- [x] App uses the server when `EXPO_PUBLIC_API_URL` is set; direct Street Library client otherwise (dev)
+- [x] CI: typecheck, lint, tests and Worker bundle on every push (`.github/workflows/ci.yml`)
+- [ ] Deploy (apps/server/README.md) and confirm Street Library accepts requests from Cloudflare (datacenter IPs can be blocked)
+- [ ] Set `EXPO_PUBLIC_API_URL` in EAS preview/production; update the privacy policy
 - [ ] Ship server-backed build to the closed test track
 
 ### Phase 4 — Production

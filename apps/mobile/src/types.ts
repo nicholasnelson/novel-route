@@ -1,11 +1,4 @@
-export type Library = {
-  id: string; // source-prefixed: 'sl:<wordpress id>' (community submissions will use 'c:<uuid>')
-  title: string;
-  latitude: number;
-  longitude: number;
-  excerpt?: string;
-  permalink?: string;
-};
+export type { Library } from '@novel-route/shared';
 
 export type VisitSource = 'manual' | 'nearby_prompt';
 

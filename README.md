@@ -18,7 +18,8 @@ A mobile app for finding and keeping track of the street libraries (little free 
 - [Expo](https://expo.dev/) (SDK 57) with React Native
 - [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) for the library cache and visit log
 - [Mapbox](https://github.com/rnmapbox/maps) maps with native clustering (see [docs/maps.md](docs/maps.md))
-- TypeScript, ESLint, Jest
+- API: [Hono](https://hono.dev/) on Cloudflare Workers with D1 ([apps/server](apps/server))
+- TypeScript, ESLint, Jest, Vitest; npm workspaces monorepo
 
 ## Prerequisites
 
@@ -34,8 +35,11 @@ A mobile app for finding and keeping track of the street libraries (little free 
 git clone https://github.com/nicholasnelson/novel-route.git
 cd novel-route
 
-# Install dependencies
+# Install dependencies for all workspaces (from the repo root)
 npm install
+
+# The app lives in apps/mobile
+cd apps/mobile
 
 # Add your Mapbox public token (https://account.mapbox.com/access-tokens/)
 echo "EXPO_PUBLIC_MAPBOX_TOKEN=pk.your-token" > .env.local
@@ -47,7 +51,9 @@ npx expo run:android   # or: npx expo run:ios
 npm start
 ```
 
-Checks:
+Without `EXPO_PUBLIC_API_URL` the app calls the Street Library site directly (development). To use the API, run it locally ([apps/server/README.md](apps/server/README.md)) or set the deployed URL.
+
+Checks, for every workspace (also run by CI on each push):
 
 ```bash
 npm run typecheck
@@ -58,19 +64,18 @@ npm test
 ## Project Structure
 
 ```
-src/
-├── api/               # Street Library API client, HTML clean-up
-├── data/              # Cache refresh (one geohash cell at a time)
-├── db/                # SQLite open and schema migrations
-├── geo/               # Geohash cells, Haversine distance
-├── location/          # Location permissions and GPS watch
-├── map/
-│   ├── MapScreen.tsx  # Main map screen
-│   ├── LibrarySheet.tsx # Library details + visit log
-│   └── LibraryMap.tsx # Mapbox map: freshness-coloured libraries, clusters, user location
-├── store/             # Libraries, visit log, freshness, nearby prompts, key-value settings
-├── ui/                # Shared UI (error boundary)
-└── types.ts           # Shared TypeScript types
+apps/
+├── mobile/            # Expo app
+│   ├── src/data/      # Cache refresh (batched cells from the API, or Street Library directly in dev)
+│   ├── src/db/        # SQLite open and schema migrations
+│   ├── src/location/  # Location permission, GPS and compass
+│   ├── src/map/       # Map screen, Mapbox map, cards and panels
+│   ├── src/store/     # Libraries, visit log, freshness, nearby card, hints
+│   └── scripts/       # Marker artwork generator
+├── server/            # Cloudflare Worker API (Hono + D1)
+└── site/              # Landing page and privacy policy (GitHub Pages)
+packages/
+└── shared/            # Street Library client, geohash/distance, API types
 docs/                  # Release plan and design docs
 ```
 
@@ -82,7 +87,7 @@ docs/                  # Release plan and design docs
 - [Visit log](docs/visit-log.md)
 - [UX design](docs/ux.md) (with [mockups](docs/ux/mockup.html))
 
-The website (landing page and privacy policy) is in [`site/`](site/) and deploys to GitHub Pages from `main`. Preview it locally with `python -m http.server 8765 --directory site`.
+The website (landing page and privacy policy) is in [`apps/site/`](apps/site/) and deploys to GitHub Pages from `main`. Preview it locally with `python -m http.server 8765 --directory apps/site`.
 
 ## Contributing
 

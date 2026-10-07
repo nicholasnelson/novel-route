@@ -40,6 +40,10 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 2: libraries that disappear upstream are kept (for visit history) but hidden from the map.
+  `
+  ALTER TABLE libraries ADD COLUMN removed INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -1,4 +1,4 @@
-import { isInServiceArea } from '../librarySync';
+import { isInServiceArea } from '../serviceArea';
 
 describe('isInServiceArea', () => {
   it('accepts Australia and New Zealand', () => {

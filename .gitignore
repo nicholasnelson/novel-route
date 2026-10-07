@@ -37,6 +37,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+apps/mobile/ios/
+apps/mobile/android/
+
+# Cloudflare Workers local state
+.wrangler/
+.dev.vars
 
 # Claude Code local settings
 .claude/settings.local.json

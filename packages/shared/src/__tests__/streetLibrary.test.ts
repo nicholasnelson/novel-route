@@ -1,5 +1,5 @@
 import { htmlToText } from '../html';
-import { fetchLibrariesForPoint, normalizeLibrary } from '../streetLibraryClient';
+import { fetchLibrariesForPoint, normalizeLibrary } from '../streetLibrary';
 
 describe('htmlToText', () => {
   it('converts a real WordPress excerpt to plain text', () => {
@@ -51,7 +51,7 @@ describe('normalizeLibrary', () => {
 
 describe('fetchLibrariesForPoint', () => {
   const respond = (body: unknown) => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => body }) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => body }) as unknown as typeof fetch;
   };
 
   it('treats locations outside Australia and New Zealand as having no libraries', async () => {

@@ -1,10 +1,10 @@
-# Publishes site/ (landing page + privacy policy) to GitHub Pages.
+# Publishes apps/site/ (landing page + privacy policy) to GitHub Pages.
 name: Deploy site
 
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/pages.yml']
+    paths: ['apps/site/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -27,6 +27,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: apps/site
       - id: deployment
         uses: actions/deploy-pages@v4

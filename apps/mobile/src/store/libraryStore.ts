@@ -21,28 +21,38 @@ function fromRow(row: LibraryRow): Library {
   };
 }
 
-/** Insert or update libraries. Rows with a newer updated_at than `updatedAt` are left alone. */
-export async function upsertLibraries(db: Db, libraries: Library[], updatedAt: number): Promise<void> {
+/**
+ * Insert or update libraries. Rows with a newer updated_at than `updatedAt` are left alone.
+ * `removed` marks libraries that have disappeared upstream (hidden from the map, kept for history).
+ */
+export async function upsertLibraries(
+  db: Db,
+  libraries: Library[],
+  updatedAt: number,
+  { removed = false }: { removed?: boolean } = {}
+): Promise<void> {
   for (const lib of libraries) {
     await db.runAsync(
-      `INSERT INTO libraries (id, title, excerpt, latitude, longitude, permalink, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO libraries (id, title, excerpt, latitude, longitude, permalink, updated_at, removed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          title = excluded.title,
          excerpt = excluded.excerpt,
          latitude = excluded.latitude,
          longitude = excluded.longitude,
          permalink = excluded.permalink,
-         updated_at = excluded.updated_at
+         updated_at = excluded.updated_at,
+         removed = excluded.removed
        WHERE excluded.updated_at >= libraries.updated_at`,
-      [lib.id, lib.title, lib.excerpt ?? null, lib.latitude, lib.longitude, lib.permalink ?? null, updatedAt]
+      [lib.id, lib.title, lib.excerpt ?? null, lib.latitude, lib.longitude, lib.permalink ?? null, updatedAt, removed ? 1 : 0]
     );
   }
 }
 
+/** Libraries to show on the map (excludes ones removed upstream). */
 export async function getAllLibraries(db: Db): Promise<Library[]> {
   const rows = await db.getAllAsync<LibraryRow>(
-    'SELECT id, title, excerpt, latitude, longitude, permalink FROM libraries',
+    'SELECT id, title, excerpt, latitude, longitude, permalink FROM libraries WHERE removed = 0',
     []
   );
   return rows.map(fromRow);
