@@ -1,15 +1,24 @@
 import { CELL_PRECISION, encodeGeohash } from '@novel-route/shared';
-import { CELL_MAX_AGE_MS, fillCell } from './cache';
+import { fillCell } from './cache';
+import { ensureSchema, getMeta, setMeta } from './store';
 
 /**
  * Background cache warming (Cron Trigger). Each run fills one cell, so users opening an area
  * usually get it straight from the cache. Shares the global upstream rate limit with requests.
  *
- * Order: cells holding known libraries that have never been filled, then the stalest filled
- * cells (refreshing before they expire), then seed cities the crawl hasn't reached yet.
- * Each fill returns ~200 libraries, often in neighbouring cells, so the crawl spreads outward
- * across connected areas by itself.
+ * Order: never-filled cells (every cell holding a known library has a row), then cells not
+ * refreshed for PREWARM_REFRESH_AGE_MS, then seed cities. Each fill marks every cell inside the
+ * results' radius, so the crawl spreads outward by itself.
+ *
+ * D1 free tier: each run reads a handful of rows via the cells_fetched_at index, and warming
+ * stops for the day once PREWARM_DAILY_WRITE_BUDGET rows have been written (user requests are
+ * unaffected), so it can never exhaust the database's daily limits.
  */
+
+/** Warming refreshes cells this old (user requests still refresh after CELL_MAX_AGE_MS). */
+export const PREWARM_REFRESH_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+/** Rows warming may write per UTC day (D1 free tier allows 100,000 in total). */
+export const PREWARM_DAILY_WRITE_BUDGET = 40_000;
 
 /** City centres to start from; regions not reachable from the others get found from these. */
 export const SEED_POINTS: [number, number][] = [
@@ -38,24 +47,25 @@ export const SEED_POINTS: [number, number][] = [
   [-43.5321, 172.6362], // Christchurch
 ];
 
-/** The next cell worth filling, or null if everything known is fresh. */
+const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
+
+/** The next cell worth filling, or null if everything known is fresh enough. */
 export async function nextCellToWarm(db: D1Database, now: number): Promise<string | null> {
+  // Index lookups only (cells_fetched_at): never filled first, skipping cells that errored or
+  // are being filled right now.
   const unfilled = await db
     .prepare(
-      `SELECT l.cell AS cell FROM libraries l
-       LEFT JOIN cells c ON c.geohash = l.cell
-       WHERE l.removed_at IS NULL AND c.fetched_at IS NULL
-       GROUP BY l.cell ORDER BY COUNT(*) DESC LIMIT 1`
+      `SELECT geohash FROM cells
+       WHERE fetched_at IS NULL AND last_error IS NULL AND (refreshing_until IS NULL OR refreshing_until < ?)
+       LIMIT 1`
     )
-    .first<{ cell: string }>();
-  if (unfilled) return unfilled.cell;
+    .bind(now)
+    .first<{ geohash: string }>();
+  if (unfilled) return unfilled.geohash;
 
   const stale = await db
-    .prepare(
-      `SELECT geohash FROM cells WHERE fetched_at IS NOT NULL AND fetched_at < ?
-       ORDER BY fetched_at ASC LIMIT 1`
-    )
-    .bind(now - CELL_MAX_AGE_MS)
+    .prepare('SELECT geohash FROM cells WHERE fetched_at < ? ORDER BY fetched_at ASC LIMIT 1')
+    .bind(now - PREWARM_REFRESH_AGE_MS)
     .first<{ geohash: string }>();
   if (stale) return stale.geohash;
 
@@ -67,9 +77,20 @@ export async function nextCellToWarm(db: D1Database, now: number): Promise<strin
   return null;
 }
 
-/** One warming step: fill the next cell (and every cell inside the results' radius). */
+/** One warming step: fill the next cell, unless today's write budget is spent. */
 export async function prewarm(db: D1Database, now: number): Promise<string[] | null> {
+  await ensureSchema(db);
+
+  const day = utcDay(now);
+  const writesToday = (await getMeta(db, 'prewarm_day')) === day ? Number((await getMeta(db, 'prewarm_writes')) ?? 0) : 0;
+  if (writesToday >= PREWARM_DAILY_WRITE_BUDGET) return null;
+
   const cell = await nextCellToWarm(db, now);
   if (!cell) return null;
-  return fillCell(db, cell, [], now);
+
+  const stats = { writes: 0 };
+  const covered = await fillCell(db, cell, [], now, stats);
+  await setMeta(db, 'prewarm_day', day);
+  await setMeta(db, 'prewarm_writes', String(writesToday + stats.writes));
+  return covered;
 }

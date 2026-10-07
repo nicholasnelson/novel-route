@@ -7,8 +7,8 @@
   // Served at api.novelroute.app (Cloudflare creates the DNS record and certificate) and on workers.dev.
   "routes": [{ "pattern": "api.novelroute.app", "custom_domain": true }],
   "workers_dev": true,
-  // Cache warming: one Street Library call at most every 2 minutes (src/prewarm.ts).
-  "triggers": { "crons": ["*/2 * * * *"] },
+  // Cache warming: one Street Library call at most every 5 minutes (src/prewarm.ts).
+  "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
