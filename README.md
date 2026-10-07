@@ -31,8 +31,8 @@ A mobile app for finding and keeping track of the street libraries (little free 
 
 ```bash
 # Clone the repo
-git clone https://github.com/nicholasnelson/streetlibrary-map-app.git
-cd streetlibrary-map-app
+git clone https://github.com/nicholasnelson/novel-route.git
+cd novel-route
 
 # Install dependencies
 npm install
