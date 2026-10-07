@@ -2,10 +2,12 @@ import {
   ApiLibrary,
   CellInfo,
   CellStatus,
+  CELL_PRECISION,
   distanceMeters,
   fetchLibrariesWithAutoNonce,
   geohashBounds,
   geohashCenter,
+  geohashesForBounds,
   LatLngLike,
   LibrariesResponse,
 } from '@novel-route/shared';
@@ -45,6 +47,10 @@ export const FILL_LOCK_MS = 30 * 1000;
 export const BACKGROUND_FILLS = 3;
 /** The endpoint's page size: if it returns this many, more libraries exist further out. */
 export const UPSTREAM_RESULT_CAP = 200;
+/** Most cells one upstream call may mark fresh (nearest the queried point first). */
+export const MAX_COVERED_CELLS = 2000;
+/** Cells are only enumerated within this distance of the queried point, to bound the work. */
+const MAX_ENUMERATION_RADIUS_M = 150_000;
 
 const NONCE_KEY = 'street_library_nonce';
 const LAST_SUCCESS_KEY = 'last_upstream_success';
@@ -71,6 +77,30 @@ export function coverageRadius(point: LatLngLike, distances: number[], cell: str
   const farthest = distances.length ? Math.max(...distances) : 0;
   if (distances.length >= UPSTREAM_RESULT_CAP) return farthest;
   return Math.max(farthest, farCornerDistance(point, cell));
+}
+
+/**
+ * Every cell lying entirely within `radius` of `point`, nearest first, capped at
+ * MAX_COVERED_CELLS. One upstream call proves all of these complete, not just the cells that
+ * happened to be requested.
+ */
+export function cellsWithinRadius(point: LatLngLike, radius: number): string[] {
+  const r = Math.min(radius, MAX_ENUMERATION_RADIUS_M);
+  if (r <= 0) return [];
+  const dLat = r / 111_320;
+  const dLng = r / (111_320 * Math.cos((point.latitude * Math.PI) / 180));
+  const box = {
+    south: point.latitude - dLat,
+    north: point.latitude + dLat,
+    west: point.longitude - dLng,
+    east: point.longitude + dLng,
+  };
+  return geohashesForBounds(box, CELL_PRECISION, 50_000)
+    .map((cell) => ({ cell, far: farCornerDistance(point, cell) }))
+    .filter((c) => c.far <= radius)
+    .sort((a, b) => a.far - b.far)
+    .slice(0, MAX_COVERED_CELLS)
+    .map((c) => c.cell);
 }
 
 function cellStatus(row: CellRow | undefined, now: number): CellStatus {
@@ -105,8 +135,12 @@ export async function fillCell(
 
     const distances = libraries.map((l) => distanceMeters(point.latitude, point.longitude, l.latitude, l.longitude));
     const radius = coverageRadius(point, distances, cell);
-    const covered = Array.from(new Set([cell, ...candidates])).filter(
-      (c) => c === cell || farCornerDistance(point, c) <= radius
+    const covered = Array.from(
+      new Set([
+        cell,
+        ...cellsWithinRadius(point, radius),
+        ...candidates.filter((c) => farCornerDistance(point, c) <= radius),
+      ])
     );
     const truncated = farCornerDistance(point, cell) > radius;
 
