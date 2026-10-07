@@ -19,7 +19,7 @@ import { getDb } from '../db/database';
 import {
   CELL_PRECISION,
   distanceMeters,
-  geohashesForBounds,
+  geohashesNearCenter,
   isInServiceArea,
   MAX_CELLS_PER_REQUEST,
 } from '@novel-route/shared';
@@ -53,8 +53,12 @@ import { colors } from '../ui/theme';
 /** Starting view until we know where the user is: the whole of Australia. */
 const AUSTRALIA: LatLng = { latitude: -27.5, longitude: 134 };
 const AUSTRALIA_ZOOM = 3.4;
-/** Below this zoom the visible area spans many cells, so panning doesn't trigger fetches. */
-const MIN_SYNC_ZOOM = 12;
+/**
+ * Panning loads libraries at this zoom or closer (about a 40 km wide view on a phone). Zoomed
+ * out that far, the view spans more cells than one request allows, so the cells nearest the
+ * centre are requested.
+ */
+const MIN_SYNC_ZOOM = 10;
 /** Fixed bottom padding while following the user, so the map doesn't jump as cards change. */
 const FOLLOW_BOTTOM_PADDING = 150;
 /** The "tap a library" hint gives way to the nearby card after this long. */
@@ -62,6 +66,9 @@ const TAP_HINT_MS = 10000;
 /** Logging a visit from further away than this asks for confirmation. */
 const FAR_VISIT_CONFIRM_M = 200;
 const HOUR_MS = 60 * 60 * 1000;
+/** Cells the server reports as pending are retried after this delay, up to MAX_PENDING_RETRIES times. */
+const PENDING_RETRY_MS = 3000;
+const MAX_PENDING_RETRIES = 3;
 /** "No libraries here" is only worth saying at street-level zoom. */
 const MIN_EMPTY_AREA_ZOOM = 13;
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
@@ -104,6 +111,8 @@ export default function MapScreen() {
   const userCellRef = useRef<string | null>(null);
   const regionCellRef = useRef<string | null>(null);
   const inFlightCellsRef = useRef(new Set<string>());
+  const retryAttemptsRef = useRef(new Map<string, number>());
+  const syncCellsRef = useRef<((database: Db, cells: string[]) => Promise<void>) | null>(null);
   const syncing = inFlightCount > 0;
 
   const location: LatLng | null = position;
@@ -134,9 +143,17 @@ export default function MapScreen() {
     cells.forEach((c) => inFlightCellsRef.current.add(c));
     setInFlightCount((n) => n + 1);
     try {
-      const updated = await refreshCells(database, cells);
+      const { updated, pending } = await refreshCells(database, cells);
       if (updated) setLibraries(await getAllLibraries(database));
       setFailedCells((failed) => (failed && failed.some((c) => cells.includes(c)) ? null : failed));
+      // The server fills a few cells per request (it paces calls to Street Library); retry the
+      // rest shortly, a few times, so a zoomed-out view fills in without the user panning.
+      const attempts = retryAttemptsRef.current;
+      const retry = pending.filter((c) => (attempts.get(c) ?? 0) < MAX_PENDING_RETRIES);
+      if (retry.length > 0) {
+        retry.forEach((c) => attempts.set(c, (attempts.get(c) ?? 0) + 1));
+        setTimeout(() => syncCellsRef.current?.(database, retry), PENDING_RETRY_MS);
+      }
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
       setFailedCells(cells);
@@ -261,6 +278,8 @@ export default function MapScreen() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => { syncCellsRef.current = syncCells; }, [syncCells]);
+
   const recordVisit = async (libraryId: string, source: VisitSource, visitedAt?: number) => {
     if (!db) return;
     const visit = await logVisit(db, libraryId, source, visitedAt);
@@ -314,10 +333,8 @@ export default function MapScreen() {
   const handleRegionChange = (next: MapRegion) => {
     setRegion(next);
     if (!db || next.zoom < MIN_SYNC_ZOOM) return;
-    // Centre cell first: in direct (development) mode only the first stale cell is fetched.
-    const centre = cellFor(next.center.latitude, next.center.longitude);
-    const visible = geohashesForBounds(next.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST);
-    const cells = [centre, ...visible.filter((c) => c !== centre)];
+    // Nearest the centre first: in direct (development) mode only the first stale cell is fetched.
+    const cells = geohashesNearCenter(next.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST);
     const key = [...cells].sort().join(',');
     if (key === regionCellRef.current) return;
     regionCellRef.current = key;
@@ -344,12 +361,24 @@ export default function MapScreen() {
       (l) => l.latitude <= north && l.latitude >= south && l.longitude <= east && l.longitude >= west
     );
   }, [region, libraries]);
-  // Zoomed out over Australia/NZ with nothing cached in view: libraries only load at street level.
+  // The middle half of the view: libraries elsewhere on screen don't mean this area is loaded.
+  const librariesInCentre = useMemo(() => {
+    if (!region) return null;
+    const { north, south, east, west } = region.bounds;
+    const dLat = (north - south) / 4;
+    const dLng = (east - west) / 4;
+    return libraries.some(
+      (l) =>
+        l.latitude <= north - dLat && l.latitude >= south + dLat &&
+        l.longitude <= east - dLng && l.longitude >= west + dLng
+    );
+  }, [region, libraries]);
+  // Too far out to load, over Australia/NZ, with nothing loaded in the middle of the view.
   const needsZoomIn =
     !!region &&
     region.zoom < MIN_SYNC_ZOOM &&
     isInServiceArea(region.center.latitude, region.center.longitude) &&
-    librariesInView === false;
+    librariesInCentre === false;
   const emptyArea = !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && librariesInView === false;
 
   let pill: StatusPillKind | null = null;

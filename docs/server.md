@@ -1,6 +1,6 @@
 # MVP data server
 
-Status: **deployed** (2026-10-07) at `https://novel-route-api.novel-route-server.workers.dev` (Cloudflare account of nnelson263@gmail.com; D1 `novel-route` in Oceania). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
+Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (also `https://novel-route-api.novel-route-server.workers.dev`) (Cloudflare account of nnelson263@gmail.com; D1 `novel-route` in Oceania). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
 
 ## Purpose
 

@@ -19,7 +19,7 @@ To point the app at a local server: `adb reverse tcp:8787 tcp:8787`, then start 
 
 ## Production
 
-Deployed at `https://novel-route-api.novel-route-server.workers.dev` (D1 database `novel-route`, Oceania). Redeploy with `npm run deploy`; schema changes: add a migration file, then `npm run db:migrate:remote` before deploying. Live logs: `npx wrangler tail`.
+Deployed at `https://api.novelroute.app` (also `https://novel-route-api.novel-route-server.workers.dev`; D1 database `novel-route`, Oceania). Redeploy with `npm run deploy`; schema changes: add a migration file, then `npm run db:migrate:remote` before deploying. Live logs: `npx wrangler tail`.
 
 ## Deploying (first time)
 

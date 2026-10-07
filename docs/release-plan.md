@@ -22,7 +22,7 @@ Related docs:
 | D6 | App name | **Novel Route** | Decided (store and trade mark checks clear) |
 | D7 | Package / bundle ID | `app.novelroute` (reverse of the novelroute.app domain). Permanent once uploaded to Play | Decided |
 | D8 | Map provider | Mapbox via `@rnmapbox/maps` (free up to 25k MAU; data-driven marker layers; native clustering). See maps.md | Decided |
-| D9 | Privacy policy hosting | GitHub Pages | Decided |
+| D9 | Privacy policy hosting | Cloudflare (Workers static assets) at https://novelroute.app/privacy | Done |
 | D10 | Closed testing | Ask Street Library Australia for a tester group (see below) | In progress |
 
 ---
@@ -50,7 +50,7 @@ Availability checks (2026-10-07):
 | Google Play / App Store exact search | No clashes (checked by owner) |
 | IP Australia trade mark search, classes 9 and 42 | No clashes (checked by owner) |
 
-`novelroute.app` can host the privacy policy and a landing page (e.g. GitHub Pages with a custom domain).
+`novelroute.app` hosts the landing page and privacy policy (Cloudflare).
 
 ## D7 — Package / bundle ID
 
@@ -68,11 +68,9 @@ Rules:
 
 ## D9 — Privacy policy
 
-Play requires a privacy policy URL because the app uses location. Requirements: publicly accessible, active, not geo-blocked, not a PDF, and it must name the app/developer. **GitHub Pages meets this** — no separate website needed.
+Play requires a privacy policy URL because the app uses location. Requirements: publicly accessible, active, not geo-blocked, not a PDF, and it must name the app/developer.
 
-Plan:
-- Publish from a `gh-pages` branch or a small separate repo (keep it out of the app's `docs/` design folder).
-- Link it from the Play listing and from an "About" screen in the app.
+Hosted at **https://novelroute.app/privacy** (`apps/site`, Cloudflare Workers static assets; moved from GitHub Pages so domain, DNS, API and site live in one Cloudflare account). Linked from the app's map key; add it to the Play listing.
 
 Content to cover (must match the Data safety form):
 - Precise location is used **on device** to centre the map and detect nearby libraries. It is not stored on our server.
@@ -132,10 +130,10 @@ Plan:
 
 ### Phase 2 — Closed testing (≥14 days)
 - [ ] Play Console app created; Play App Signing with EAS-managed keystore
-- [x] Privacy policy and landing page drafted (`site/`, deployed by `.github/workflows/pages.yml`)
-- [ ] Set up `hello@novelroute.app` (used as the contact address on the site and in the policy)
-- [ ] Enable GitHub Pages (source: GitHub Actions), point `novelroute.app` DNS at it, set the custom domain, enforce HTTPS
-- [ ] Privacy policy URL in Play Console and in the app's About screen
+- [x] Landing page and privacy policy live at https://novelroute.app (`apps/site`, Cloudflare)
+- [x] API at https://api.novelroute.app; EAS `EXPO_PUBLIC_API_URL` points there
+- [ ] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
+- [ ] Privacy policy URL in Play Console (already linked from the app's map key)
 - [ ] Update the privacy policy when the server replaces the direct Street Library calls
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK

@@ -1,4 +1,4 @@
-import { encodeGeohash, geohashBounds, geohashCenter, geohashesForBounds } from '../geohash';
+import { encodeGeohash, geohashBounds, geohashCenter, geohashesForBounds, geohashesNearCenter } from '../geohash';
 
 describe('geohash', () => {
   it('encodes a known reference point', () => {
@@ -38,5 +38,21 @@ describe('geohash', () => {
   it('returns no cells when the area is too large', () => {
     const allOfSa = { south: -38, west: 129, north: -26, east: 141 };
     expect(geohashesForBounds(allOfSa, 5, 64)).toEqual([]);
+  });
+
+  it('picks the cells nearest the centre when the area is large', () => {
+    // Roughly Adelaide at zoom ~10: far more than 20 precision-5 cells.
+    const bounds = { south: -35.15, west: 138.35, north: -34.7, east: 138.85 };
+    const cells = geohashesNearCenter(bounds, 5, 20);
+    expect(cells).toHaveLength(20);
+    expect(cells[0]).toBe(encodeGeohash(-34.925, 138.6, 5));
+    expect(new Set(cells).size).toBe(20);
+  });
+
+  it('returns every cell when the area is small, and the centre cell when it is huge', () => {
+    const small = { south: -34.95, west: 138.55, north: -34.9, east: 138.65 };
+    expect(geohashesNearCenter(small, 5, 20).sort()).toEqual(geohashesForBounds(small, 5).sort());
+    const allOfAustralia = { south: -44, west: 112, north: -10, east: 154 };
+    expect(geohashesNearCenter(allOfAustralia, 5, 20)).toEqual([encodeGeohash(-27, 133, 5)]);
   });
 });

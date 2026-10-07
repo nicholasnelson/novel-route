@@ -9,7 +9,7 @@ import { colors } from '../../ui/theme';
 
 const STATES: Freshness[] = ['never', 'fresh', 'recent', 'old'];
 
-export const PRIVACY_POLICY_URL = 'https://novelroute.app/privacy.html';
+export const PRIVACY_POLICY_URL = 'https://novelroute.app/privacy';
 export const REGISTER_LIBRARY_URL = 'https://streetlibrary.org.au/';
 
 /** Map legend plus a few lines on what the app does. */
