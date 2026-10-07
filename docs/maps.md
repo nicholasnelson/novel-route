@@ -32,7 +32,7 @@ Accepted trade-offs:
 - [x] Create a **dedicated public access token** for the app. Scopes: `styles:read`, `styles:tiles`, `fonts:read` only (verified sufficient: style, glyph and tile requests all return 200).
 - [ ] Set usage alerts on the account.
 - [x] Token kept out of git in `.env.local` (`EXPO_PUBLIC_MAPBOX_TOKEN`, gitignored).
-- [ ] Add `EXPO_PUBLIC_MAPBOX_TOKEN` as an EAS environment variable for cloud builds (after `eas init`). Note that any token shipped in the app is extractable; that's expected for public tokens.
+- [x] `EXPO_PUBLIC_MAPBOX_TOKEN` added as an EAS environment variable (string, plaintext, all environments). Note that any token shipped in the app is extractable; that's expected for public tokens.
 - The secret "downloads" token that older guides require for fetching the Android SDK is **no longer needed** — Mapbox lifted that requirement. Only add one if the current `@rnmapbox/maps` install docs say otherwise.
 
 ### Integration

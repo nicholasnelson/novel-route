@@ -103,14 +103,15 @@ Plan:
 - [x] Update `app.json`: `name` "Novel Route", `slug` `novel-route`, `android.package` / `ios.bundleIdentifier` `app.novelroute`; remove duplicate permissions
 - [x] `package.json` name and README renamed
 - [x] Old EAS project ID removed from `app.json`
-- [ ] Run `eas init` to create the new `novel-route` EAS project (owner)
+- [x] `eas init`: new `novel-route` EAS project (owner `ausshb`)
 - [ ] Rename the GitHub repo (optional)
 - [x] Upgrade to the current stable Expo SDK (57)
 - [x] Fix `start` script (`expo start`); add `typecheck`, lint (`eslint-config-expo`), tests (`jest-expo`)
 - [x] `expo-sqlite` storage layer (no import of pre-SQLite data: the app ID changed, so old installs are a separate app)
 - [x] Visit log (visit-log.md), including migration of existing visited IDs and `sl:` ID prefix
 - [x] Mapbox account and dedicated public token (in `.env.local`, not in git)
-- [ ] Mapbox usage alerts; token as an EAS env var (maps.md)
+- [x] Token as an EAS env var (all environments, plaintext)
+- [ ] Mapbox usage alerts (maps.md)
 - [x] Map spike on the emulator: 3,000 points, freshness colours, clustering, taps
 - [ ] Repeat the map check on a real mid-range Android phone
 - [x] Replace WebView/Leaflet with `LibraryMap` on `@rnmapbox/maps`; remove `react-native-webview`
