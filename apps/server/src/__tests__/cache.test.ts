@@ -93,6 +93,26 @@ describe('getLibraries', () => {
     expect(later.libraries.map((l) => l.id)).toEqual(['sl:900']);
   });
 
+  it('keeps going in the background when the slot is briefly held elsewhere', async () => {
+    const db = createTestD1();
+    const upstream = mockUpstream([...nearby, ...melbourne]);
+    const deferred: Promise<unknown>[] = [];
+    // Another request's fill takes the slot just before our first background attempt.
+    let slept = 0;
+    const sleep = async () => {
+      slept++;
+      if (slept === 1) await acquireUpstreamSlot(db, NOW + UPSTREAM_MIN_INTERVAL_MS, UPSTREAM_MIN_INTERVAL_MS);
+    };
+    await getLibraries(db, [HOME, MELBOURNE], NOW, (t) => deferred.push(t), sleep);
+    await Promise.all(deferred);
+
+    expect(slept).toBeGreaterThan(1); // the busy attempt was retried rather than abandoned
+
+    expect(libraryQueries(upstream)).toBe(2);
+    const later = await getLibraries(db, [MELBOURNE], NOW + 60_000, noDefer);
+    expect(later.cells[0].status).toBe('fresh');
+  });
+
   it('leaves cells pending when another request holds the upstream slot', async () => {
     const db = createTestD1();
     const upstream = mockUpstream(melbourne);

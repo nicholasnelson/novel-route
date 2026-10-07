@@ -45,6 +45,12 @@ export const FILL_LOCK_MS = 30 * 1000;
  * by the politeness interval; the app retries pending cells a few seconds later.
  */
 export const BACKGROUND_FILLS = 3;
+/**
+ * Background attempts per request. An attempt can fail without anything being wrong: another
+ * request's fill holds the politeness slot or the cell's lock. Keep trying other cells instead
+ * of giving up (bounded so the work fits in waitUntil).
+ */
+export const BACKGROUND_ATTEMPTS = 6;
 /** The endpoint's page size: if it returns this many, more libraries exist further out. */
 export const UPSTREAM_RESULT_CAP = 200;
 /** Most cells one upstream call may mark fresh (nearest the queried point first). */
@@ -229,12 +235,18 @@ async function fillInBackground(
 ): Promise<void> {
   let remaining = unfilled;
   let time = start;
-  for (let i = 0; i < BACKGROUND_FILLS && remaining.length > 0; i++) {
+  let fills = 0;
+  for (let attempt = 0; attempt < BACKGROUND_ATTEMPTS && fills < BACKGROUND_FILLS && remaining.length > 0; attempt++) {
     await sleep(UPSTREAM_MIN_INTERVAL_MS);
     time += UPSTREAM_MIN_INTERVAL_MS;
     const covered = await fillCell(db, remaining[0], remaining, time);
-    if (!covered) return;
-    remaining = remaining.filter((c) => !covered.includes(c));
+    if (covered) {
+      fills++;
+      remaining = remaining.filter((c) => !covered.includes(c));
+    } else {
+      // Busy (slot or lock held elsewhere): try another cell next time round.
+      remaining = [...remaining.slice(1), remaining[0]];
+    }
   }
   if (stale.length > 0) {
     await sleep(UPSTREAM_MIN_INTERVAL_MS);
