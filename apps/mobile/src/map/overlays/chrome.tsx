@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 
-export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'location-off' | 'empty-area';
+export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'empty-area';
 
 /** Small status message under the status bar. `onAction` retries, fixes location, or opens the link. */
 export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(): void }) {
@@ -28,6 +28,13 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
           <Ionicons name="search" size={14} color="#fff" />
           <Text style={styles.text}>Zoom in to load libraries here</Text>
           <Text style={styles.action}>Zoom in</Text>
+        </Pressable>
+      );
+    case 'not-loaded':
+      return (
+        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button">
+          <Text style={styles.text}>Part of this area hasn&apos;t loaded</Text>
+          <Text style={styles.action}>Retry</Text>
         </Pressable>
       );
     case 'location-off':

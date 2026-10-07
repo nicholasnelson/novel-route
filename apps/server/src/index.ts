@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { ConfigResponse, isValidCell, MAX_CELLS_PER_REQUEST } from '@novel-route/shared';
 import { getHealth, getLibraries, toApiLibrary } from './cache';
 import { getLibrary } from './store';
+import { prewarm } from './prewarm';
 
 export type Env = {
   DB: D1Database;
@@ -68,4 +69,12 @@ app.get('/v1/health', async (c) => c.json(await getHealth(c.env.DB)));
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Cron Trigger: warm one cell of the cache per run (see prewarm.ts). */
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(prewarm(env.DB, Date.now()));
+  },
+} satisfies ExportedHandler<Env>;
+
+export { app };

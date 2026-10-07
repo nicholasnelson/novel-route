@@ -19,12 +19,14 @@ import { getDb } from '../db/database';
 import {
   CELL_PRECISION,
   distanceMeters,
+  geohashCenter,
+  geohashesForBounds,
   geohashesNearCenter,
   isInServiceArea,
   MAX_CELLS_PER_REQUEST,
 } from '@novel-route/shared';
 import { cellFor, refreshCells } from '../data/librarySync';
-import { getAllLibraries } from '../store/libraryStore';
+import { getAllLibraries, getLoadedCells } from '../store/libraryStore';
 import {
   clearVisits,
   deleteVisit,
@@ -66,8 +68,13 @@ const TAP_HINT_MS = 10000;
 /** Logging a visit from further away than this asks for confirmation. */
 const FAR_VISIT_CONFIRM_M = 200;
 const HOUR_MS = 60 * 60 * 1000;
-/** Cells the server reports as pending are retried after this delay, up to MAX_PENDING_RETRIES times. */
-const PENDING_RETRY_MS = 3000;
+/** Loaded/not-loaded status is only worked out while the view spans at most this many cells. */
+const MAX_VIEW_CELLS = 400;
+/**
+ * Cells the server reports as pending are retried after this delay, up to MAX_PENDING_RETRIES
+ * times. The server fills them in the background about every 3.5 s (2 s politeness + the call).
+ */
+const PENDING_RETRY_MS = 4000;
 const MAX_PENDING_RETRIES = 3;
 /** "No libraries here" is only worth saying at street-level zoom. */
 const MIN_EMPTY_AREA_ZOOM = 13;
@@ -107,6 +114,8 @@ export default function MapScreen() {
 
   const [inFlightCount, setInFlightCount] = useState(0);
   const [failedCells, setFailedCells] = useState<string[] | null>(null);
+  /** Cells whose libraries are on the device (loaded at least once). */
+  const [loadedCells, setLoadedCells] = useState<Set<string>>(new Set());
   const [dbFailed, setDbFailed] = useState(false);
   const userCellRef = useRef<string | null>(null);
   const regionCellRef = useRef<string | null>(null);
@@ -145,6 +154,7 @@ export default function MapScreen() {
     try {
       const { updated, pending } = await refreshCells(database, cells);
       if (updated) setLibraries(await getAllLibraries(database));
+      setLoadedCells(await getLoadedCells(database));
       setFailedCells((failed) => (failed && failed.some((c) => cells.includes(c)) ? null : failed));
       // The server fills a few cells per request (it paces calls to Street Library); retry the
       // rest shortly, a few times, so a zoomed-out view fills in without the user panning.
@@ -177,14 +187,16 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, visitSummaries, hints, perm] = await Promise.all([
+        const [libs, loaded, visitSummaries, hints, perm] = await Promise.all([
           getAllLibraries(database),
+          getLoadedCells(database),
           getVisitSummaries(database),
           getSeenHints(database),
           getLocationPermission(),
         ]);
         if (cancelled) return;
         setLibraries(libs);
+        setLoadedCells(loaded);
         setSummaries(visitSummaries);
         setSeenHints(hints);
         setPermission(perm);
@@ -346,14 +358,39 @@ export default function MapScreen() {
     if (location) mapRef.current?.frame([location, library]);
   };
 
+  /** The cells panning would load for the current view (nearest the centre first). */
+  const cellsToLoadForView = (): string[] =>
+    region ? geohashesNearCenter(region.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST) : [];
+
   const retrySync = () => {
     if (!db) return;
-    const cells = failedCells ?? (location ? [cellFor(location.latitude, location.longitude)] : null);
-    if (cells) syncCells(db, cells);
+    // Clear the error now so the tap visibly does something ("Updating libraries…"); it comes
+    // back if this attempt fails too.
+    setFailedCells(null);
+    retryAttemptsRef.current.clear();
+    const userCell = location ? [cellFor(location.latitude, location.longitude)] : [];
+    const cells = Array.from(new Set([...(failedCells ?? []), ...cellsToLoadForView(), ...userCell]));
+    if (cells.length > 0) syncCells(db, cells.slice(0, MAX_CELLS_PER_REQUEST));
   };
 
   // --- Status pill (top) ---
 
+  // Which parts of the view have library data on the device. Cells that haven't loaded get a
+  // grey veil on the map, so "no libraries here" and "not loaded yet" look different.
+  const viewCells = useMemo(() => {
+    if (!region) return null;
+    // null when zoomed so far out that the view spans more cells than is worth drawing.
+    const cells = geohashesForBounds(region.bounds, CELL_PRECISION, MAX_VIEW_CELLS);
+    if (cells.length === 0) return null;
+    return cells.filter((c) => {
+      const centre = geohashCenter(c);
+      return isInServiceArea(centre.latitude, centre.longitude);
+    });
+  }, [region]);
+  const unloadedCells = useMemo(
+    () => (viewCells ? viewCells.filter((c) => !loadedCells.has(c)) : []),
+    [viewCells, loadedCells]
+  );
   const librariesInView = useMemo(() => {
     if (!region) return null;
     const { north, south, east, west } = region.bounds;
@@ -361,36 +398,40 @@ export default function MapScreen() {
       (l) => l.latitude <= north && l.latitude >= south && l.longitude <= east && l.longitude >= west
     );
   }, [region, libraries]);
-  // The middle half of the view: libraries elsewhere on screen don't mean this area is loaded.
-  const librariesInCentre = useMemo(() => {
-    if (!region) return null;
-    const { north, south, east, west } = region.bounds;
-    const dLat = (north - south) / 4;
-    const dLng = (east - west) / 4;
-    return libraries.some(
-      (l) =>
-        l.latitude <= north - dLat && l.latitude >= south + dLat &&
-        l.longitude <= east - dLng && l.longitude >= west + dLng
-    );
-  }, [region, libraries]);
-  // Too far out to load, over Australia/NZ, with nothing loaded in the middle of the view.
+
+  const inServiceArea = !!region && isInServiceArea(region.center.latitude, region.center.longitude);
+  const centreLoaded = !!region && loadedCells.has(cellFor(region.center.latitude, region.center.longitude));
+  // Zoomed out too far to load, with unloaded areas in view (or too much in view to tell).
   const needsZoomIn =
-    !!region &&
-    region.zoom < MIN_SYNC_ZOOM &&
-    isInServiceArea(region.center.latitude, region.center.longitude) &&
-    librariesInCentre === false;
-  const emptyArea = !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && librariesInView === false;
+    !!region && region.zoom < MIN_SYNC_ZOOM && inServiceArea &&
+    (viewCells === null ? !centreLoaded : unloadedCells.length > 0);
+  // Close enough to load, but cells panning should have loaded (the ones nearest the centre)
+  // still haven't: server busy or gave up. Edges of a zoomed-out view load as you pan, so they
+  // only get the veil, not the pill.
+  const unloadedNearCentre = useMemo(() => {
+    if (!region || region.zoom < MIN_SYNC_ZOOM) return [];
+    return geohashesNearCenter(region.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST).filter((c) => {
+      const centre = geohashCenter(c);
+      return isInServiceArea(centre.latitude, centre.longitude) && !loadedCells.has(c);
+    });
+  }, [region, loadedCells]);
+  const partlyLoaded = !syncing && unloadedNearCentre.length > 0;
+  // Everything in view has loaded and there's nothing here.
+  const emptyArea =
+    !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && unloadedCells.length === 0 && librariesInView === false;
 
   let pill: StatusPillKind | null = null;
   if (failedCells || dbFailed) pill = 'error';
   else if (syncing) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
+  else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
   else if (emptyArea) pill = 'empty-area';
 
   const handlePillAction = () => {
     if (pill === 'error') retrySync();
     else if (pill === 'zoom-in') mapRef.current?.zoomTo(MIN_SYNC_ZOOM + 1);
+    else if (pill === 'not-loaded') retrySync();
     else if (pill === 'location-off') askForLocation();
     else if (pill === 'empty-area') Linking.openURL(REGISTER_LIBRARY_URL);
   };
@@ -516,6 +557,7 @@ export default function MapScreen() {
         visitSummaries={summaries}
         now={Math.floor(now / HOUR_MS) * HOUR_MS}
         selectedId={selectedId}
+        loadedCells={loadedCells}
         initialCenter={AUSTRALIA}
         initialZoom={AUSTRALIA_ZOOM}
         followUser={followUser}

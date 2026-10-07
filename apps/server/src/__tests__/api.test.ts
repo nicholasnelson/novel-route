@@ -1,5 +1,5 @@
 import { encodeGeohash, LibrariesResponse } from '@novel-route/shared';
-import app from '../index';
+import { app } from '../index';
 import { createTestD1, mockUpstream } from './helpers';
 
 const HOME = encodeGeohash(-34.9285, 138.6007, 5);

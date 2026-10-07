@@ -75,16 +75,22 @@ describe('getLibraries', () => {
     expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'fresh']);
   });
 
-  it('waits out the upstream interval between fills within one request', async () => {
+  it('returns after one fill and fills the rest in the background, paced', async () => {
     const db = createTestD1();
     const upstream = mockUpstream([...nearby, ...melbourne]);
     const sleep = vi.fn(async () => {});
+    const deferred: Promise<unknown>[] = [];
 
-    const result = await getLibraries(db, [HOME, MELBOURNE], NOW, noDefer, sleep);
+    const result = await getLibraries(db, [HOME, MELBOURNE], NOW, (t) => deferred.push(t), sleep);
+    expect(libraryQueries(upstream)).toBe(1);
+    expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'pending']);
+
+    await Promise.all(deferred);
     expect(libraryQueries(upstream)).toBe(2);
     expect(sleep).toHaveBeenCalledWith(UPSTREAM_MIN_INTERVAL_MS);
-    expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'fresh']);
-    expect(result.libraries.map((l) => l.id)).toContain('sl:900');
+    const later = await getLibraries(db, [MELBOURNE], NOW + 10_000, noDefer);
+    expect(later.cells[0].status).toBe('fresh');
+    expect(later.libraries.map((l) => l.id)).toEqual(['sl:900']);
   });
 
   it('leaves cells pending when another request holds the upstream slot', async () => {
@@ -110,7 +116,7 @@ describe('getLibraries', () => {
     // Upstream drops a library.
     const upstream = mockUpstream(nearby.slice(1));
     const deferred: Promise<unknown>[] = [];
-    const stale = await getLibraries(db, [HOME], NOW + CELL_MAX_AGE_MS, (t) => deferred.push(t));
+    const stale = await getLibraries(db, [HOME], NOW + CELL_MAX_AGE_MS, (t) => deferred.push(t), async () => {});
     expect(stale.cells[0].status).toBe('stale');
     expect(stale.libraries.find((l) => l.id === 'sl:100')?.removed).toBe(false);
 
