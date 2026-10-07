@@ -83,3 +83,26 @@ export function geohashesForBounds(bounds: CellBounds, precision: number, maxCel
   }
   return [...hashes];
 }
+
+/**
+ * Up to `limit` cells covering `bounds`, nearest the bounds' centre first. Unlike
+ * geohashesForBounds this never returns nothing for a large area: zoomed out, it covers the
+ * middle of the view. Areas spanning more than `maxScan` cells return just the centre cell.
+ */
+export function geohashesNearCenter(bounds: CellBounds, precision: number, limit: number, maxScan = 2500): string[] {
+  const centerLat = (bounds.north + bounds.south) / 2;
+  const centerLng = (bounds.east + bounds.west) / 2;
+  const all = geohashesForBounds(bounds, precision, maxScan);
+  if (all.length === 0) return [encodeGeohash(centerLat, centerLng, precision)];
+
+  const lngScale = Math.cos((centerLat * Math.PI) / 180);
+  const distance = (hash: string) => {
+    const c = geohashCenter(hash);
+    return Math.hypot(c.latitude - centerLat, (c.longitude - centerLng) * lngScale);
+  };
+  return all
+    .map((hash) => ({ hash, d: distance(hash) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, limit)
+    .map((x) => x.hash);
+}

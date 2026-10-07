@@ -43,7 +43,7 @@ describe('refreshCells (server mode)', () => {
       libraries: [lib('sl:1'), lib('sl:2', true)],
     });
 
-    expect(await refreshCells(db, [ADELAIDE_CELL, 'r1f96'], NOW)).toBe(true);
+    expect(await refreshCells(db, [ADELAIDE_CELL, 'r1f96'], NOW)).toEqual({ updated: true, pending: [] });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(`https://api.example/v1/libraries?cells=${ADELAIDE_CELL},r1f96`);
     expect((await getAllLibraries(db)).map((l) => l.id)).toEqual(['sl:1']); // removed one is hidden
@@ -54,7 +54,7 @@ describe('refreshCells (server mode)', () => {
     const { refreshCells } = loadSync('https://api.example');
     const db = await createTestDb();
     respond({ cells: [{ geohash: ADELAIDE_CELL, status: 'pending', fetchedAt: null }], libraries: [] });
-    await refreshCells(db, [ADELAIDE_CELL], NOW);
+    expect(await refreshCells(db, [ADELAIDE_CELL], NOW)).toEqual({ updated: false, pending: [ADELAIDE_CELL] });
     expect(await getCellFetchedAt(db, ADELAIDE_CELL)).toBeNull();
   });
 
@@ -65,7 +65,7 @@ describe('refreshCells (server mode)', () => {
     await refreshCells(db, [ADELAIDE_CELL], NOW);
     fetchMock.mockClear();
 
-    expect(await refreshCells(db, [ADELAIDE_CELL, 's0000'], NOW + 1000)).toBe(false);
+    expect(await refreshCells(db, [ADELAIDE_CELL, 's0000'], NOW + 1000)).toEqual({ updated: false, pending: [] });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

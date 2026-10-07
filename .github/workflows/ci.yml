@@ -27,3 +27,6 @@ jobs:
       - name: Server bundles for Workers
         run: npx wrangler deploy --dry-run --outdir dist
         working-directory: apps/server
+      - name: Site bundles for Workers
+        run: npx wrangler deploy --dry-run --outdir dist
+        working-directory: apps/site

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "novel-route-site",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Run the script first so it can redirect www; it hands everything else to the assets.
+    "run_worker_first": true,
+    "not_found_handling": "404-page"
+  },
+  // Cloudflare creates the DNS records and certificates for these.
+  "routes": [
+    { "pattern": "novelroute.app", "custom_domain": true },
+    { "pattern": "www.novelroute.app", "custom_domain": true }
+  ],
+  "workers_dev": false
+}

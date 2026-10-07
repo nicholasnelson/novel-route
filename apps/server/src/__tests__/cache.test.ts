@@ -7,7 +7,7 @@ import {
   getLibraries,
   UPSTREAM_MIN_INTERVAL_MS,
 } from '../cache';
-import { acquireCellLock } from '../store';
+import { acquireCellLock, acquireUpstreamSlot } from '../store';
 import { createTestD1, libraryQueries, mockUpstream } from './helpers';
 
 const NOW = Date.UTC(2026, 9, 7, 2);
@@ -75,13 +75,26 @@ describe('getLibraries', () => {
     expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'fresh']);
   });
 
-  it('rate limits upstream calls across a request, leaving later cells pending', async () => {
+  it('waits out the upstream interval between fills within one request', async () => {
     const db = createTestD1();
     const upstream = mockUpstream([...nearby, ...melbourne]);
+    const sleep = vi.fn(async () => {});
 
-    const result = await getLibraries(db, [HOME, MELBOURNE], NOW, noDefer);
-    expect(libraryQueries(upstream)).toBe(1);
-    expect(result.cells.find((c) => c.geohash === MELBOURNE)?.status).toBe('pending');
+    const result = await getLibraries(db, [HOME, MELBOURNE], NOW, noDefer, sleep);
+    expect(libraryQueries(upstream)).toBe(2);
+    expect(sleep).toHaveBeenCalledWith(UPSTREAM_MIN_INTERVAL_MS);
+    expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'fresh']);
+    expect(result.libraries.map((l) => l.id)).toContain('sl:900');
+  });
+
+  it('leaves cells pending when another request holds the upstream slot', async () => {
+    const db = createTestD1();
+    const upstream = mockUpstream(melbourne);
+    expect(await acquireUpstreamSlot(db, NOW, UPSTREAM_MIN_INTERVAL_MS)).toBe(true);
+
+    const result = await getLibraries(db, [MELBOURNE], NOW + 500, noDefer);
+    expect(libraryQueries(upstream)).toBe(0);
+    expect(result.cells[0].status).toBe('pending');
 
     // After the interval, the pending cell fills.
     const later = await getLibraries(db, [MELBOURNE], NOW + UPSTREAM_MIN_INTERVAL_MS, noDefer);

@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // Served at api.novelroute.app (Cloudflare creates the DNS record and certificate) and on workers.dev.
+  "routes": [{ "pattern": "api.novelroute.app", "custom_domain": true }],
+  "workers_dev": true,
   "d1_databases": [
     {
       "binding": "DB",

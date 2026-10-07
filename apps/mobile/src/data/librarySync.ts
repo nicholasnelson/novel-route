@@ -33,26 +33,33 @@ export async function isCellStale(db: Db, cell: string, now: number): Promise<bo
   return fetchedAt === null || now - fetchedAt >= CELL_MAX_AGE_MS;
 }
 
+export type RefreshResult = {
+  /** New library data was stored. */
+  updated: boolean;
+  /** Cells the server couldn't fill yet (e.g. upstream busy); worth retrying shortly. */
+  pending: string[];
+};
+
 /**
  * Refresh whichever of `cells` are missing or older than CELL_MAX_AGE_MS. Cells outside
  * Australia/NZ are skipped. In direct (development) mode only the first stale cell is fetched,
- * since each one costs an upstream call. Returns true if new library data was stored.
+ * since each one costs an upstream call.
  */
-export async function refreshCells(db: Db, cells: string[], now = Date.now()): Promise<boolean> {
+export async function refreshCells(db: Db, cells: string[], now = Date.now()): Promise<RefreshResult> {
   const stale: string[] = [];
   for (const cell of cells) {
     const center = geohashCenter(cell);
     if (!isInServiceArea(center.latitude, center.longitude)) continue;
     if (await isCellStale(db, cell, now)) stale.push(cell);
   }
-  if (stale.length === 0) return false;
+  if (stale.length === 0) return { updated: false, pending: [] };
 
   return API_URL
     ? refreshFromServer(db, stale.slice(0, MAX_CELLS_PER_REQUEST), now)
     : refreshFromStreetLibrary(db, stale[0], now);
 }
 
-async function refreshFromServer(db: Db, cells: string[], now: number): Promise<boolean> {
+async function refreshFromServer(db: Db, cells: string[], now: number): Promise<RefreshResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let body: LibrariesResponse;
@@ -75,10 +82,13 @@ async function refreshFromServer(db: Db, cells: string[], now: number): Promise<
       if (cell.status !== 'pending') await setCellFetchedAt(db, cell.geohash, now);
     }
   });
-  return body.libraries.length > 0;
+  return {
+    updated: body.libraries.length > 0,
+    pending: body.cells.filter((c) => c.status === 'pending').map((c) => c.geohash),
+  };
 }
 
-async function refreshFromStreetLibrary(db: Db, cell: string, now: number): Promise<boolean> {
+async function refreshFromStreetLibrary(db: Db, cell: string, now: number): Promise<RefreshResult> {
   const center = geohashCenter(cell);
   const cachedNonce = await getKv(db, KV_KEYS.nonce);
   const result = await fetchLibrariesWithAutoNonce({
@@ -92,5 +102,5 @@ async function refreshFromStreetLibrary(db: Db, cell: string, now: number): Prom
     await setCellFetchedAt(db, cell, now);
     await setKv(db, KV_KEYS.nonce, result.nonce);
   });
-  return true;
+  return { updated: true, pending: [] };
 }

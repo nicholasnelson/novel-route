@@ -4,6 +4,7 @@
   "workspaces": [
     "apps/mobile",
     "apps/server",
+    "apps/site",
     "packages/*"
   ],
   "scripts": {

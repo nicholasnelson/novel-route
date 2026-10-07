@@ -149,15 +149,23 @@ export async function getLibraries(
   db: D1Database,
   cells: string[],
   now: number,
-  defer: (task: Promise<unknown>) => void
+  defer: (task: Promise<unknown>) => void,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 ): Promise<LibrariesResponse> {
   let rows = await getCells(db, cells);
 
+  // A zoomed-out view can need more than one upstream call; wait out the politeness interval
+  // between them rather than leaving half the view pending.
   let unfilled = cells.filter((c) => !rows.get(c)?.fetched_at);
+  let fillTime = now;
   for (let budget = SYNC_FILL_BUDGET; unfilled.length > 0 && budget > 0; budget--) {
-    const covered = await fillCell(db, unfilled[0], unfilled, now);
+    const covered = await fillCell(db, unfilled[0], unfilled, fillTime);
     if (!covered) break;
     unfilled = unfilled.filter((c) => !covered.includes(c));
+    if (unfilled.length > 0 && budget > 1) {
+      await sleep(UPSTREAM_MIN_INTERVAL_MS);
+      fillTime += UPSTREAM_MIN_INTERVAL_MS;
+    }
   }
 
   const stale = cells.filter((c) => cellStatus(rows.get(c), now) === 'stale');

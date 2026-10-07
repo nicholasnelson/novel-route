@@ -26,7 +26,7 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
       return (
         <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button">
           <Ionicons name="search" size={14} color="#fff" />
-          <Text style={styles.text}>Zoom in to find libraries</Text>
+          <Text style={styles.text}>Zoom in to load libraries here</Text>
           <Text style={styles.action}>Zoom in</Text>
         </Pressable>
       );

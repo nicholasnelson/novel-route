@@ -18,7 +18,8 @@ A mobile app for finding and keeping track of the street libraries (little free 
 - [Expo](https://expo.dev/) (SDK 57) with React Native
 - [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) for the library cache and visit log
 - [Mapbox](https://github.com/rnmapbox/maps) maps with native clustering (see [docs/maps.md](docs/maps.md))
-- API: [Hono](https://hono.dev/) on Cloudflare Workers with D1 ([apps/server](apps/server))
+- API: [Hono](https://hono.dev/) on Cloudflare Workers with D1 ([apps/server](apps/server)), at `api.novelroute.app`
+- Website: Cloudflare Workers static assets ([apps/site](apps/site))
 - TypeScript, ESLint, Jest, Vitest; npm workspaces monorepo
 
 ## Prerequisites
@@ -73,7 +74,7 @@ apps/
 │   ├── src/store/     # Libraries, visit log, freshness, nearby card, hints
 │   └── scripts/       # Marker artwork generator
 ├── server/            # Cloudflare Worker API (Hono + D1)
-└── site/              # Landing page and privacy policy (GitHub Pages)
+└── site/              # novelroute.app landing page and privacy policy (Cloudflare Worker, static assets)
 packages/
 └── shared/            # Street Library client, geohash/distance, API types
 docs/                  # Release plan and design docs
@@ -87,7 +88,7 @@ docs/                  # Release plan and design docs
 - [Visit log](docs/visit-log.md)
 - [UX design](docs/ux.md) (with [mockups](docs/ux/mockup.html))
 
-The website (landing page and privacy policy) is in [`apps/site/`](apps/site/) and deploys to GitHub Pages from `main`. Preview it locally with `python -m http.server 8765 --directory apps/site`.
+The website ([novelroute.app](https://novelroute.app): landing page and privacy policy) is in [`apps/site/`](apps/site/), served by a Cloudflare Worker with static assets. Edit files in `apps/site/public/`, preview with `npm run dev` in `apps/site`, and publish with `npm run deploy`.
 
 ## Contributing
 
