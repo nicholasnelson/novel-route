@@ -1,24 +1,19 @@
 import { CELL_PRECISION, encodeGeohash } from '@novel-route/shared';
 import { fillCell } from './cache';
-import { ensureSchema, getMeta, setMeta } from './store';
+import { getMeta, setMeta } from './store';
 
 /**
- * Background cache warming (Cron Trigger). Each run fills one cell, so users opening an area
- * usually get it straight from the cache. Shares the global upstream rate limit with requests.
+ * Seed warming (Cron Trigger): makes sure every major city has data before anyone opens it.
+ * Each run fills at most one never-loaded seed cell (each fill also covers the cells around it);
+ * once all are loaded a run is a handful of primary-key lookups. Everything else, including
+ * refreshing the seeds, happens when people view an area (src/cache.ts).
  *
- * Order: never-filled cells (every cell holding a known library has a row), then cells not
- * refreshed for PREWARM_REFRESH_AGE_MS, then seed cities. Each fill marks every cell inside the
- * results' radius, so the crawl spreads outward by itself.
- *
- * D1 free tier: each run reads a handful of rows via the cells_fetched_at index, and warming
- * stops for the day once PREWARM_DAILY_WRITE_BUDGET rows have been written (user requests are
- * unaffected), so it can never exhaust the database's daily limits.
+ * As a backstop against D1's free-tier limits, warming stops for the day after
+ * PREWARM_DAILY_WRITE_BUDGET written rows (user requests are unaffected).
  */
 
-/** Warming refreshes cells this old (user requests still refresh after CELL_MAX_AGE_MS). */
-export const PREWARM_REFRESH_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 /** Rows warming may write per UTC day (D1 free tier allows 100,000 in total). */
-export const PREWARM_DAILY_WRITE_BUDGET = 40_000;
+export const PREWARM_DAILY_WRITE_BUDGET = 20_000;
 
 /** City centres to start from; regions not reachable from the others get found from these. */
 export const SEED_POINTS: [number, number][] = [
@@ -49,43 +44,26 @@ export const SEED_POINTS: [number, number][] = [
 
 const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-/** The next cell worth filling, or null if everything known is fresh enough. */
-export async function nextCellToWarm(db: D1Database, now: number): Promise<string | null> {
-  // Index lookups only (cells_fetched_at): never filled first, skipping cells that errored or
-  // are being filled right now.
-  const unfilled = await db
-    .prepare(
-      `SELECT geohash FROM cells
-       WHERE fetched_at IS NULL AND last_error IS NULL AND (refreshing_until IS NULL OR refreshing_until < ?)
-       LIMIT 1`
-    )
-    .bind(now)
-    .first<{ geohash: string }>();
-  if (unfilled) return unfilled.geohash;
-
-  const stale = await db
-    .prepare('SELECT geohash FROM cells WHERE fetched_at < ? ORDER BY fetched_at ASC LIMIT 1')
-    .bind(now - PREWARM_REFRESH_AGE_MS)
-    .first<{ geohash: string }>();
-  if (stale) return stale.geohash;
-
+/** The first seed city cell that has never been loaded, or null when all have been. */
+export async function nextCellToWarm(db: D1Database): Promise<string | null> {
   for (const [lat, lng] of SEED_POINTS) {
     const cell = encodeGeohash(lat, lng, CELL_PRECISION);
-    const row = await db.prepare('SELECT fetched_at FROM cells WHERE geohash = ?').bind(cell).first<{ fetched_at: number | null }>();
-    if (!row?.fetched_at) return cell;
+    const row = await db
+      .prepare('SELECT fetched_at, last_error FROM cells WHERE geohash = ?')
+      .bind(cell)
+      .first<{ fetched_at: number | null; last_error: string | null }>();
+    if (!row?.fetched_at && !row?.last_error) return cell;
   }
   return null;
 }
 
 /** One warming step: fill the next cell, unless today's write budget is spent. */
 export async function prewarm(db: D1Database, now: number): Promise<string[] | null> {
-  await ensureSchema(db);
-
   const day = utcDay(now);
   const writesToday = (await getMeta(db, 'prewarm_day')) === day ? Number((await getMeta(db, 'prewarm_writes')) ?? 0) : 0;
   if (writesToday >= PREWARM_DAILY_WRITE_BUDGET) return null;
 
-  const cell = await nextCellToWarm(db, now);
+  const cell = await nextCellToWarm(db);
   if (!cell) return null;
 
   const stats = { writes: 0 };

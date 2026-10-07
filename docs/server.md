@@ -38,7 +38,7 @@ Freshness and politeness:
 - **Single-flight per cell:** a lock (`cells.refreshing_until`, 30 s) taken with an atomic conditional update.
 - **Global upstream limit:** at most 1 call every 2 seconds across the whole server (atomic compare-and-set on `meta.upstream_last_call`). A request that can't get a slot isn't queued; its cells come back `pending` and the app retries on its next sync.
 - A request waits for at most **one** upstream call (never-filled cells); remaining unfilled cells (up to 3 more calls) and one stale cell are filled in the background (`waitUntil`), paced by the 2 s interval. The app retries `pending` cells every 4 s (up to 3 times).
-- **Pre-warming** (Cron Trigger, every 2 minutes, `src/prewarm.ts`): fills one cell per run — never-filled cells holding known libraries first, then the stalest, then seed cities — so most user requests are answered from the cache (~0.4 s).
+- **Seed warming** (Cron Trigger, every 5 minutes, `src/prewarm.ts`): loads each major AU/NZ city once (one call per run, stops after a 20k-row daily write budget); after that everything, including the seeds, is refreshed only when viewed. A full crawl was tried and exhausted D1's free-tier daily read limit, so background work stays minimal.
 - Nonce cached server-side; on nonce expiry refresh and retry once.
 - If a library previously seen inside the coverage radius is missing from a refresh, set `removed_at` instead of deleting it (it stays in users' visit history). The API returns it with `removed: true`; the app hides it from the map.
 
