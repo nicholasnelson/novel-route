@@ -1,15 +1,18 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { vi } from 'vitest';
 
 /**
  * The subset of the D1 API the server uses, backed by Node's built-in SQLite and the real
- * migration file.
+ * migration files.
  */
 export function createTestD1(): D1Database {
   const sqlite = new DatabaseSync(':memory:');
-  sqlite.exec(readFileSync(join(__dirname, '..', '..', 'migrations', '0001_init.sql'), 'utf8'));
+  const migrations = join(__dirname, '..', '..', 'migrations');
+  for (const file of readdirSync(migrations).filter((f) => f.endsWith('.sql')).sort()) {
+    sqlite.exec(readFileSync(join(migrations, file), 'utf8'));
+  }
 
   const statement = (sql: string, params: unknown[] = []) => ({
     sql,

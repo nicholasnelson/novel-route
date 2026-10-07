@@ -69,6 +69,12 @@ app.get('/v1/health', async (c) => c.json(await getHealth(c.env.DB)));
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
+// Database unavailable (e.g. D1 daily limits) or another failure: a JSON 503 the app can show.
+app.onError((err, c) => {
+  console.error('Request failed', err);
+  return c.json({ error: 'Service temporarily unavailable' }, 503);
+});
+
 export default {
   fetch: app.fetch,
   /** Cron Trigger: warm one cell of the cache per run (see prewarm.ts). */

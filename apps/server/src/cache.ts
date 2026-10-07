@@ -54,7 +54,7 @@ export const BACKGROUND_ATTEMPTS = 6;
 /** The endpoint's page size: if it returns this many, more libraries exist further out. */
 export const UPSTREAM_RESULT_CAP = 200;
 /** Most cells one upstream call may mark fresh (nearest the queried point first). */
-export const MAX_COVERED_CELLS = 2000;
+export const MAX_COVERED_CELLS = 600;
 /** Cells are only enumerated within this distance of the queried point, to bound the work. */
 const MAX_ENUMERATION_RADIUS_M = 150_000;
 
@@ -122,7 +122,8 @@ export async function fillCell(
   db: D1Database,
   cell: string,
   candidates: string[],
-  now: number
+  now: number,
+  stats?: { writes: number }
 ): Promise<string[] | null> {
   if (!(await acquireCellLock(db, cell, now, FILL_LOCK_MS))) return null;
   if (!(await acquireUpstreamSlot(db, now, UPSTREAM_MIN_INTERVAL_MS))) {
@@ -158,9 +159,11 @@ export async function fillCell(
       .filter((l) => distanceMeters(point.latitude, point.longitude, l.latitude, l.longitude) <= radius)
       .map((l) => l.id);
 
-    await upsertLibraries(db, libraries, now);
-    await markRemoved(db, disappeared, now);
-    await markCellsFetched(db, covered, now, truncated ? cell : null);
+    const writes =
+      (await upsertLibraries(db, libraries, now)) +
+      (await markRemoved(db, disappeared, now)) +
+      (await markCellsFetched(db, covered, now, truncated ? cell : null));
+    if (stats) stats.writes += writes;
     await setMeta(db, NONCE_KEY, nonce);
     await setMeta(db, LAST_SUCCESS_KEY, String(now));
     await releaseCellLock(db, cell);

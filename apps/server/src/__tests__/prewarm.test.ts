@@ -1,6 +1,7 @@
 import { encodeGeohash } from '@novel-route/shared';
-import { CELL_MAX_AGE_MS, getLibraries } from '../cache';
-import { nextCellToWarm, prewarm, SEED_POINTS } from '../prewarm';
+import { getLibraries } from '../cache';
+import { nextCellToWarm, prewarm, PREWARM_DAILY_WRITE_BUDGET, PREWARM_REFRESH_AGE_MS, SEED_POINTS } from '../prewarm';
+import { getMeta, setMeta } from '../store';
 import { createTestD1, libraryQueries, mockUpstream } from './helpers';
 
 const NOW = Date.UTC(2026, 9, 7, 2);
@@ -29,7 +30,7 @@ describe('nextCellToWarm', () => {
     const db = createTestD1();
     mockUpstream([{ id: '1', latitude: firstSeedLat, longitude: firstSeedLng }]);
     await getLibraries(db, [FIRST_SEED], NOW, noDefer);
-    expect(await nextCellToWarm(db, NOW + CELL_MAX_AGE_MS + 1)).toBe(FIRST_SEED);
+    expect(await nextCellToWarm(db, NOW + PREWARM_REFRESH_AGE_MS + 1)).toBe(FIRST_SEED);
   });
 });
 
@@ -53,5 +54,23 @@ describe('prewarm', () => {
     await prewarm(db, NOW);
     expect(await prewarm(db, NOW + 500)).toBeNull(); // within the 2 s interval
     expect(libraryQueries(upstream)).toBe(1);
+  });
+
+  it('stops for the day once the write budget is spent', async () => {
+    const db = createTestD1();
+    const upstream = mockUpstream([{ id: '1', latitude: firstSeedLat, longitude: firstSeedLng }]);
+    await setMeta(db, 'prewarm_day', new Date(NOW).toISOString().slice(0, 10));
+    await setMeta(db, 'prewarm_writes', String(PREWARM_DAILY_WRITE_BUDGET));
+    expect(await prewarm(db, NOW)).toBeNull();
+    expect(libraryQueries(upstream)).toBe(0);
+    // A new UTC day resets the budget.
+    expect(await prewarm(db, NOW + 24 * 60 * 60 * 1000)).not.toBeNull();
+  });
+
+  it('counts the rows it writes', async () => {
+    const db = createTestD1();
+    mockUpstream([{ id: '1', latitude: firstSeedLat, longitude: firstSeedLng }]);
+    await prewarm(db, NOW);
+    expect(Number(await getMeta(db, 'prewarm_writes'))).toBeGreaterThan(0);
   });
 });
