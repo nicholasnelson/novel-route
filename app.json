@@ -41,7 +41,9 @@
         }
       ],
       "expo-sqlite",
-      "@rnmapbox/maps"
+      "@rnmapbox/maps",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

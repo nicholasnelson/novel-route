@@ -95,6 +95,11 @@ export async function fetchLibrariesForPoint({
     return { libraries, nonceExpired: false };
   }
 
+  // The endpoint only serves Australia and New Zealand; elsewhere there are simply no libraries.
+  if (typeof json.data === 'string' && json.data.includes('within Australia')) {
+    return { libraries: [], nonceExpired: false };
+  }
+
   // Check for nonce expiry
   if (
     json.data === 'nonce_expired' ||
@@ -105,7 +110,8 @@ export async function fetchLibrariesForPoint({
     return { libraries: [], nonceExpired: true };
   }
 
-  throw new Error(json.data?.message ?? 'API request failed');
+  const message = typeof json?.data === 'string' ? json.data : json?.data?.message;
+  throw new Error(message ?? `API request failed: ${JSON.stringify(json).slice(0, 160)}`);
 }
 
 export async function fetchLibrariesWithAutoNonce({

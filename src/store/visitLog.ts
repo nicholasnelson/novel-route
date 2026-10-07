@@ -23,20 +23,23 @@ function fromRow(row: VisitRow): Visit {
   };
 }
 
-/** Log a visit. Returns null (and logs nothing) if the library was logged within the duplicate window. */
+/**
+ * Log a visit at `visitedAt` (default now; earlier for a past visit). Returns null (and logs nothing)
+ * if there's already a visit to this library within the duplicate window of that time.
+ */
 export async function logVisit(
   db: Db,
   libraryId: string,
   source: VisitSource,
-  now = Date.now()
+  visitedAt = Date.now()
 ): Promise<Visit | null> {
-  const last = await db.getFirstAsync<{ visited_at: number }>(
-    'SELECT visited_at FROM visits WHERE library_id = ? ORDER BY visited_at DESC LIMIT 1',
-    [libraryId]
+  const duplicate = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM visits WHERE library_id = ? AND ABS(visited_at - ?) < ? LIMIT 1',
+    [libraryId, visitedAt, DUPLICATE_VISIT_WINDOW_MS]
   );
-  if (last && now - last.visited_at < DUPLICATE_VISIT_WINDOW_MS) return null;
+  if (duplicate) return null;
 
-  const visit: Visit = { id: randomUUID(), libraryId, visitedAt: now, source };
+  const visit: Visit = { id: randomUUID(), libraryId, visitedAt, source };
   await db.runAsync(
     'INSERT INTO visits (id, library_id, visited_at, source) VALUES (?, ?, ?, ?)',
     [visit.id, visit.libraryId, visit.visitedAt, visit.source]

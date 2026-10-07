@@ -8,9 +8,9 @@ A mobile app for finding and keeping track of the street libraries (little free 
 
 ## Features
 
-- Map of street libraries, coloured by how recently you visited (red = never, greens fading with time since your last visit)
-- Tap a library to see details, log a visit, browse or edit your visit history, or get directions
-- Nearby detection — when you're within 100m of a library you haven't visited (or haven't visited in 30 days) you're offered to log a visit
+- Map of street libraries drawn as little libraries on posts: amber with closed doors if you haven't been, green with open doors after a visit, slowly swinging shut over the months
+- Tap a library for a quick preview, or open its details to log a visit, browse or edit your visit history, or get directions
+- A card at the bottom points you to the nearest library you're due to visit, and offers one-tap logging when you arrive
 - Offline-friendly local cache; library data is refreshed at most once a day per area
 
 ## Tech Stack
@@ -80,6 +80,7 @@ docs/                  # Release plan and design docs
 - [Maps](docs/maps.md)
 - [Server](docs/server.md)
 - [Visit log](docs/visit-log.md)
+- [UX design](docs/ux.md) (with [mockups](docs/ux/mockup.html))
 
 The website (landing page and privacy policy) is in [`site/`](site/) and deploys to GitHub Pages from `main`. Preview it locally with `python -m http.server 8765 --directory site`.
 

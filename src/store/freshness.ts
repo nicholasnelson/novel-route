@@ -8,11 +8,19 @@ export const FRESHNESS_THRESHOLDS = {
   recentDays: 182,
 };
 
-export const FRESHNESS_COLORS: Record<Freshness, { fill: string; stroke: string }> = {
-  never: { fill: '#ef4444', stroke: '#991b1b' },
-  fresh: { fill: '#16a34a', stroke: '#14532d' },
-  recent: { fill: '#4ade80', stroke: '#166534' },
-  old: { fill: '#bbf7d0', stroke: '#4d7c0f' },
+/** Accent colour per state (matches the marker artwork in scripts/build-markers.mjs). */
+export const FRESHNESS_COLORS: Record<Freshness, string> = {
+  never: '#e9a23b',
+  fresh: '#1f8f3a',
+  recent: '#5fae71',
+  old: '#8fae96',
+};
+
+export const FRESHNESS_LABELS: Record<Freshness, string> = {
+  never: 'Not visited yet',
+  fresh: 'Visited in the last month',
+  recent: 'Visited in the last six months',
+  old: 'Not visited for over six months',
 };
 
 export function freshnessFor(summary: VisitSummary | undefined, now: number): Freshness {
@@ -24,17 +32,25 @@ export function freshnessFor(summary: VisitSummary | undefined, now: number): Fr
   return 'old';
 }
 
-/** Human-readable status for the library detail sheet. */
-export function describeVisits(summary: VisitSummary | undefined, now: number): string {
-  if (!summary || summary.visitCount === 0) return 'Never visited';
+/** "today", "yesterday", "12 days ago", "3 months ago", "2 years ago". */
+export function relativeDay(timestamp: number, now: number): string {
+  const days = Math.floor((now - timestamp) / DAY_MS);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 60) return `${days} days ago`;
+  if (days < 730) return `${Math.floor(days / 30)} months ago`;
+  return `${Math.floor(days / 365)} years ago`;
+}
 
-  const days = Math.floor((now - summary.lastVisitedAt) / DAY_MS);
-  const when =
-    days <= 0 ? 'today'
-    : days === 1 ? 'yesterday'
-    : days < 60 ? `${days} days ago`
-    : days < 730 ? `${Math.floor(days / 30)} months ago`
-    : `${Math.floor(days / 365)} years ago`;
+/** Short status for cards: "Not visited yet" / "Last visited 3 days ago". */
+export function describeLastVisit(summary: VisitSummary | undefined, now: number): string {
+  if (!summary || summary.visitCount === 0) return 'Not visited yet';
+  return `Last visited ${relativeDay(summary.lastVisitedAt, now)}`;
+}
+
+/** Status for the detail panel: adds the visit count. */
+export function describeVisits(summary: VisitSummary | undefined, now: number): string {
+  if (!summary || summary.visitCount === 0) return 'Not visited yet';
   const count = summary.visitCount === 1 ? '1 visit' : `${summary.visitCount} visits`;
-  return `Last visited ${when} · ${count}`;
+  return `${describeLastVisit(summary, now)} · ${count}`;
 }

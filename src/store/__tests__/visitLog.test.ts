@@ -31,6 +31,14 @@ describe('visitLog', () => {
     expect(await getVisits(db, 'sl:1')).toHaveLength(1);
   });
 
+  it('logs past visits, keeping the most recent as the last visit', async () => {
+    const db = await createTestDb();
+    await logVisit(db, 'sl:1', 'manual', T0);
+    expect(await logVisit(db, 'sl:1', 'manual', T0 - 3 * 24 * 60 * MINUTE)).not.toBeNull();
+    expect(await logVisit(db, 'sl:1', 'manual', T0 - 30 * 1000)).toBeNull(); // too close to an existing visit
+    expect((await getVisitSummaries(db)).get('sl:1')).toMatchObject({ visitCount: 2, lastVisitedAt: T0 });
+  });
+
   it('summarises visit count and last visit per library', async () => {
     const db = await createTestDb();
     await logVisit(db, 'sl:1', 'manual', T0);

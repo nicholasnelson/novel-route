@@ -1,4 +1,4 @@
-import { describeVisits, freshnessFor } from '../freshness';
+import { describeLastVisit, describeVisits, freshnessFor } from '../freshness';
 import { VisitSummary } from '../../types';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -29,7 +29,8 @@ describe('freshnessFor', () => {
 
 describe('describeVisits', () => {
   it('describes each state', () => {
-    expect(describeVisits(undefined, NOW)).toBe('Never visited');
+    expect(describeVisits(undefined, NOW)).toBe('Not visited yet');
+    expect(describeLastVisit(summary(3), NOW)).toBe('Last visited 3 days ago');
     expect(describeVisits(summary(0), NOW)).toBe('Last visited today · 1 visit');
     expect(describeVisits(summary(1, { visitCount: 3 }), NOW)).toBe('Last visited yesterday · 3 visits');
     expect(describeVisits(summary(12), NOW)).toBe('Last visited 12 days ago · 1 visit');

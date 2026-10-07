@@ -1,5 +1,5 @@
 import { htmlToText } from '../html';
-import { normalizeLibrary } from '../streetLibraryClient';
+import { fetchLibrariesForPoint, normalizeLibrary } from '../streetLibraryClient';
 
 describe('htmlToText', () => {
   it('converts a real WordPress excerpt to plain text', () => {
@@ -46,5 +46,32 @@ describe('normalizeLibrary', () => {
   it('rejects items without an ID or valid coordinates', () => {
     expect(normalizeLibrary({ title: 'x', latitude: '1', longitude: '2' })).toBeNull();
     expect(normalizeLibrary({ id: 1, title: 'x', latitude: 'nope', longitude: '2' })).toBeNull();
+  });
+});
+
+describe('fetchLibrariesForPoint', () => {
+  const respond = (body: unknown) => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => body }) as unknown as typeof fetch;
+  };
+
+  it('treats locations outside Australia and New Zealand as having no libraries', async () => {
+    respond({ success: false, data: 'Search location must be within Australia or New Zealand.' });
+    await expect(fetchLibrariesForPoint({ lat: 0, lng: 0, nonce: 'n' })).resolves.toEqual({
+      libraries: [],
+      nonceExpired: false,
+    });
+  });
+
+  it('surfaces plain-text errors from the server', async () => {
+    respond({ success: false, data: 'Something broke' });
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).rejects.toThrow('Something broke');
+  });
+
+  it('detects an expired nonce', async () => {
+    respond({ success: false, data: { nonce_expired: true } });
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).resolves.toEqual({
+      libraries: [],
+      nonceExpired: true,
+    });
   });
 });

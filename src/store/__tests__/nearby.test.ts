@@ -1,10 +1,11 @@
 import { createTestDb } from '../../test/testDb';
 import {
-  findNearbyCandidate,
   getPromptedToday,
-  isPromptEligible,
+  isDue,
   localDateKey,
   markPrompted,
+  nearbyCardState,
+  visitedToday,
 } from '../nearby';
 import { Library, VisitSummary } from '../../types';
 
@@ -12,12 +13,12 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date(2026, 9, 7, 12, 0).getTime();
 const HERE = { latitude: -34.9285, longitude: 138.6007 };
 
-// ~0.0009 degrees of latitude is ~100m
-const lib = (id: string, dLat: number): Library => ({
+// 0.00009 degrees of latitude is ~10m
+const lib = (id: string, metresNorth: number, metresEast = 0): Library => ({
   id,
   title: id,
-  latitude: HERE.latitude + dLat,
-  longitude: HERE.longitude,
+  latitude: HERE.latitude + metresNorth * 0.000009,
+  longitude: HERE.longitude + metresEast * 0.000011,
 });
 
 const visited = (id: string, daysAgo: number): VisitSummary => ({
@@ -26,41 +27,68 @@ const visited = (id: string, daysAgo: number): VisitSummary => ({
   lastVisitedAt: NOW - daysAgo * DAY,
 });
 
-describe('isPromptEligible', () => {
-  it('prompts for never-visited libraries', () => {
-    expect(isPromptEligible(undefined, NOW)).toBe(true);
+describe('isDue / visitedToday', () => {
+  it('treats never-visited and 30+ day old visits as due', () => {
+    expect(isDue(undefined, NOW)).toBe(true);
+    expect(isDue(visited('a', 10), NOW)).toBe(false);
+    expect(isDue(visited('a', 31), NOW)).toBe(true);
   });
 
-  it('only re-prompts once the last visit is over 30 days old', () => {
-    expect(isPromptEligible(visited('a', 10), NOW)).toBe(false);
-    expect(isPromptEligible(visited('a', 31), NOW)).toBe(true);
+  it('knows whether the last visit was today (local time)', () => {
+    expect(visitedToday(visited('a', 0), NOW)).toBe(true);
+    expect(visitedToday(visited('a', 1), NOW)).toBe(false);
   });
 });
 
-describe('findNearbyCandidate', () => {
-  it('picks the nearest eligible library within 100m', () => {
-    const libraries = [lib('far', 0.002), lib('mid', 0.0005), lib('near', 0.0002)];
-    const result = findNearbyCandidate(libraries, HERE, new Map(), new Set(), NOW);
-    expect(result?.library.id).toBe('near');
+describe('nearbyCardState', () => {
+  it('returns null without a location or libraries', () => {
+    expect(nearbyCardState([lib('a', 50)], null, null, new Map(), NOW)).toBeNull();
+    expect(nearbyCardState([], HERE, null, new Map(), NOW)).toBeNull();
   });
 
-  it('skips recently visited and already-prompted libraries', () => {
-    const libraries = [lib('recent', 0.0001), lib('prompted', 0.0002), lib('stale', 0.0003)];
-    const summaries = new Map([
-      ['recent', visited('recent', 2)],
-      ['stale', visited('stale', 60)],
-    ]);
-    const result = findNearbyCandidate(libraries, HERE, summaries, new Set(['prompted']), NOW);
-    expect(result?.library.id).toBe('stale');
+  it('reports arrival within 30m', () => {
+    const state = nearbyCardState([lib('far', 500), lib('here', 20)], HERE, 5, new Map(), NOW);
+    expect(state).toMatchObject({ kind: 'arrived', library: { id: 'here' } });
   });
 
-  it('returns null when nothing is in range', () => {
-    expect(findNearbyCandidate([lib('far', 0.01)], HERE, new Map(), new Set(), NOW)).toBeNull();
+  it('allows for GPS accuracy, capped at 20m', () => {
+    const libraries = [lib('a', 45)];
+    expect(nearbyCardState(libraries, HERE, 0, new Map(), NOW)?.kind).toBe('approaching');
+    expect(nearbyCardState(libraries, HERE, 20, new Map(), NOW)?.kind).toBe('arrived');
+    expect(nearbyCardState([lib('b', 60)], HERE, 100, new Map(), NOW)?.kind).toBe('approaching');
+  });
+
+  it('arrives even at a recently visited library, but not one logged today', () => {
+    const libraries = [lib('a', 10)];
+    expect(nearbyCardState(libraries, HERE, 5, new Map([['a', visited('a', 3)]]), NOW)?.kind).toBe('arrived');
+    expect(nearbyCardState(libraries, HERE, 5, new Map([['a', visited('a', 0)]]), NOW)?.kind).not.toBe('arrived');
+  });
+
+  it('approaches the nearest due library within 2km, with a bearing', () => {
+    const libraries = [lib('fresh', 100), lib('due', 0, 400), lib('far', 1500)];
+    const state = nearbyCardState(libraries, HERE, 5, new Map([['fresh', visited('fresh', 2)]]), NOW);
+    expect(state?.kind).toBe('approaching');
+    if (state?.kind !== 'approaching') return;
+    expect(state.library.id).toBe('due');
+    expect(state.distance).toBeGreaterThan(350);
+    expect(state.bearing).toBeGreaterThan(85); // due east
+    expect(state.bearing).toBeLessThan(95);
+  });
+
+  it('suggests a due library beyond 2km when nothing closer is due', () => {
+    const libraries = [lib('fresh', 100), lib('far', 5000)];
+    const state = nearbyCardState(libraries, HERE, 5, new Map([['fresh', visited('fresh', 2)]]), NOW);
+    expect(state).toMatchObject({ kind: 'suggestion', library: { id: 'far' } });
+  });
+
+  it('suggests nothing specific when every library is fresh', () => {
+    const state = nearbyCardState([lib('a', 300)], HERE, 5, new Map([['a', visited('a', 2)]]), NOW);
+    expect(state).toEqual({ kind: 'suggestion', library: null, distance: null, bearing: null });
   });
 });
 
 describe('prompt history', () => {
-  it('remembers prompts for the current local day only', async () => {
+  it('remembers nudges for the current local day only', async () => {
     const db = await createTestDb();
     await markPrompted(db, 'sl:1', NOW);
     expect(await getPromptedToday(db, NOW)).toEqual(new Set(['sl:1']));

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novel Route UX mockups</title>
+<style>
+  :root {
+    --paper: #fbf8f1;
+    --card: #fffdf8;
+    --ink: #1d2721;
+    --soft: #5b665f;
+    --line: #e7e0d0;
+    --green: #1f8f3a;
+    --amber: #e9a23b;
+    --shadow: 0 10px 30px rgba(20, 30, 25, 0.18);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+  }
+  body { margin: 0; background: #ece7dc; }
+  header { padding: 28px 16px 8px; max-width: 1400px; margin: 0 auto; }
+  h1 { font-family: Georgia, serif; margin: 0 0 6px; }
+  header p { margin: 0; color: var(--soft); max-width: 60em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 28px; padding: 18px 16px; max-width: 1400px; margin: 0 auto; }
+  .legend figure { margin: 0; text-align: center; font-size: 13px; color: var(--soft); width: 110px; }
+  .legend svg { width: 64px; height: 85px; display: block; margin: 0 auto 6px; }
+  .screens { display: flex; flex-wrap: wrap; gap: 32px; padding: 16px; max-width: 1400px; margin: 0 auto 48px; }
+  .screen { width: 300px; }
+  .screen h2 { font-size: 15px; margin: 0 0 4px; }
+  .screen p.note { font-size: 13px; color: var(--soft); margin: 0 0 10px; min-height: 3.2em; }
+
+  /* Phone */
+  .phone { position: relative; width: 300px; height: 630px; border-radius: 36px; background: #111; padding: 9px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .viewport { position: relative; width: 100%; height: 100%; border-radius: 28px; overflow: hidden; background: #e9e6df; }
+  .map { position: absolute; inset: 0; background: url(map-bg.webp) center/cover; filter: grayscale(0.85) brightness(1.06) contrast(0.88); }
+  .marker { position: absolute; width: 30px; height: 40px; transform: translate(-50%, -100%); cursor: pointer; transition: transform .2s; }
+  .marker.selected { transform: translate(-50%, -100%) scale(1.35); filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); z-index: 2; }
+  .me { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #2f7ae5; border: 3px solid #fff; transform: translate(-50%, -50%); box-shadow: 0 0 0 10px rgba(47,122,229,.18); }
+  .cluster { position: absolute; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 50%; background: #fff; border: 3px solid var(--amber); display: grid; place-items: center; font-weight: 700; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  .cluster.all-visited { border-color: var(--green); }
+
+  /* Map chrome */
+  .fab { position: absolute; right: 12px; width: 42px; height: 42px; border-radius: 50%; background: var(--card); box-shadow: 0 2px 8px rgba(0,0,0,.2); display: grid; place-items: center; font-size: 18px; color: var(--ink); }
+  .fab.locate { top: 44px; color: #2f7ae5; }
+  .fab.key { top: 94px; font-weight: 700; font-family: Georgia, serif; }
+  .pill { position: absolute; top: 46px; left: 50%; transform: translateX(-50%); background: rgba(29,39,33,.82); color: #fff; font-size: 12px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
+  .statusbar { position: absolute; top: 0; left: 0; right: 0; height: 30px; font-size: 11px; display: flex; justify-content: space-between; padding: 8px 18px; color: #222; z-index: 3; }
+
+  /* Bottom cards */
+  .card { position: absolute; left: 10px; right: 10px; bottom: 14px; background: var(--card); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .card .icon { width: 30px; height: 40px; flex: none; }
+  .card .title { font-weight: 650; font-size: 15px; line-height: 1.25; }
+  .card .sub { font-size: 12.5px; color: var(--soft); }
+  .grow { flex: 1; min-width: 0; }
+  .dist { text-align: right; font-weight: 650; font-size: 14px; }
+  .arrow { display: inline-block; font-size: 18px; color: var(--green); }
+  .btn { border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 650; font-size: 14px; cursor: pointer; }
+  .btn.primary { background: var(--green); color: #fff; }
+  .btn.ghost { background: #eef3ee; color: var(--ink); }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns .btn { flex: 1; }
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--green); }
+  .toast { position: absolute; left: 10px; right: 10px; bottom: 14px; background: #1d2721; color: #fff; border-radius: 14px; padding: 12px 14px; display: none; justify-content: space-between; font-size: 14px; box-shadow: var(--shadow); }
+  .toast b { color: #8fd6a0; cursor: pointer; }
+  .hint { position: absolute; left: 10px; right: 10px; bottom: 14px; background: #24432f; color: #fff; border-radius: 18px; padding: 12px 14px; font-size: 13.5px; box-shadow: var(--shadow); }
+  .hint .x { float: right; opacity: .7; margin-left: 8px; }
+
+  /* Detail panel */
+  .scrim { position: absolute; inset: 0; background: rgba(20,30,25,.28); }
+  .panel { position: absolute; inset: 40px 14px 14px; background: var(--card); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
+  .panel-head { padding: 14px 14px 10px; display: flex; gap: 12px; align-items: flex-start; background: linear-gradient(#f3efe4, var(--card)); }
+  .panel-head svg { width: 54px; height: 72px; flex: none; }
+  .panel-head .tools { margin-left: auto; display: flex; gap: 6px; }
+  .round { width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; }
+  .panel-body { padding: 4px 16px 16px; overflow: auto; }
+  .panel h3 { margin: 4px 0 2px; font-family: Georgia, serif; font-size: 19px; line-height: 1.2; }
+  .status { font-weight: 650; margin: 10px 0 12px; }
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 14px; }
+  .action { background: #f1eee6; border-radius: 14px; padding: 9px 4px; text-align: center; font-size: 11.5px; }
+  .action span { display: block; font-size: 17px; margin-bottom: 2px; }
+  .desc { font-size: 13.5px; color: var(--soft); line-height: 1.45; }
+  .more { color: var(--green); font-weight: 650; font-size: 13px; }
+  .section { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--soft); margin: 16px 0 6px; }
+  .visit { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .visit small { display: block; color: var(--soft); font-size: 11.5px; }
+  .dots { color: var(--soft); font-size: 18px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Novel Route: UX mockups</h1>
+  <p>Static mockups for docs/ux.md. Map background is a desaturated screenshot standing in for a minimal Mapbox style; library positions are illustrative. On screen 2, "Log visit" is clickable.</p>
+</header>
+
+<div class="legend" id="legend"></div>
+
+<div class="screens">
+  <div class="screen">
+    <h2>1 · Approaching</h2>
+    <p class="note">The nearest library that's due is shown in a calm card. The arrow points to it relative to the map.</p>
+    <div class="phone"><div class="viewport">
+      <div class="map"></div>
+      <div class="statusbar"><span>9:41</span><span>● ●</span></div>
+      <div class="fab locate">◉</div><div class="fab key">?</div>
+      <div data-marker="never" style="left:84%;top:52%"></div>
+      <div data-marker="recent" style="left:28%;top:30%"></div>
+      <div data-marker="old" style="left:66%;top:22%"></div>
+      <div data-marker="fresh" style="left:20%;top:70%"></div>
+      <div class="cluster" style="left:80%;top:84%">7</div>
+      <div class="me" style="left:47%;top:58%"></div>
+      <div class="card">
+        <div class="row">
+          <div data-icon="never"></div>
+          <div class="grow">
+            <div class="kicker">Nearest to visit</div>
+            <div class="title">Wakefield St Little Library</div>
+            <div class="sub">Not visited yet</div>
+          </div>
+          <div class="dist">260 m<br><span class="arrow" style="transform:rotate(80deg)">↑</span></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2>2 · Arrived</h2>
+    <p class="note">Within ~75 m the card offers one-tap logging. No modal. Try it: the doors open and an undo appears.</p>
+    <div class="phone"><div class="viewport" id="arrive">
+      <div class="map" style="background-position: 62% 50%"></div>
+      <div class="statusbar"><span>9:44</span><span>● ●</span></div>
+      <div class="fab locate">◉</div><div class="fab key">?</div>
+      <div data-marker="never" id="arriveMarker" style="left:53%;top:55%"></div>
+      <div data-marker="fresh" style="left:18%;top:28%"></div>
+      <div class="me" style="left:47%;top:58%"></div>
+      <div class="card" id="arriveCard">
+        <div class="row">
+          <div data-icon="never" id="arriveIcon"></div>
+          <div class="grow">
+            <div class="kicker">You're here</div>
+            <div class="title">Wakefield St Little Library</div>
+          </div>
+          <button class="btn primary" id="logBtn">Log visit</button>
+        </div>
+      </div>
+      <div class="toast" id="toast"><span>Visit logged</span><b id="undo">Undo</b></div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2>3 · Preview card</h2>
+    <p class="note">Tapping a marker shows a compact card; tap others to compare on your round. Tap the card for details.</p>
+    <div class="phone"><div class="viewport">
+      <div class="map"></div>
+      <div class="statusbar"><span>9:41</span><span>● ●</span></div>
+      <div class="fab locate">◉</div><div class="fab key">?</div>
+      <div data-marker="never" style="left:84%;top:52%"></div>
+      <div data-marker="old" class="selected" style="left:66%;top:22%"></div>
+      <div data-marker="fresh" style="left:20%;top:70%"></div>
+      <div data-marker="recent" style="left:28%;top:30%"></div>
+      <div class="me" style="left:47%;top:58%"></div>
+      <div class="card">
+        <div class="row">
+          <div data-icon="old"></div>
+          <div class="grow">
+            <div class="title">Flinders St Baptist Courtyard Library</div>
+            <div class="sub">Last visited 7 months ago · 450 m</div>
+          </div>
+        </div>
+        <div class="btns">
+          <button class="btn primary">Log visit</button>
+          <button class="btn ghost">Directions</button>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2>4 · Detail panel</h2>
+    <p class="note">Floats over the map with a margin, so it's clearly on top. Clear history lives in the ⋯ menu.</p>
+    <div class="phone"><div class="viewport">
+      <div class="map"></div>
+      <div class="scrim"></div>
+      <div class="statusbar"><span>9:41</span><span>● ●</span></div>
+      <div class="panel">
+        <div class="panel-head">
+          <div data-big="fresh"></div>
+          <div class="tools"><div class="round">⋯</div><div class="round">✕</div></div>
+        </div>
+        <div class="panel-body">
+          <h3>Flinders St Baptist Courtyard Library</h3>
+          <div class="sub" style="color:var(--soft);font-size:13px">450 m away · Adelaide</div>
+          <div class="status">Last visited today · 5 visits</div>
+          <button class="btn primary" style="width:100%">Visited today ✓</button>
+          <div style="text-align:center;font-size:12.5px;margin-top:6px;color:var(--green);font-weight:650">Log another visit</div>
+          <div class="actions">
+            <div class="action"><span>↗</span>Directions</div>
+            <div class="action"><span>📖</span>Street Library page</div>
+            <div class="action"><span>⤴</span>Share</div>
+          </div>
+          <div class="desc">Let's Get Reading!! Free books to take, read and share with others. Find Christian, children's, crime and general fiction…</div>
+          <div class="more">More</div>
+          <div class="section">Your visits</div>
+          <div class="visit"><div>Today, 10:39 am<small>Logged when nearby</small></div><span class="dots">⋯</span></div>
+          <div class="visit"><div>12 Sep 2026</div><span class="dots">⋯</span></div>
+          <div class="visit"><div>3 Aug 2026</div><span class="dots">⋯</span></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2>5 · A one-off hint</h2>
+    <p class="note">Shown once when libraries first appear; gone after the first marker tap. Map key (?) is always available.</p>
+    <div class="phone"><div class="viewport">
+      <div class="map"></div>
+      <div class="statusbar"><span>9:41</span><span>● ●</span></div>
+      <div class="pill">Updating libraries…</div>
+      <div class="fab locate">◉</div><div class="fab key">?</div>
+      <div data-marker="never" style="left:84%;top:52%"></div>
+      <div data-marker="never" style="left:28%;top:30%"></div>
+      <div data-marker="never" style="left:66%;top:22%"></div>
+      <div class="cluster" style="left:22%;top:78%">12</div>
+      <div class="me" style="left:47%;top:58%"></div>
+      <div class="hint"><span class="x">✕</span><b>Tap a library</b> to see what's there, get directions, or log a visit. Closed doors mean you haven't been yet.</div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+// Library-on-a-post marker. Doors: closed | ajar | half | open.
+const STATES = {
+  never:  { body: '#e9a23b', roof: '#b9721a', door: '#f6c870', doors: 'closed', label: 'Not visited yet' },
+  fresh:  { body: '#1f8f3a', roof: '#146b2c', door: '#4cb565', doors: 'open',   label: 'Visited < 30 days' },
+  recent: { body: '#5fae71', roof: '#3e8a50', door: '#9bd1a6', doors: 'half',   label: '30 days – 6 months' },
+  old:    { body: '#a8c1ad', roof: '#7f9c86', door: '#cfdfd2', doors: 'ajar',   label: 'Over 6 months' },
+};
+const DOORS = {
+  closed: [[12,21,24,21,24,35,12,35],[24,21,36,21,36,35,24,35]],
+  ajar:   [[12,21,22.5,21.6,22.5,34.4,12,35],[36,21,25.5,21.6,25.5,34.4,36,35]],
+  half:   [[12,21,17.5,22.3,17.5,33.7,12,35],[36,21,30.5,22.3,30.5,33.7,36,35]],
+  open:   [[12,21,5,22.6,5,33.4,12,35],[36,21,43,22.6,43,33.4,36,35]],
+};
+const BOOKS = ['#c94f3d','#3b6ea8','#e3c25a','#5a8f5a','#8a5aa0','#d9822b','#4f7f8f'];
+function marker(state) {
+  const s = STATES[state];
+  const doors = DOORS[s.doors];
+  const pts = d => d.join(' ');
+  const books = BOOKS.map((c, i) => `<rect x="${13 + i * 3.25}" y="${23 + (i % 3)}" width="2.6" height="${11 - (i % 3)}" rx="0.4" fill="${c}"/>`).join('');
+  const halo = `<g fill="#fff" stroke="#fff" stroke-width="3.2" stroke-linejoin="round">
+      <rect x="22" y="36" width="4" height="24"/>
+      <path d="M4 20 L24 5 L44 20 Z"/><rect x="8" y="18" width="32" height="20" rx="2"/>
+      ${doors.map(d => `<polygon points="${pts(d)}"/>`).join('')}</g>`;
+  return `<svg viewBox="0 0 48 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${s.label}">
+    <ellipse cx="24" cy="61" rx="7" ry="2" fill="rgba(0,0,0,.2)"/>
+    ${halo}
+    <rect x="22" y="36" width="4" height="24" rx="1" fill="#5b5f5c"/>
+    <path d="M4 20 L24 5 L44 20 Z" fill="${s.roof}" stroke="${s.roof}" stroke-width="1.5" stroke-linejoin="round"/>
+    <rect x="8" y="18" width="32" height="20" rx="2" fill="${s.body}"/>
+    <rect x="12" y="21" width="24" height="14" fill="#3a2e24"/>${books}
+    ${doors.map(d => `<polygon points="${pts(d)}" fill="${s.door}" stroke="${s.roof}" stroke-width="0.8" stroke-linejoin="round"/>`).join('')}
+    ${s.doors === 'closed' ? `<circle cx="22.4" cy="28" r="0.9" fill="${s.roof}"/><circle cx="25.6" cy="28" r="0.9" fill="${s.roof}"/>` : ''}
+  </svg>`;
+}
+
+document.getElementById('legend').innerHTML = Object.keys(STATES)
+  .map(k => `<figure>${marker(k)}<figcaption>${STATES[k].label}</figcaption></figure>`).join('');
+document.querySelectorAll('[data-marker]').forEach(el => { el.classList.add('marker'); el.innerHTML = marker(el.dataset.marker); });
+document.querySelectorAll('[data-icon]').forEach(el => { el.classList.add('icon'); el.innerHTML = marker(el.dataset.icon); });
+document.querySelectorAll('[data-big]').forEach(el => { el.innerHTML = marker(el.dataset.big); });
+
+// Screen 2 interaction
+const card = document.getElementById('arriveCard'), toast = document.getElementById('toast');
+const m = document.getElementById('arriveMarker'), icon = document.getElementById('arriveIcon');
+document.getElementById('logBtn').onclick = () => {
+  m.innerHTML = marker('fresh'); icon.innerHTML = marker('fresh');
+  m.classList.add('selected'); setTimeout(() => m.classList.remove('selected'), 400);
+  card.style.display = 'none'; toast.style.display = 'flex';
+};
+document.getElementById('undo').onclick = () => {
+  m.innerHTML = marker('never'); icon.innerHTML = marker('never');
+  toast.style.display = 'none'; card.style.display = 'block';
+};
+</script>
+</body>
+</html>

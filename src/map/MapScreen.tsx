@@ -1,60 +1,120 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
-import LibraryMap, { MapRegion } from './LibraryMap';
-import LibrarySheet from './LibrarySheet';
+import LibraryMap, { LibraryMapHandle, MapRegion } from './LibraryMap';
+import LibraryDetail from './overlays/LibraryDetail';
+import MapKey, { REGISTER_LIBRARY_URL } from './overlays/MapKey';
+import {
+  DirectionReference,
+  HintCard,
+  LibraryPreviewCard,
+  NearbyCard,
+  UndoToast,
+} from './overlays/cards';
+import { MapControls, StatusPill, StatusPillKind } from './overlays/chrome';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
-import { cellFor, refreshCellIfStale } from '../data/librarySync';
+import { cellFor, isInServiceArea, refreshCellIfStale } from '../data/librarySync';
 import { getAllLibraries } from '../store/libraryStore';
 import {
   clearVisits,
   deleteVisit,
+  DUPLICATE_VISIT_WINDOW_MS,
   getVisits,
   getVisitSummaries,
   logVisit,
   restoreVisit,
 } from '../store/visitLog';
-import { findNearbyCandidate, getPromptedToday, markPrompted } from '../store/nearby';
+import { freshnessFor } from '../store/freshness';
+import { getPromptedToday, markPrompted, nearbyCardState } from '../store/nearby';
+import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
+import { distanceMeters } from '../geo/distance';
+import { formatDistance } from '../geo/bearing';
 import {
   getCurrentPosition,
+  getLocationPermission,
+  Heading,
+  PermissionState,
+  PositionFix,
   requestLocationPermission,
+  watchHeading,
   watchPosition,
 } from '../location/location';
+import { colors } from '../ui/theme';
 
-const ADELAIDE_CBD: LatLng = { latitude: -34.9285, longitude: 138.6007 };
+/** Starting view until we know where the user is: the whole of Australia. */
+const AUSTRALIA: LatLng = { latitude: -27.5, longitude: 134 };
+const AUSTRALIA_ZOOM = 3.4;
 /** Below this zoom the visible area spans many cells, so panning doesn't trigger fetches. */
 const MIN_SYNC_ZOOM = 12;
+/** Fixed bottom padding while following the user, so the map doesn't jump as cards change. */
+const FOLLOW_BOTTOM_PADDING = 150;
+/** The "tap a library" hint gives way to the nearby card after this long. */
+const TAP_HINT_MS = 10000;
+/** Logging a visit from further away than this asks for confirmation. */
+const FAR_VISIT_CONFIRM_M = 200;
+const HOUR_MS = 60 * 60 * 1000;
+/** "No libraries here" is only worth saying at street-level zoom. */
+const MIN_EMPTY_AREA_ZOOM = 13;
+/** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
+const MIN_COURSE_SPEED = 0.8;
+const UNDO_TIMEOUT_MS = 6000;
+
+function directionsUrl(library: Library) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${library.latitude},${library.longitude}&travelmode=walking`;
+}
 
 export default function MapScreen() {
+  const insets = useSafeAreaInsets();
+  const mapRef = useRef<LibraryMapHandle>(null);
+
   const [db, setDb] = useState<Db | null>(null);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [summaries, setSummaries] = useState<Map<string, VisitSummary>>(new Map());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedVisits, setSelectedVisits] = useState<Visit[]>([]);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [followUser, setFollowUser] = useState(true);
-  const [locationGranted, setLocationGranted] = useState(false);
-  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const promptOpenRef = useRef(false);
+  const [seenHints, setSeenHints] = useState<Set<HintKey> | null>(null);
+
+  const [permission, setPermission] = useState<{ status: PermissionState; canAskAgain: boolean } | null>(null);
+  const [position, setPosition] = useState<PositionFix | null>(null);
+  const [heading, setHeading] = useState<Heading | null>(null);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const [followUser, setFollowUser] = useState(true);
+  const [requestingLocation, setRequestingLocation] = useState(false);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedVisits, setSelectedVisits] = useState<Visit[]>([]);
+  const [mapKeyOpen, setMapKeyOpen] = useState(false);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  const [toast, setToast] = useState<Visit | null>(null);
+  const [region, setRegion] = useState<MapRegion | null>(null);
+  const [bottomHeight, setBottomHeight] = useState(0);
+
+  const [inFlightCount, setInFlightCount] = useState(0);
+  const [failedCell, setFailedCell] = useState<string | null>(null);
+  const [dbFailed, setDbFailed] = useState(false);
   const userCellRef = useRef<string | null>(null);
   const regionCellRef = useRef<string | null>(null);
   const inFlightCellsRef = useRef(new Set<string>());
-  const lastFailedCellRef = useRef<string | null>(null);
+  const syncing = inFlightCount > 0;
+
+  const location: LatLng | null = position;
+  const locationGranted = permission?.status === 'granted';
 
   const selectedLibrary = useMemo(
     () => libraries.find((l) => l.id === selectedId) ?? null,
     [libraries, selectedId]
   );
+
+  const distanceTo = useCallback(
+    (library: Library) =>
+      location ? distanceMeters(location.latitude, location.longitude, library.latitude, library.longitude) : null,
+    [location]
+  );
+
+  // --- Data ---
 
   const reloadVisitState = useCallback(async (database: Db, libraryId: string | null) => {
     setNow(Date.now());
@@ -65,29 +125,26 @@ export default function MapScreen() {
   const syncCell = useCallback(async (database: Db, cell: string) => {
     if (inFlightCellsRef.current.has(cell)) return;
     inFlightCellsRef.current.add(cell);
-    setSyncStatus('loading');
+    setInFlightCount((n) => n + 1);
     try {
       const updated = await refreshCellIfStale(database, cell);
       if (updated) setLibraries(await getAllLibraries(database));
-      if (lastFailedCellRef.current === cell) lastFailedCellRef.current = null;
+      setFailedCell((failed) => (failed === cell ? null : failed));
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
-      lastFailedCellRef.current = cell;
+      setFailedCell(cell);
     } finally {
       inFlightCellsRef.current.delete(cell);
-      if (inFlightCellsRef.current.size === 0) {
-        setSyncStatus(lastFailedCellRef.current ? 'error' : 'idle');
-      }
+      setInFlightCount((n) => n - 1);
     }
   }, []);
 
-  const recordVisit = useCallback(
-    async (libraryId: string, source: VisitSource) => {
-      if (!db) return;
-      await logVisit(db, libraryId, source);
-      await reloadVisitState(db, selectedId);
+  const seeHint = useCallback(
+    (hint: HintKey) => {
+      setSeenHints((prev) => new Set(prev).add(hint));
+      if (db) markHintSeen(db, hint);
     },
-    [db, reloadVisitState, selectedId]
+    [db]
   );
 
   // Open the database and render whatever is cached.
@@ -96,169 +153,384 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, visitSummaries] = await Promise.all([
+        const [libs, visitSummaries, hints, perm] = await Promise.all([
           getAllLibraries(database),
           getVisitSummaries(database),
+          getSeenHints(database),
+          getLocationPermission(),
         ]);
         if (cancelled) return;
         setLibraries(libs);
         setSummaries(visitSummaries);
+        setSeenHints(hints);
+        setPermission(perm);
         setDb(database);
       } catch (err: any) {
         console.error('Failed to open database:', err?.message);
-        if (!cancelled) setSyncStatus('error');
+        if (!cancelled) setDbFailed(true);
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Locate the user and follow their position. Without a position, load the default area.
+  // Keep relative times ("today", freshness colours) current while the app stays open.
   useEffect(() => {
-    if (!db) return;
+    const timer = setInterval(() => setNow(Date.now()), 60 * 1000);
+    const sub = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => { clearInterval(timer); sub.remove(); };
+  }, []);
+
+  // --- Location ---
+
+  useEffect(() => {
+    if (!locationGranted || !appActive) return;
     let subscription: { remove(): void } | null = null;
     let cancelled = false;
-
     (async () => {
-      const granted = await requestLocationPermission();
+      const first = await getCurrentPosition();
       if (cancelled) return;
-      setLocationGranted(granted);
-      const pos = granted ? await getCurrentPosition() : null;
-      if (cancelled) return;
-
-      if (pos) setUserLocation(pos);
-      else await syncCell(db, cellFor(ADELAIDE_CBD.latitude, ADELAIDE_CBD.longitude));
-
-      if (granted && !cancelled) {
-        const sub = await watchPosition((coords) => setUserLocation(coords));
-        if (cancelled) sub.remove();
-        else subscription = sub;
-      }
+      if (first) setPosition(first);
+      const sub = await watchPosition(setPosition);
+      if (cancelled) sub.remove();
+      else subscription = sub;
     })();
-
-    return () => {
-      cancelled = true;
-      subscription?.remove();
-    };
-  }, [db, syncCell]);
+    return () => { cancelled = true; subscription?.remove(); };
+  }, [locationGranted, appActive]);
 
   // Refresh the user's cache cell whenever they enter a new one (no-op if it's fresh).
   useEffect(() => {
-    if (!db || !userLocation) return;
-    const cell = cellFor(userLocation.latitude, userLocation.longitude);
+    if (!db || !location) return;
+    const cell = cellFor(location.latitude, location.longitude);
     if (cell === userCellRef.current) return;
     userCellRef.current = cell;
     syncCell(db, cell);
-  }, [db, userLocation, syncCell]);
+  }, [db, location, syncCell]);
 
-  // Offer to log a visit when the user is near an unvisited (or long-unvisited) library.
+  const askForLocation = async () => {
+    if (permission?.status === 'denied' && !permission.canAskAgain) {
+      Linking.openSettings();
+      return;
+    }
+    setRequestingLocation(true);
+    const granted = await requestLocationPermission();
+    setPermission(await getLocationPermission());
+    setRequestingLocation(false);
+    if (granted) setFollowUser(true);
+  };
+
+  // --- Nearby card ---
+
+  const nearby = useMemo(
+    () => nearbyCardState(libraries, location, position?.accuracy ?? null, summaries, now),
+    [libraries, location, position?.accuracy, summaries, now]
+  );
+
+  // "Forward" for the nearby arrow: compass if calibrated, else direction of travel when walking,
+  // else null (north-up, matching the non-rotating map).
+  let directionReference: DirectionReference = null;
+  if (heading?.reliable) directionReference = { degrees: heading.degrees, source: 'compass' };
+  else if (position?.course != null && (position.speed ?? 0) >= MIN_COURSE_SPEED) {
+    directionReference = { degrees: position.course, source: 'course' };
+  }
+
+  // A gentle tick the first time each day you arrive at a library.
+  const arrivedId = nearby?.kind === 'arrived' ? nearby.library.id : null;
   useEffect(() => {
-    if (!db || !userLocation || libraries.length === 0 || promptOpenRef.current) return;
-
+    if (!db || !arrivedId) return;
     (async () => {
       const at = Date.now();
-      const promptedToday = await getPromptedToday(db, at);
-      const candidate = findNearbyCandidate(libraries, userLocation, summaries, promptedToday, at);
-      if (!candidate || promptOpenRef.current) return;
-
-      promptOpenRef.current = true;
-      await markPrompted(db, candidate.library.id, at);
-      const lastVisit = summaries.get(candidate.library.id);
-      Alert.alert(
-        'Nearby library',
-        lastVisit
-          ? `You're near "${candidate.library.title}". Log another visit?`
-          : `You're near "${candidate.library.title}". Log a visit?`,
-        [
-          { text: 'Not now', style: 'cancel', onPress: () => { promptOpenRef.current = false; } },
-          {
-            text: 'Log visit',
-            onPress: async () => {
-              promptOpenRef.current = false;
-              await recordVisit(candidate.library.id, 'nearby_prompt');
-            },
-          },
-        ],
-        { onDismiss: () => { promptOpenRef.current = false; } }
-      );
+      if ((await getPromptedToday(db, at)).has(arrivedId)) return;
+      await markPrompted(db, arrivedId, at);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     })();
-  }, [db, userLocation, libraries, summaries, recordVisit]);
+  }, [db, arrivedId]);
 
-  // Load libraries for the area the user pans to.
-  const handleRegionChange = (region: MapRegion) => {
-    if (!db || region.zoom < MIN_SYNC_ZOOM) return;
-    const cell = cellFor(region.center.latitude, region.center.longitude);
+  // --- Actions ---
+
+  // The undo toast hides itself after a few seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), UNDO_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const recordVisit = async (libraryId: string, source: VisitSource, visitedAt?: number) => {
+    if (!db) return;
+    const visit = await logVisit(db, libraryId, source, visitedAt);
+    if (!visit) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setToast(visit);
+    await reloadVisitState(db, selectedId);
+  };
+
+  const undoLastVisit = async () => {
+    if (!db || !toast) return;
+    await deleteVisit(db, toast.id);
+    setToast(null);
+    await reloadVisitState(db, selectedId);
+  };
+
+  /** "Log visit" from a card or the detail panel: asks first if you're clearly not there. */
+  const logVisitNow = (library: Library) => {
+    const distance = distanceTo(library);
+    if (distance !== null && distance > FAR_VISIT_CONFIRM_M) {
+      Alert.alert(
+        'Log a visit from here?',
+        `You're ${formatDistance(distance)} from ${library.title}. Log a visit anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log visit', onPress: () => recordVisit(library.id, 'manual') },
+        ]
+      );
+      return;
+    }
+    recordVisit(library.id, 'manual');
+  };
+
+  const toastLibraryTitle = toast ? libraries.find((l) => l.id === toast.libraryId)?.title : undefined;
+
+  const selectLibrary = (id: string) => {
+    setSelectedId(id);
+    if (seenHints && !seenHints.has('tap_library')) seeHint('tap_library');
+  };
+
+  const openDetail = async (id: string) => {
+    setSelectedId(id);
+    setDetailOpen(true);
+    if (db) await reloadVisitState(db, id);
+  };
+
+  const openDirections = (library: Library) => {
+    Linking.openURL(directionsUrl(library));
+  };
+
+  const handleRegionChange = (next: MapRegion) => {
+    setRegion(next);
+    if (!db || next.zoom < MIN_SYNC_ZOOM) return;
+    const cell = cellFor(next.center.latitude, next.center.longitude);
     if (cell === regionCellRef.current) return;
     regionCellRef.current = cell;
     syncCell(db, cell);
   };
 
-  const handleRetry = () => {
+  const focusLibrary = (library: Library) => {
+    selectLibrary(library.id);
+    if (location) mapRef.current?.frame([location, library]);
+  };
+
+  const retrySync = () => {
     if (!db) return;
-    const cell =
-      lastFailedCellRef.current ??
-      cellFor((userLocation ?? ADELAIDE_CBD).latitude, (userLocation ?? ADELAIDE_CBD).longitude);
-    syncCell(db, cell);
+    const cell = failedCell ?? (location ? cellFor(location.latitude, location.longitude) : null);
+    if (cell) syncCell(db, cell);
   };
 
-  const handleLibraryPress = (id: string) => {
-    setSelectedId(id);
-    if (db) reloadVisitState(db, id);
+  // --- Status pill (top) ---
+
+  const librariesInView = useMemo(() => {
+    if (!region) return null;
+    const { north, south, east, west } = region.bounds;
+    return libraries.some(
+      (l) => l.latitude <= north && l.latitude >= south && l.longitude <= east && l.longitude >= west
+    );
+  }, [region, libraries]);
+  // Zoomed out over Australia/NZ with nothing cached in view: libraries only load at street level.
+  const needsZoomIn =
+    !!region &&
+    region.zoom < MIN_SYNC_ZOOM &&
+    isInServiceArea(region.center.latitude, region.center.longitude) &&
+    librariesInView === false;
+  const emptyArea = !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && librariesInView === false;
+
+  let pill: StatusPillKind | null = null;
+  if (failedCell || dbFailed) pill = 'error';
+  else if (syncing) pill = 'loading';
+  else if (needsZoomIn) pill = 'zoom-in';
+  else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
+  else if (emptyArea) pill = 'empty-area';
+
+  const handlePillAction = () => {
+    if (pill === 'error') retrySync();
+    else if (pill === 'zoom-in') mapRef.current?.zoomTo(MIN_SYNC_ZOOM + 1);
+    else if (pill === 'location-off') askForLocation();
+    else if (pill === 'empty-area') Linking.openURL(REGISTER_LIBRARY_URL);
   };
 
-  const handleNavigate = () => {
-    if (!selectedLibrary) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedLibrary.latitude},${selectedLibrary.longitude}`;
-    Linking.openURL(url);
-  };
+  // --- Bottom slot: one card at a time, highest priority first ---
+
+  const nearbyLibrary = nearby?.library ?? null;
+  const nearbySummary = nearbyLibrary ? summaries.get(nearbyLibrary.id) : undefined;
+  const showLocationExplainer = permission?.status === 'undetermined' && !seenHints?.has('location_explained');
+  const showTapHint = libraries.length > 0 && !seenHints?.has('tap_library');
+  // Wait for the undo toast to go, so two dark cards don't stack.
+  const showDoorsHint = summaries.size > 0 && !seenHints?.has('doors') && !toast;
+  const showNearby = nearby !== null && !(nearby.kind === 'suggestion' && suggestionDismissed);
+
+  let bottomCard: React.ReactNode = null;
+  let tapHintVisible = false;
+  if (!seenHints) {
+    bottomCard = null;
+  } else if (selectedLibrary) {
+    bottomCard = (
+      <LibraryPreviewCard
+        library={selectedLibrary}
+        freshness={freshnessFor(summaries.get(selectedLibrary.id), now)}
+        summary={summaries.get(selectedLibrary.id)}
+        now={now}
+        distance={distanceTo(selectedLibrary)}
+        onOpen={() => openDetail(selectedLibrary.id)}
+        onLogVisit={() => logVisitNow(selectedLibrary)}
+        onDirections={() => openDirections(selectedLibrary)}
+        onClose={() => setSelectedId(null)}
+      />
+    );
+  } else if (showLocationExplainer) {
+    bottomCard = (
+      <HintCard
+        title="Find libraries near you"
+        body="Novel Route uses your location to show nearby street libraries and to let you log a visit when you arrive. It stays on your phone."
+        actions={[
+          { label: 'Not now', onPress: () => seeHint('location_explained') },
+          { label: 'Allow', primary: true, onPress: () => { seeHint('location_explained'); askForLocation(); } },
+        ]}
+      />
+    );
+  } else if (nearby?.kind === 'arrived') {
+    bottomCard = (
+      <NearbyCard
+        state={nearby}
+        freshness={freshnessFor(nearbySummary, now)}
+        summary={nearbySummary}
+        now={now}
+        reference={directionReference}
+        onPress={() => openDetail(nearby.library.id)}
+        onLogVisit={() => recordVisit(nearby.library.id, 'nearby_prompt')}
+        onDismiss={() => {}}
+      />
+    );
+  } else if (showTapHint) {
+    tapHintVisible = true;
+    bottomCard = (
+      <HintCard
+        body={
+          <Text style={styles.hintText}>
+            <Text style={styles.hintStrong}>Tap a library</Text> to see what&apos;s there, get directions or log a
+            visit. Closed doors mean you haven&apos;t been yet.
+          </Text>
+        }
+        onDismiss={() => seeHint('tap_library')}
+      />
+    );
+  } else if (showDoorsHint) {
+    bottomCard = (
+      <HintCard
+        title="The doors are open"
+        body="Logging a visit opens a library's doors. They slowly close over the months, a reminder that there might be new books to find."
+        onDismiss={() => seeHint('doors')}
+      />
+    );
+  } else if (showNearby && nearby) {
+    bottomCard = (
+      <NearbyCard
+        state={nearby}
+        freshness={freshnessFor(nearbySummary, now)}
+        summary={nearbySummary}
+        now={now}
+        reference={directionReference}
+        onPress={() => nearbyLibrary && focusLibrary(nearbyLibrary)}
+        onLogVisit={() => {}}
+        onDismiss={() => setSuggestionDismissed(true)}
+      />
+    );
+  }
+
+  const arrowShowing = !!bottomCard && showNearby && nearby?.kind !== 'arrived' && !!nearbyLibrary &&
+    !selectedLibrary && !tapHintVisible;
+
+  // Compass, only while the app is in the foreground and the nearby arrow is showing.
+  useEffect(() => {
+    if (!locationGranted || !appActive || !arrowShowing) return;
+    let subscription: { remove(): void } | null = null;
+    let cancelled = false;
+    watchHeading(setHeading)
+      .then((sub) => { if (cancelled) sub.remove(); else subscription = sub; })
+      .catch(() => setHeading(null));
+    return () => { cancelled = true; subscription?.remove(); };
+  }, [locationGranted, appActive, arrowShowing]);
+
+  // The "tap a library" hint steps aside for the nearby card after a while.
+  useEffect(() => {
+    if (!tapHintVisible) return;
+    const timer = setTimeout(() => seeHint('tap_library'), TAP_HINT_MS);
+    return () => clearTimeout(timer);
+  }, [tapHintVisible, seeHint]);
+
+  const topOffset = insets.top + 8;
+  const detailLibrary = detailOpen ? selectedLibrary : null;
+  const selectedSummary = selectedId ? summaries.get(selectedId) : undefined;
 
   return (
     <View style={styles.container}>
       <LibraryMap
+        ref={mapRef}
         libraries={libraries}
         visitSummaries={summaries}
-        now={now}
+        now={Math.floor(now / HOUR_MS) * HOUR_MS}
         selectedId={selectedId}
-        initialCenter={ADELAIDE_CBD}
+        initialCenter={AUSTRALIA}
+        initialZoom={AUSTRALIA_ZOOM}
         followUser={followUser}
         showUserLocation={locationGranted}
-        onLibraryPress={handleLibraryPress}
+        showHeading={!!heading?.reliable}
+        padding={{ top: topOffset + 44, bottom: bottomHeight + insets.bottom + 16 }}
+        followPadding={{ top: topOffset + 44, bottom: FOLLOW_BOTTOM_PADDING + insets.bottom }}
+        ornamentTop={topOffset}
+        onLibraryPress={selectLibrary}
+        onMapPress={() => setSelectedId(null)}
         onRegionChange={handleRegionChange}
         onFollowUserChange={setFollowUser}
       />
 
-      {syncStatus === 'loading' && (
-        <View style={styles.badge} pointerEvents="none">
-          <ActivityIndicator size="small" color="#fff" />
-          <Text style={styles.badgeText}>Updating libraries…</Text>
+      {pill && (
+        <View style={[styles.pillSlot, { top: topOffset + 40 }]} pointerEvents="box-none">
+          <StatusPill kind={pill} onAction={handlePillAction} />
         </View>
       )}
 
-      {syncStatus === 'error' && (
-        <TouchableOpacity
-          style={[styles.badge, styles.badgeError]}
-          onPress={handleRetry}
-          accessibilityRole="button"
-        >
-          <Text style={styles.badgeText}>Couldn&apos;t update libraries. Showing saved data. Tap to retry</Text>
-        </TouchableOpacity>
-      )}
+      <View style={[styles.controls, { top: topOffset + 40, right: insets.right + 12 }]}>
+        <MapControls
+          following={followUser && locationGranted}
+          locationAvailable={locationGranted}
+          onLocate={() => (locationGranted ? setFollowUser(true) : askForLocation())}
+          onShowKey={() => setMapKeyOpen(true)}
+        />
+      </View>
 
-      {locationGranted && !followUser && (
-        <TouchableOpacity
-          style={styles.autoCenterButton}
-          onPress={() => setFollowUser(true)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.autoCenterText}>Re-center</Text>
-        </TouchableOpacity>
-      )}
+      <View
+        style={[styles.bottomSlot, { bottom: insets.bottom + 12, left: insets.left + 10, right: insets.right + 10 }]}
+        pointerEvents="box-none"
+        onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}
+      >
+        {toast && !detailOpen && (
+          <UndoToast
+            message={toastLibraryTitle ? `Logged a visit to ${toastLibraryTitle}` : 'Visit logged'}
+            onUndo={undoLastVisit}
+          />
+        )}
+        {bottomCard}
+      </View>
 
-      <LibrarySheet
-        library={selectedLibrary}
-        summary={selectedId ? summaries.get(selectedId) : undefined}
+      <LibraryDetail
+        library={detailLibrary}
+        freshness={freshnessFor(selectedSummary, now)}
+        summary={selectedSummary}
         visits={selectedVisits}
         now={now}
-        onLogVisit={() => selectedId && recordVisit(selectedId, 'manual')}
+        distance={detailLibrary ? distanceTo(detailLibrary) : null}
+        canLogAgain={!selectedSummary || now - selectedSummary.lastVisitedAt >= DUPLICATE_VISIT_WINDOW_MS}
+        justLogged={toast && toast.libraryId === selectedId ? toast : null}
+        onUndoLog={undoLastVisit}
+        onLogVisit={() => detailLibrary && logVisitNow(detailLibrary)}
+        onLogPastVisit={(visitedAt) => selectedId && recordVisit(selectedId, 'manual', visitedAt)}
         onDeleteVisit={async (visit) => {
           if (!db) return;
           await deleteVisit(db, visit.id);
@@ -274,9 +546,11 @@ export default function MapScreen() {
           await clearVisits(db, selectedId);
           await reloadVisitState(db, selectedId);
         }}
-        onNavigate={handleNavigate}
-        onClose={() => setSelectedId(null)}
+        onDirections={() => detailLibrary && openDirections(detailLibrary)}
+        onClose={() => setDetailOpen(false)}
       />
+
+      <MapKey visible={mapKeyOpen} onClose={() => setMapKeyOpen(false)} />
     </View>
   );
 }
@@ -284,44 +558,30 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.paper,
   },
-  badge: {
+  pillSlot: {
     position: 'absolute',
-    top: 60,
-    alignSelf: 'center',
-    maxWidth: '90%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
+    left: 72,
+    right: 72,
     alignItems: 'center',
-    gap: 8,
   },
-  badgeError: {
-    backgroundColor: 'rgba(153,27,27,0.9)',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  autoCenterButton: {
+  controls: {
     position: 'absolute',
-    bottom: 40,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
-  autoCenterText: {
-    color: '#3b82f6',
+  bottomSlot: {
+    position: 'absolute',
+    gap: 8,
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  hintText: {
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 20,
+  },
+  hintStrong: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });

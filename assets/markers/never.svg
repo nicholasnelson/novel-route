@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="48" height="64">
+  <ellipse cx="24" cy="61" rx="7" ry="2" fill="#000" fill-opacity="0.2"/>
+  <g fill="#fff" stroke="#fff" stroke-width="3.2" stroke-linejoin="round">
+    <rect x="22" y="36" width="4" height="24"/>
+    <path d="M4 20 L24 5 L44 20 Z"/>
+    <rect x="8" y="18" width="32" height="20" rx="2"/>
+    <polygon points="12 21 24 21 24 35 12 35" /><polygon points="24 21 36 21 36 35 24 35" />
+  </g>
+  <rect x="22" y="36" width="4" height="24" rx="1" fill="#5b5f5c"/>
+  <path d="M4 20 L24 5 L44 20 Z" fill="#b9721a" stroke="#b9721a" stroke-width="1.5" stroke-linejoin="round"/>
+  <rect x="8" y="18" width="32" height="20" rx="2" fill="#e9a23b"/>
+  <rect x="12" y="21" width="24" height="14" fill="#3a2e24"/>
+  <rect x="13" y="23" width="2.6" height="11" rx="0.4" fill="#c94f3d"/><rect x="16.25" y="24" width="2.6" height="10" rx="0.4" fill="#3b6ea8"/><rect x="19.5" y="25" width="2.6" height="9" rx="0.4" fill="#e3c25a"/><rect x="22.75" y="23" width="2.6" height="11" rx="0.4" fill="#5a8f5a"/><rect x="26" y="24" width="2.6" height="10" rx="0.4" fill="#8a5aa0"/><rect x="29.25" y="25" width="2.6" height="9" rx="0.4" fill="#d9822b"/><rect x="32.5" y="23" width="2.6" height="11" rx="0.4" fill="#4f7f8f"/>
+  <polygon points="12 21 24 21 24 35 12 35" fill="#f6c870" stroke="#b9721a" stroke-width="0.8" stroke-linejoin="round"/><polygon points="24 21 36 21 36 35 24 35" fill="#f6c870" stroke="#b9721a" stroke-width="0.8" stroke-linejoin="round"/>
+  <circle cx="22.4" cy="28" r="0.9" fill="#b9721a"/><circle cx="25.6" cy="28" r="0.9" fill="#b9721a"/>
+</svg>
