@@ -17,6 +17,10 @@ Try it: `curl "http://localhost:8787/v1/libraries?cells=r1f93,r1f96"` (Adelaide 
 
 To point the app at a local server: `adb reverse tcp:8787 tcp:8787`, then start Metro with `EXPO_PUBLIC_API_URL=http://127.0.0.1:8787` (from `apps/mobile`).
 
+## Production
+
+Deployed at `https://novel-route-api.novel-route-server.workers.dev` (D1 database `novel-route`, Oceania). Redeploy with `npm run deploy`; schema changes: add a migration file, then `npm run db:migrate:remote` before deploying. Live logs: `npx wrangler tail`.
+
 ## Deploying (first time)
 
 1. `npx wrangler login`

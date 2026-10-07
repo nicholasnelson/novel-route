@@ -8,8 +8,7 @@
     {
       "binding": "DB",
       "database_name": "novel-route",
-      // Replace with the id printed by `npx wrangler d1 create novel-route`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "cbfd1de8-5ad4-4cae-b0ee-353e814e4160",
       "migrations_dir": "migrations"
     }
   ],

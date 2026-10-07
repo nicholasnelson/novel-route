@@ -1,6 +1,6 @@
 # MVP data server
 
-Status: **built, not yet deployed** (2026-10-07). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
+Status: **deployed** (2026-10-07) at `https://novel-route-api.novel-route-server.workers.dev` (Cloudflare account of nnelson263@gmail.com; D1 `novel-route` in Oceania). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
 
 ## Purpose
 
@@ -20,7 +20,7 @@ Status: **built, not yet deployed** (2026-10-07). Code: `apps/server`; deploymen
 - TypeScript + [Hono](https://hono.dev/) — small, and runs on Cloudflare Workers, Node or Bun unchanged.
 - SQLite: Cloudflare D1 if on Workers, plain SQLite file if on Node.
 - Host: **Cloudflare Workers + D1** (free tier), with the Workers rate limiting binding.
-- **Still to confirm on deploy:** that the Street Library endpoint accepts requests from Cloudflare's network (some WordPress sites block datacenter IPs). Locally (`wrangler dev`) it works from a home connection. If Workers is blocked, the same Hono app runs on Node with SQLite on a small VM.
+- **Confirmed on deploy:** the Street Library endpoint accepts requests from Cloudflare's network (Adelaide: 3 cells / 37 libraries from one call; Melbourne: 2 cells / 28 libraries). If that ever changes (cells stuck `pending`, `wrangler tail` shows upstream errors), the same Hono app can run on Node with SQLite on a small VM.
 
 ## Tiling and upstream fetching
 
