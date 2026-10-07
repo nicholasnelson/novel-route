@@ -31,17 +31,6 @@ const LIBRARY_TOUCH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 /** A covered cell refreshed more recently than this isn't rewritten (overlapping circles). */
 const CELL_REWRITE_AFTER_MS = 12 * 60 * 60 * 1000;
 
-/**
- * Applies migration 0002 if it hasn't been (idempotent), so the cache warmer never runs its
- * queries without their index. Cheap: one meta lookup once it's done.
- */
-export async function ensureSchema(db: D1Database): Promise<void> {
-  if ((await getMeta(db, 'schema_v2')) === '1') return;
-  await db.prepare('CREATE INDEX IF NOT EXISTS cells_fetched_at ON cells (fetched_at)').run();
-  await db.prepare('INSERT OR IGNORE INTO cells (geohash) SELECT DISTINCT cell FROM libraries').run();
-  await setMeta(db, 'schema_v2', '1');
-}
-
 export async function getCells(db: D1Database, cells: string[]): Promise<Map<string, CellRow>> {
   if (cells.length === 0) return new Map();
   const { results } = await db
@@ -119,16 +108,10 @@ export async function markCellsFetched(
 
 /**
  * Insert new libraries and update changed ones (or unchanged ones not confirmed for a week).
- * Also gives each library's cell a row, so the cache warmer can find never-filled cells by index.
  * Returns rows written.
  */
 export async function upsertLibraries(db: D1Database, libraries: Library[], now: number): Promise<number> {
   if (libraries.length === 0) return 0;
-  const cells = Array.from(new Set(libraries.map((l) => encodeGeohash(l.latitude, l.longitude, CELL_PRECISION))));
-  const cellRows = await db
-    .prepare('INSERT OR IGNORE INTO cells (geohash) SELECT value FROM json_each(?)')
-    .bind(jsonList(cells))
-    .run();
   const results = await db.batch(
     libraries.map((lib) =>
       db
@@ -159,7 +142,7 @@ export async function upsertLibraries(db: D1Database, libraries: Library[], now:
         )
     )
   );
-  return (cellRows.meta.changes ?? 0) + results.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
+  return results.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
 }
 
 export async function markRemoved(db: D1Database, ids: string[], now: number): Promise<number> {
