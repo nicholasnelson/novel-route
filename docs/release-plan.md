@@ -123,7 +123,11 @@ Plan:
 
 ### Phase 2 — Closed testing (≥14 days)
 - [ ] Play Console app created; Play App Signing with EAS-managed keystore
-- [ ] Privacy policy published (GitHub Pages)
+- [x] Privacy policy and landing page drafted (`site/`, deployed by `.github/workflows/pages.yml`)
+- [ ] Set up `hello@novelroute.app` (used as the contact address on the site and in the policy)
+- [ ] Enable GitHub Pages (source: GitHub Actions), point `novelroute.app` DNS at it, set the custom domain, enforce HTTPS
+- [ ] Privacy policy URL in Play Console and in the app's About screen
+- [ ] Update the privacy policy when the server replaces the direct Street Library calls
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
 - [ ] Closed test track live with ≥12 opted-in testers

@@ -81,6 +81,8 @@ docs/                  # Release plan and design docs
 - [Server](docs/server.md)
 - [Visit log](docs/visit-log.md)
 
+The website (landing page and privacy policy) is in [`site/`](site/) and deploys to GitHub Pages from `main`. Preview it locally with `python -m http.server 8765 --directory site`.
+
 ## Contributing
 
 Contributions are welcome! Here's how to get involved:
