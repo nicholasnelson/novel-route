@@ -5,11 +5,24 @@ export async function requestLocationPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
+const POSITION_TIMEOUT_MS = 10000;
+const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
+
+/**
+ * A quick starting position: a recent last-known fix if there is one, otherwise a fresh fix,
+ * giving up after POSITION_TIMEOUT_MS (a fresh fix can take minutes indoors).
+ * Returns null if neither is available; watchPosition will deliver a fix later.
+ */
 export async function getCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
   try {
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS });
+    const location =
+      lastKnown ??
+      (await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), POSITION_TIMEOUT_MS)),
+      ]));
+    if (!location) return null;
     return {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
@@ -31,21 +44,4 @@ export async function watchPosition(
       });
     }
   );
-}
-
-/** Haversine distance in meters between two points. */
-export function distanceMeters(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371000; // Earth radius in meters
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

@@ -1,16 +1,21 @@
 /**
  * Generates the Leaflet map HTML that runs inside a WebView.
  *
- * Why a WebView?  React Native has no DOM, so browser-based mapping
- * libraries like Leaflet can't run natively.  We embed Leaflet inside a
- * WebView and communicate via postMessage / onMessage.  This keeps the
- * app completely free of API keys — Leaflet + OpenStreetMap tiles require
- * no credentials.
+ * Interim renderer: this is being replaced by Mapbox (docs/maps.md). Until then,
+ * colours are computed on the React Native side and sent with each marker.
  *
  * The React Native side sends messages to this page (updateMarkers,
  * updateUserPosition, setAutoCenter) and this page posts messages back
  * (markerPress, autoCenterChanged).
  */
+
+export type MapMarker = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  fill: string;
+  stroke: string;
+};
 
 export function buildMapHtml(center: {
   latitude: number;
@@ -51,19 +56,23 @@ function updateUserPosition(lat, lng) {
       color: '#ffffff',
       weight: 3,
       opacity: 1,
-      fillOpacity: 1
+      fillOpacity: 1,
+      interactive: false
     }).addTo(map);
     userCircle = L.circle(latlng, {
       radius: 30,
       fillColor: '#4285F4',
       color: '#4285F4',
       weight: 0,
-      fillOpacity: 0.15
+      fillOpacity: 0.15,
+      interactive: false
     }).addTo(map);
   } else {
     userMarker.setLatLng(latlng);
     userCircle.setLatLng(latlng);
   }
+  userCircle.bringToFront();
+  userMarker.bringToFront();
   if (autoCenter) {
     map.setView(latlng, map.getZoom());
   }
@@ -73,33 +82,36 @@ function setAutoCenter(enabled) {
   autoCenter = enabled;
 }
 
-function updateMarkers(libs, visitedIds) {
+function updateMarkers(list) {
   Object.keys(markers).forEach(function(id) { map.removeLayer(markers[id]); });
   markers = {};
 
-  libs.forEach(function(lib) {
-    var isVisited = visitedIds.indexOf(lib.id) !== -1;
-    var marker = L.circleMarker([lib.latitude, lib.longitude], {
+  list.forEach(function(m) {
+    var marker = L.circleMarker([m.latitude, m.longitude], {
       radius: 10,
-      fillColor: isVisited ? '#22c55e' : '#ef4444',
-      color: isVisited ? '#166534' : '#991b1b',
+      fillColor: m.fill,
+      color: m.stroke,
       weight: 2,
       opacity: 1,
-      fillOpacity: 0.85
+      fillOpacity: 0.9
     }).addTo(map);
     marker.on('click', function() {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'markerPress', id: lib.id }));
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'markerPress', id: m.id }));
     });
-    markers[lib.id] = marker;
+    markers[m.id] = marker;
   });
+  // Keep the user's position visible above library markers
+  if (userCircle) userCircle.bringToFront();
+  if (userMarker) userMarker.bringToFront();
 }
 
 document.addEventListener('message', function(e) { handleMsg(e); });
 window.addEventListener('message', function(e) { handleMsg(e); });
 function handleMsg(e) {
-  var msg = JSON.parse(e.data);
+  var msg;
+  try { msg = JSON.parse(e.data); } catch (err) { return; }
   if (msg.type === 'updateMarkers') {
-    updateMarkers(msg.libraries, msg.visitedIds);
+    updateMarkers(msg.markers);
   } else if (msg.type === 'updateUserPosition') {
     updateUserPosition(msg.lat, msg.lng);
   } else if (msg.type === 'setAutoCenter') {

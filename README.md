@@ -1,6 +1,6 @@
-# Street Library App
+# Novel Route
 
-A mobile app for viewing and tracking visits to [Street Libraries](https://streetlibrary.org.au/) across Australia. Explore the map, find nearby libraries, and keep track of the ones you've visited.
+A mobile app for finding and keeping track of the street libraries (little free book boxes) near you across Australia. Explore the map, log your visits, and see at a glance which boxes you haven't checked in a while.
 
 > **Early WIP / Testing** — This project is under active development and is not yet available on any app store.
 
@@ -8,24 +8,21 @@ A mobile app for viewing and tracking visits to [Street Libraries](https://stree
 
 ## Features
 
-- Map view showing street libraries as coloured markers (green = visited, red = not visited)
-- Tap a marker to see details, mark it visited, or get navigation directions
-- Automatic nearby detection — get prompted when you're within 100m of a library
-- Offline-friendly caching (fetches new data at most once per area per day)
-- No API keys required — uses Leaflet + OpenStreetMap tiles
+- Map of street libraries, coloured by how recently you visited (red = never, greens fading with time since your last visit)
+- Tap a library to see details, log a visit, browse or edit your visit history, or get directions
+- Nearby detection — when you're within 100m of a library you haven't visited (or haven't visited in 30 days) you're offered to log a visit
+- Offline-friendly local cache; library data is refreshed at most once a day per area
 
 ## Tech Stack
 
-- [Expo](https://expo.dev/) (SDK 54) with React Native
-- [Leaflet](https://leafletjs.com/) rendered inside a WebView for keyless, free mapping (temporary, looking at replacing with MapLibre + OpenFreeMap)
-- [OpenStreetMap](https://www.openstreetmap.org/) tile layer
-- AsyncStorage for persistent caching and visit tracking
-- TypeScript
+- [Expo](https://expo.dev/) (SDK 57) with React Native
+- [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) for the library cache and visit log
+- Map: currently [Leaflet](https://leafletjs.com/) in a WebView with OpenStreetMap tiles; moving to [Mapbox](https://github.com/rnmapbox/maps) (see [docs/maps.md](docs/maps.md))
+- TypeScript, ESLint, Jest
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) (LTS recommended)
-- [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli` or use `npx expo`)
 - For Android: Android Studio with an emulator, or a physical device
 - For iOS: Xcode (macOS only) with a simulator, or a physical device (UNTESTED)
 - An [Expo dev client](https://docs.expo.dev/develop/development-builds/introduction/) build (this project does **not** run in Expo Go)
@@ -34,8 +31,8 @@ A mobile app for viewing and tracking visits to [Street Libraries](https://stree
 
 ```bash
 # Clone the repo
-git clone https://github.com/nicholasnelson/streetlibrary-app.git
-cd streetlibrary-app
+git clone https://github.com/nicholasnelson/streetlibrary-map-app.git
+cd streetlibrary-map-app
 
 # Install dependencies
 npm install
@@ -43,21 +40,43 @@ npm install
 # Create a development build (first time only)
 npx expo run:android   # or: npx expo run:ios
 
+# Afterwards, start the dev server
+npm start
+```
+
+Checks:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
 ```
 
 ## Project Structure
 
 ```
 src/
-├── api/               # Street Library API client + nonce handling
-├── cache/             # Per-area caching with 24h refresh policy
-├── location/          # Location permissions, GPS watch, Haversine distance
+├── api/               # Street Library API client, HTML clean-up
+├── data/              # Cache refresh (one geohash cell at a time)
+├── db/                # SQLite open/migrations, one-time AsyncStorage import
+├── geo/               # Geohash cells, Haversine distance
+├── location/          # Location permissions and GPS watch
 ├── map/
-│   ├── MapScreen.tsx  # Main map screen component
-│   └── mapHtml.ts     # Leaflet HTML template for the WebView
-├── store/             # Visited-library persistence
+│   ├── MapScreen.tsx  # Main map screen
+│   ├── LibrarySheet.tsx # Library details + visit log
+│   └── mapHtml.ts     # Leaflet HTML for the WebView (being replaced by Mapbox)
+├── store/             # Libraries, visit log, freshness, nearby prompts, key-value settings
+├── ui/                # Shared UI (error boundary)
 └── types.ts           # Shared TypeScript types
+docs/                  # Release plan and design docs
 ```
+
+## Docs
+
+- [Release plan](docs/release-plan.md)
+- [Maps](docs/maps.md)
+- [Server](docs/server.md)
+- [Visit log](docs/visit-log.md)
 
 ## Contributing
 
@@ -65,18 +84,16 @@ Contributions are welcome! Here's how to get involved:
 
 1. **Fork** the repo and create a feature branch (`git checkout -b my-feature`)
 2. **Make your changes** — try to keep commits focused and well-described
-3. **Test on a device or emulator** — make sure the app builds and runs
+3. **Run the checks** above and **test on a device or emulator**
 4. **Open a Pull Request** with a clear description of what you changed and why
 
 ### Ideas for Contributions
 
 - UI/UX improvements (better modals, animations, dark mode)
-- Migrating from WebView+Leaflet to a native map library (e.g. MapLibre)
 - Search / filter functionality
 - Stats screen (total visited, progress by area, etc.)
 - iOS testing and polish
 - Accessibility improvements
-- Tests
 
 ### Code Style
 

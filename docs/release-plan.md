@@ -1,0 +1,148 @@
+# Release plan (Android v1)
+
+Status: **planning** — written 2026-10-07, before build work starts.
+Target: Google Play (Android). iOS is not in scope for v1, but no decision here should rule it out.
+
+Related docs:
+- [maps.md](./maps.md) — map provider decision (Mapbox) and implementation plan
+- [server.md](./server.md) — MVP data server
+- [visit-log.md](./visit-log.md) — visit log replacing the visited flag
+
+---
+
+## Decisions
+
+| # | Topic | Decision | Status |
+|---|-------|----------|--------|
+| D1 | Local storage | Move from AsyncStorage to `expo-sqlite` (libraries cache + visit log) | Decided |
+| D2 | Data source | App talks to our own server; the server is the only thing that calls the Street Library API | Decided |
+| D3 | Rate limiting | Server caches the upstream API and never spams it; app caches server responses and never spams the server. The old "one API call per area per day, on device" rule is retired | Decided |
+| D4 | Submissions | **Not in v1.** Server MVP is read-only. ID scheme reserves room for community submissions later | Decided |
+| D5 | Visited state | Replace boolean visited set with a visit log (see visit-log.md) | Decided |
+| D6 | App name | **Novel Route** | Decided (store and trade mark checks clear) |
+| D7 | Package / bundle ID | `app.novelroute` (reverse of the novelroute.app domain). Permanent once uploaded to Play | Decided |
+| D8 | Map provider | Mapbox via `@rnmapbox/maps` (free up to 25k MAU; data-driven marker layers; native clustering). See maps.md | Decided |
+| D9 | Privacy policy hosting | GitHub Pages | Decided |
+| D10 | Closed testing | Ask Street Library Australia for a tester group (see below) | In progress |
+
+---
+
+## D6 — App name
+
+**Novel Route** — "novel" as in a book *and* something new, "route" as in doing your rounds of local book boxes (and the planned walk-route feature). Suits the target audience: regular street library visitors checking their boxes for fresh stock.
+
+Store title (30 char max), e.g. `Novel Route: Book Box Finder` (28). Keep "Street Library" out of the title; ask Street Library Australia before using their name in the description.
+
+Constraints it meets:
+- No "Street Library" (Street Library Australia's name; Play impersonation policy).
+- No "Little Free Library" (US registered trade mark) or "Nook" (Barnes & Noble's e-reading brand).
+- Nothing that echoes Pokémon.
+
+Availability checks (2026-10-07):
+| Check | Result |
+|-------|--------|
+| Web search for apps named "Novel Route" | None found. Nearest: "LiteraryTrip: Book Routes" (iOS, literary walking tours — different concept) |
+| Web search for "Novel Route" trade marks | None found |
+| GitHub `novelroute` | Available |
+| `novelroute.com` | Taken (registered 2020) |
+| `novelroute.app` | Being registered by the owner |
+| `novelroute.com.au` | Appears unregistered (needs an ABN / Australian presence to register) |
+| Google Play / App Store exact search | No clashes (checked by owner) |
+| IP Australia trade mark search, classes 9 and 42 | No clashes (checked by owner) |
+
+`novelroute.app` can host the privacy policy and a landing page (e.g. GitHub Pages with a custom domain).
+
+## D7 — Package / bundle ID
+
+A domain is **not** required. Android only needs the application ID to be unique on Play and syntactically valid (letters, digits, underscores, dot-separated, each segment starting with a letter — **no hyphens**). Reverse-domain is a convention, not ownership proof.
+
+Options:
+- `io.github.nicholasnelson.<appname>` — the original plan before a domain was registered. Backed by the GitHub account; survives domain lapses.
+- `com.<personal-domain>.<appname>` — fine, but ties the app's permanent ID to your personal domain.
+- Registering a project domain is optional. Worth it only if you want a nice home for the privacy policy / landing page; it doesn't affect the package ID.
+
+Rules:
+- Use the **same ID** for `android.package` and `ios.bundleIdentifier` in `app.json`.
+- **Chosen: `app.novelroute`**, the reverse of the `novelroute.app` domain (registered by the owner). The app keeps working even if the domain lapses, but keep it renewed so the ID stays unambiguously ours.
+- It's visible in the Play URL but not prominent; it doesn't need to match the display name forever. Pick something neutral enough to survive a rename.
+
+## D9 — Privacy policy
+
+Play requires a privacy policy URL because the app uses location. Requirements: publicly accessible, active, not geo-blocked, not a PDF, and it must name the app/developer. **GitHub Pages meets this** — no separate website needed.
+
+Plan:
+- Publish from a `gh-pages` branch or a small separate repo (keep it out of the app's `docs/` design folder).
+- Link it from the Play listing and from an "About" screen in the app.
+
+Content to cover (must match the Data safety form):
+- Precise location is used **on device** to centre the map and detect nearby libraries. It is not stored on our server.
+- The app sends the visible map area (approximate location) to our server to load libraries. State what the server logs (IP, request) and for how long.
+- Visit history is stored only on the device.
+- Mapbox receives map tile requests (IP, approximate viewed area) and, unless telemetry is disabled in-app, SDK telemetry. Name Mapbox and link its privacy policy.
+- No accounts, no ads, no analytics (update if crash reporting is added — Sentry collects device/crash data).
+
+## D10 — Closed testing (the long pole)
+
+New personal Play developer accounts must run a closed test with **at least 12 testers, opted in continuously for 14 days**, before production access. If the count drops below 12, the clock resets. Google also checks testers actually use the app. Organisation accounts are exempt, but need a D-U-N-S number — not worth it here.
+
+Plan:
+- Re-contact Street Library Australia. Ask for:
+  1. A small group of volunteer testers (library stewards would be ideal real-world testers).
+  2. Their blessing for the app using their public library data, and whether they'd prefer a supported data feed over the website endpoint.
+  3. Whether they're happy with how the app is described/branded.
+- Aim for 15–20 testers so drop-outs don't reset the clock.
+- Start the closed test as soon as Phase 1 is stable; build the server while the 14 days run.
+- Fallbacks: friends/family, local community groups; paid "tester" services are a last resort and risky given Google's engagement checks.
+
+---
+
+## Work phases
+
+### Phase 1 — Foundations
+- [x] Finish D6 store and trade mark checks (no clashes found)
+- [x] Update `app.json`: `name` "Novel Route", `slug` `novel-route`, `android.package` / `ios.bundleIdentifier` `app.novelroute`; remove duplicate permissions
+- [x] `package.json` name and README renamed
+- [ ] Rename the EAS project on expo.dev to slug `novel-route` (or run `eas init` for a new one) — EAS builds fail while the slug doesn't match
+- [ ] Rename the GitHub repo (optional)
+- [x] Upgrade to the current stable Expo SDK (57)
+- [x] Fix `start` script (`expo start`); add `typecheck`, lint (`eslint-config-expo`), tests (`jest-expo`)
+- [x] `expo-sqlite` storage layer; migrate existing AsyncStorage data
+- [x] Visit log (visit-log.md), including migration of existing visited IDs and `sl:` ID prefix
+- [ ] Mapbox account, dedicated public token (EAS env var, not in git), usage alerts (maps.md)
+- [ ] Map spike: ~3,000 points, freshness colours, clustering, taps, on a mid-range Android phone
+- [ ] Replace WebView/Leaflet with `LibraryMap` on `@rnmapbox/maps`; remove `react-native-webview`
+- [x] Strip/decode HTML in excerpts (`<br />`, entities)
+- [x] Fetch hardening: `res.ok`, timeouts, user-visible offline/error state
+- [x] Error boundary
+- [ ] Crash reporting (optional: Sentry)
+- [ ] "About" screen: privacy policy link, data source disclaimer (Mapbox attribution stays on the map itself)
+
+### Phase 2 — Closed testing (≥14 days)
+- [ ] Play Console app created; Play App Signing with EAS-managed keystore
+- [ ] Privacy policy published (GitHub Pages)
+- [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
+- [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
+- [ ] Closed test track live with ≥12 opted-in testers
+
+### Phase 3 — Server (in parallel with Phase 2)
+- [ ] Spike: confirm the Street Library endpoint works from the chosen host (datacenter IPs can be blocked)
+- [ ] Build MVP server (server.md)
+- [ ] App switches to the server; direct Street Library client kept behind a dev flag
+- [ ] Ship server-backed build to the closed test track
+
+### Phase 4 — Production
+- [ ] Check Mapbox usage against the free tier before launch
+- [ ] `eas submit` service account configured (`eas.json` → `submit.production`)
+- [ ] Production release
+- [ ] Update CLAUDE.md to reflect the new architecture (server, visit log, freshness colours)
+
+---
+
+## Reference: facts established so far
+
+From a live call to the Street Library endpoint (2026-10-07, Adelaide CBD):
+- Returns at most **200** libraries, nearest first. In Adelaide CBD the 200th was 12.2 km away. There is no radius parameter.
+- IDs are stable WordPress post IDs (`"45760"`).
+- `latitude`/`longitude` are strings; `distance` is km.
+- `excerpt` contains HTML (`<br />`) and typographic characters.
+- Nonce endpoint returns `{"success":true,"data":{"nonce":"…"}}`.

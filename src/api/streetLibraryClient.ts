@@ -1,26 +1,69 @@
 import { Library } from '../types';
+import { htmlToText } from './html';
+
+/**
+ * Direct client for the Street Library WordPress endpoint.
+ * Temporary: once our own server exists (docs/server.md) the app will talk to it instead,
+ * and this client will only be used behind a development flag.
+ */
 
 const API_URL = 'https://streetlibrary.org.au/wp-admin/admin-ajax.php';
-const REFERER = 'https://streetlibrary.org.au/find/';
+const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_HEADERS = {
+  Accept: 'application/json',
+  Referer: 'https://streetlibrary.org.au/find/',
+};
+
+export const STREET_LIBRARY_ID_PREFIX = 'sl:';
+
+async function postForm(form: FormData): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: form,
+      headers: REQUEST_HEADERS,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Street Library request failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function getNonce(): Promise<string> {
   const form = new FormData();
   form.append('action', 'library_locator_get_nonce');
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    body: form,
-    headers: {
-      Accept: 'application/json',
-      Referer: REFERER,
-    },
-  });
-
-  const json = await res.json();
+  const json = await postForm(form);
   if (json.success && json.data) {
-    return typeof json.data === 'string' ? json.data : json.data.nonce ?? json.data;
+    const nonce = typeof json.data === 'string' ? json.data : json.data.nonce;
+    if (typeof nonce === 'string') return nonce;
   }
   throw new Error('Failed to get nonce');
+}
+
+export function normalizeLibrary(item: any): Library | null {
+  const latitude = parseFloat(item.latitude);
+  const longitude = parseFloat(item.longitude);
+  const rawId = item.id ?? item.ID;
+  if (rawId == null || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const excerpt = typeof item.excerpt === 'string' ? htmlToText(item.excerpt) : '';
+  const title = typeof item.title === 'string' ? htmlToText(item.title) : '';
+
+  return {
+    id: STREET_LIBRARY_ID_PREFIX + String(rawId),
+    title: title || 'Unnamed library',
+    latitude,
+    longitude,
+    excerpt: excerpt || undefined,
+    permalink: item.permalink || undefined,
+  };
 }
 
 export async function fetchLibrariesForPoint({
@@ -38,30 +81,16 @@ export async function fetchLibrariesForPoint({
   form.append('lng', String(lng));
   form.append('nonce', nonce);
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    body: form,
-    headers: {
-      Accept: 'application/json',
-      Referer: REFERER,
-    },
-  });
-
-  const json = await res.json();
+  const json = await postForm(form);
 
   if (json.success) {
     const raw: any[] = Array.isArray(json.data)
       ? json.data
       : json.data?.libraries ?? [];
 
-    const libraries: Library[] = raw.map((item: any) => ({
-      id: String(item.id ?? item.ID ?? `${item.latitude}_${item.longitude}`),
-      title: item.title ?? 'Unknown Library',
-      latitude: parseFloat(item.latitude),
-      longitude: parseFloat(item.longitude),
-      excerpt: item.excerpt || undefined,
-      permalink: item.permalink || undefined,
-    }));
+    const libraries = raw
+      .map(normalizeLibrary)
+      .filter((lib): lib is Library => lib !== null);
 
     return { libraries, nonceExpired: false };
   }
