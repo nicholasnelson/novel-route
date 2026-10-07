@@ -17,7 +17,7 @@ A mobile app for finding and keeping track of the street libraries (little free 
 
 - [Expo](https://expo.dev/) (SDK 57) with React Native
 - [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) for the library cache and visit log
-- Map: currently [Leaflet](https://leafletjs.com/) in a WebView with OpenStreetMap tiles; moving to [Mapbox](https://github.com/rnmapbox/maps) (see [docs/maps.md](docs/maps.md))
+- [Mapbox](https://github.com/rnmapbox/maps) maps with native clustering (see [docs/maps.md](docs/maps.md))
 - TypeScript, ESLint, Jest
 
 ## Prerequisites
@@ -36,6 +36,9 @@ cd streetlibrary-map-app
 
 # Install dependencies
 npm install
+
+# Add your Mapbox public token (https://account.mapbox.com/access-tokens/)
+echo "EXPO_PUBLIC_MAPBOX_TOKEN=pk.your-token" > .env.local
 
 # Create a development build (first time only)
 npx expo run:android   # or: npx expo run:ios
@@ -64,7 +67,7 @@ src/
 ├── map/
 │   ├── MapScreen.tsx  # Main map screen
 │   ├── LibrarySheet.tsx # Library details + visit log
-│   └── mapHtml.ts     # Leaflet HTML for the WebView (being replaced by Mapbox)
+│   └── LibraryMap.tsx # Mapbox map: freshness-coloured libraries, clusters, user location
 ├── store/             # Libraries, visit log, freshness, nearby prompts, key-value settings
 ├── ui/                # Shared UI (error boundary)
 └── types.ts           # Shared TypeScript types

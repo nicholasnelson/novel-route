@@ -40,15 +40,11 @@
           "imageWidth": 200
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "@rnmapbox/maps"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "58a5b943-727c-4856-8ff0-2cd03629f20c"
-      }
     }
   }
 }

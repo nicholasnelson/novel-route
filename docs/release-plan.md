@@ -102,15 +102,18 @@ Plan:
 - [x] Finish D6 store and trade mark checks (no clashes found)
 - [x] Update `app.json`: `name` "Novel Route", `slug` `novel-route`, `android.package` / `ios.bundleIdentifier` `app.novelroute`; remove duplicate permissions
 - [x] `package.json` name and README renamed
-- [ ] Rename the EAS project on expo.dev to slug `novel-route` (or run `eas init` for a new one) — EAS builds fail while the slug doesn't match
+- [x] Old EAS project ID removed from `app.json`
+- [ ] Run `eas init` to create the new `novel-route` EAS project (owner)
 - [ ] Rename the GitHub repo (optional)
 - [x] Upgrade to the current stable Expo SDK (57)
 - [x] Fix `start` script (`expo start`); add `typecheck`, lint (`eslint-config-expo`), tests (`jest-expo`)
 - [x] `expo-sqlite` storage layer (no import of pre-SQLite data: the app ID changed, so old installs are a separate app)
 - [x] Visit log (visit-log.md), including migration of existing visited IDs and `sl:` ID prefix
-- [ ] Mapbox account, dedicated public token (EAS env var, not in git), usage alerts (maps.md)
-- [ ] Map spike: ~3,000 points, freshness colours, clustering, taps, on a mid-range Android phone
-- [ ] Replace WebView/Leaflet with `LibraryMap` on `@rnmapbox/maps`; remove `react-native-webview`
+- [x] Mapbox account and dedicated public token (in `.env.local`, not in git)
+- [ ] Mapbox usage alerts; token as an EAS env var (maps.md)
+- [x] Map spike on the emulator: 3,000 points, freshness colours, clustering, taps
+- [ ] Repeat the map check on a real mid-range Android phone
+- [x] Replace WebView/Leaflet with `LibraryMap` on `@rnmapbox/maps`; remove `react-native-webview`
 - [x] Strip/decode HTML in excerpts (`<br />`, entities)
 - [x] Fetch hardening: `res.ok`, timeouts, user-visible offline/error state
 - [x] Error boundary

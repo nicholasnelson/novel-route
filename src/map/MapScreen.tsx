@@ -8,9 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
-import { buildMapHtml, MapMarker } from './mapHtml';
+import LibraryMap, { MapRegion } from './LibraryMap';
 import LibrarySheet from './LibrarySheet';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
@@ -24,7 +23,6 @@ import {
   logVisit,
   restoreVisit,
 } from '../store/visitLog';
-import { FRESHNESS_COLORS, freshnessFor } from '../store/freshness';
 import { findNearbyCandidate, getPromptedToday, markPrompted } from '../store/nearby';
 import {
   getCurrentPosition,
@@ -33,6 +31,8 @@ import {
 } from '../location/location';
 
 const ADELAIDE_CBD: LatLng = { latitude: -34.9285, longitude: 138.6007 };
+/** Below this zoom the visible area spans many cells, so panning doesn't trigger fetches. */
+const MIN_SYNC_ZOOM = 12;
 
 export default function MapScreen() {
   const [db, setDb] = useState<Db | null>(null);
@@ -41,25 +41,20 @@ export default function MapScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedVisits, setSelectedVisits] = useState<Visit[]>([]);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [autoCenter, setAutoCenter] = useState(true);
+  const [followUser, setFollowUser] = useState(true);
+  const [locationGranted, setLocationGranted] = useState(false);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [mapReady, setMapReady] = useState(false);
-  const webViewRef = useRef<WebView>(null);
   const promptOpenRef = useRef(false);
-  const syncedCellRef = useRef<string | null>(null);
-
-  // Built once: rebuilding the HTML would reload the whole WebView.
-  const mapHtml = useMemo(() => buildMapHtml(ADELAIDE_CBD), []);
+  const userCellRef = useRef<string | null>(null);
+  const regionCellRef = useRef<string | null>(null);
+  const inFlightCellsRef = useRef(new Set<string>());
+  const lastFailedCellRef = useRef<string | null>(null);
 
   const selectedLibrary = useMemo(
     () => libraries.find((l) => l.id === selectedId) ?? null,
     [libraries, selectedId]
   );
-
-  const postToMap = useCallback((message: object) => {
-    webViewRef.current?.postMessage(JSON.stringify(message));
-  }, []);
 
   const reloadVisitState = useCallback(async (database: Db, libraryId: string | null) => {
     setNow(Date.now());
@@ -67,15 +62,22 @@ export default function MapScreen() {
     setSelectedVisits(libraryId ? await getVisits(database, libraryId) : []);
   }, []);
 
-  const syncAround = useCallback(async (database: Db, location: LatLng) => {
+  const syncCell = useCallback(async (database: Db, cell: string) => {
+    if (inFlightCellsRef.current.has(cell)) return;
+    inFlightCellsRef.current.add(cell);
     setSyncStatus('loading');
     try {
-      const updated = await refreshCellIfStale(database, cellFor(location.latitude, location.longitude));
+      const updated = await refreshCellIfStale(database, cell);
       if (updated) setLibraries(await getAllLibraries(database));
-      setSyncStatus('idle');
+      if (lastFailedCellRef.current === cell) lastFailedCellRef.current = null;
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
-      setSyncStatus('error');
+      lastFailedCellRef.current = cell;
+    } finally {
+      inFlightCellsRef.current.delete(cell);
+      if (inFlightCellsRef.current.size === 0) {
+        setSyncStatus(lastFailedCellRef.current ? 'error' : 'idle');
+      }
     }
   }, []);
 
@@ -118,11 +120,13 @@ export default function MapScreen() {
 
     (async () => {
       const granted = await requestLocationPermission();
+      if (cancelled) return;
+      setLocationGranted(granted);
       const pos = granted ? await getCurrentPosition() : null;
       if (cancelled) return;
 
       if (pos) setUserLocation(pos);
-      else await syncAround(db, ADELAIDE_CBD);
+      else await syncCell(db, cellFor(ADELAIDE_CBD.latitude, ADELAIDE_CBD.longitude));
 
       if (granted && !cancelled) {
         const sub = await watchPosition((coords) => setUserLocation(coords));
@@ -135,31 +139,16 @@ export default function MapScreen() {
       cancelled = true;
       subscription?.remove();
     };
-  }, [db, syncAround]);
+  }, [db, syncCell]);
 
   // Refresh the user's cache cell whenever they enter a new one (no-op if it's fresh).
   useEffect(() => {
     if (!db || !userLocation) return;
     const cell = cellFor(userLocation.latitude, userLocation.longitude);
-    if (cell === syncedCellRef.current) return;
-    syncedCellRef.current = cell;
-    syncAround(db, userLocation);
-  }, [db, userLocation, syncAround]);
-
-  // Push markers to the map whenever libraries or visits change.
-  useEffect(() => {
-    if (!mapReady) return;
-    const markers: MapMarker[] = libraries.map((lib) => {
-      const colors = FRESHNESS_COLORS[freshnessFor(summaries.get(lib.id), now)];
-      return { id: lib.id, latitude: lib.latitude, longitude: lib.longitude, ...colors };
-    });
-    postToMap({ type: 'updateMarkers', markers });
-  }, [libraries, summaries, now, mapReady, postToMap]);
-
-  useEffect(() => {
-    if (!mapReady || !userLocation) return;
-    postToMap({ type: 'updateUserPosition', lat: userLocation.latitude, lng: userLocation.longitude });
-  }, [userLocation, mapReady, postToMap]);
+    if (cell === userCellRef.current) return;
+    userCellRef.current = cell;
+    syncCell(db, cell);
+  }, [db, userLocation, syncCell]);
 
   // Offer to log a visit when the user is near an unvisited (or long-unvisited) library.
   useEffect(() => {
@@ -194,24 +183,26 @@ export default function MapScreen() {
     })();
   }, [db, userLocation, libraries, summaries, recordVisit]);
 
-  const handleWebViewMessage = (event: { nativeEvent: { data: string } }) => {
-    let msg: any;
-    try {
-      msg = JSON.parse(event.nativeEvent.data);
-    } catch {
-      return;
-    }
-    if (msg.type === 'markerPress' && db) {
-      setSelectedId(msg.id);
-      reloadVisitState(db, msg.id);
-    } else if (msg.type === 'autoCenterChanged') {
-      setAutoCenter(msg.value);
-    }
+  // Load libraries for the area the user pans to.
+  const handleRegionChange = (region: MapRegion) => {
+    if (!db || region.zoom < MIN_SYNC_ZOOM) return;
+    const cell = cellFor(region.center.latitude, region.center.longitude);
+    if (cell === regionCellRef.current) return;
+    regionCellRef.current = cell;
+    syncCell(db, cell);
   };
 
-  const handleAutoCenter = () => {
-    setAutoCenter(true);
-    postToMap({ type: 'setAutoCenter', enabled: true });
+  const handleRetry = () => {
+    if (!db) return;
+    const cell =
+      lastFailedCellRef.current ??
+      cellFor((userLocation ?? ADELAIDE_CBD).latitude, (userLocation ?? ADELAIDE_CBD).longitude);
+    syncCell(db, cell);
+  };
+
+  const handleLibraryPress = (id: string) => {
+    setSelectedId(id);
+    if (db) reloadVisitState(db, id);
   };
 
   const handleNavigate = () => {
@@ -222,18 +213,21 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <WebView
-        ref={webViewRef}
-        style={styles.map}
-        source={{ html: mapHtml }}
-        onMessage={handleWebViewMessage}
-        onLoad={() => setMapReady(true)}
-        javaScriptEnabled
-        originWhitelist={['*']}
+      <LibraryMap
+        libraries={libraries}
+        visitSummaries={summaries}
+        now={now}
+        selectedId={selectedId}
+        initialCenter={ADELAIDE_CBD}
+        followUser={followUser}
+        showUserLocation={locationGranted}
+        onLibraryPress={handleLibraryPress}
+        onRegionChange={handleRegionChange}
+        onFollowUserChange={setFollowUser}
       />
 
       {syncStatus === 'loading' && (
-        <View style={styles.badge}>
+        <View style={styles.badge} pointerEvents="none">
           <ActivityIndicator size="small" color="#fff" />
           <Text style={styles.badgeText}>Updating libraries…</Text>
         </View>
@@ -242,15 +236,19 @@ export default function MapScreen() {
       {syncStatus === 'error' && (
         <TouchableOpacity
           style={[styles.badge, styles.badgeError]}
-          onPress={() => db && syncAround(db, userLocation ?? ADELAIDE_CBD)}
+          onPress={handleRetry}
           accessibilityRole="button"
         >
           <Text style={styles.badgeText}>Couldn&apos;t update libraries. Showing saved data. Tap to retry</Text>
         </TouchableOpacity>
       )}
 
-      {!autoCenter && (
-        <TouchableOpacity style={styles.autoCenterButton} onPress={handleAutoCenter}>
+      {locationGranted && !followUser && (
+        <TouchableOpacity
+          style={styles.autoCenterButton}
+          onPress={() => setFollowUser(true)}
+          accessibilityRole="button"
+        >
           <Text style={styles.autoCenterText}>Re-center</Text>
         </TouchableOpacity>
       )}
@@ -287,9 +285,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  map: {
-    flex: 1,
-  },
   badge: {
     position: 'absolute',
     top: 60,
@@ -312,7 +307,7 @@ const styles = StyleSheet.create({
   },
   autoCenterButton: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 40,
     right: 16,
     backgroundColor: '#fff',
     borderRadius: 24,

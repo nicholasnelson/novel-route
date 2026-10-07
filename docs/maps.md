@@ -27,18 +27,20 @@ Accepted trade-offs:
 ## Implementation plan
 
 ### Account and tokens
-- [ ] Create a Mapbox account. Check at signup: whether a card is required, what happens if the free tier is exceeded with no billing details, and whether usage alerts or caps are available. Record the answers here.
-- [ ] Create a **dedicated public access token** for the app with only the default public scopes (styles/tiles/fonts read). Don't reuse the account's default token.
+- [x] Create a Mapbox account.
+- [ ] Check in the account: whether a card is required, what happens if the free tier is exceeded with no billing details, and whether usage alerts or caps are available. Record the answers here.
+- [x] Create a **dedicated public access token** for the app. Scopes: `styles:read`, `styles:tiles`, `fonts:read` only (verified sufficient: style, glyph and tile requests all return 200).
 - [ ] Set usage alerts on the account.
-- [ ] Keep the token out of git: supply it via an EAS environment variable (e.g. `EXPO_PUBLIC_MAPBOX_TOKEN`) and a local `.env` that's gitignored. Note that any token shipped in the app is extractable; that's expected for public tokens.
+- [x] Token kept out of git in `.env.local` (`EXPO_PUBLIC_MAPBOX_TOKEN`, gitignored).
+- [ ] Add `EXPO_PUBLIC_MAPBOX_TOKEN` as an EAS environment variable for cloud builds (after `eas init`). Note that any token shipped in the app is extractable; that's expected for public tokens.
 - The secret "downloads" token that older guides require for fetching the Android SDK is **no longer needed** — Mapbox lifted that requirement. Only add one if the current `@rnmapbox/maps` install docs say otherwise.
 
 ### Integration
-- [ ] `npx expo install @rnmapbox/maps`, add its config plugin to `app.json`.
-- [ ] Remove `react-native-webview`, `src/map/mapHtml.ts` and the Leaflet code.
-- [ ] Decide telemetry: disable it in-app (simplest Data safety story), or keep it and disclose.
-- [ ] Choose a base style (e.g. Mapbox Streets or Outdoors; Outdoors suits walking). Prefer Mapbox's built-in styles over custom Studio styles unless needed — Studio styles may only be used on Mapbox maps.
-- [ ] Attribution: keep the Mapbox logo and attribution button visible (required by the terms).
+- [x] `npx expo install @rnmapbox/maps`, add its config plugin to `app.json`.
+- [x] Remove `react-native-webview`, `src/map/mapHtml.ts` and the Leaflet code.
+- [x] Telemetry disabled in-app (`Mapbox.setTelemetryEnabled(false)`, called after the token is set — on Android it creates a map internally).
+- [x] Base style: **Outdoors**. Choose a base style (e.g. Mapbox Streets or Outdoors; Outdoors suits walking). Prefer Mapbox's built-in styles over custom Studio styles unless needed — Studio styles may only be used on Mapbox maps.
+- [x] Attribution: Mapbox logo and attribution button left at their defaults (required by the terms).
 
 ### `LibraryMap` component
 All map-library imports live in `src/map/LibraryMap.tsx`; nothing else in the app imports `@rnmapbox/maps`.
@@ -65,8 +67,8 @@ Rendering:
 - Tap: `onPress` on the source. A cluster tap zooms in to the cluster's expansion zoom; a point tap calls `onLibraryPress`.
 - User position: the library's built-in location puck, with a camera that follows the user until they pan (replaces the current "Re-center" logic).
 
-### Validation spike (first task)
-Before building the full component: render ~3,000 libraries (cached real data plus synthetic points) with freshness colours, clustering and tap-to-open, and run it on a mid-range Android phone. Confirm smooth panning/zooming and correct taps.
+### Validation spike
+**Done 2026-10-07 on the Android emulator (API 36):** real Adelaide data plus 3,000 synthetic points rendered with freshness colours and clustering; cluster taps zoom in; point taps open the library sheet; panning stayed smooth. Still to do on a real mid-range phone. Original plan: render ~3,000 libraries (cached real data plus synthetic points) with freshness colours, clustering and tap-to-open, and run it on a mid-range Android phone. Confirm smooth panning/zooming and correct taps.
 
 ## Route planning (post-v1)
 
@@ -93,4 +95,4 @@ Routing calls go through our server so the token stays off the device and result
 
 - **Google/Apple** were rejected mainly for marker drawing limits. (`expo-maps` offers the same split but is still alpha.)
 - **MapLibre + OpenFreeMap** is the fallback / migration path if Mapbox's terms change: same rendering model, no account, but a donation-run tile service and a less mature RN library.
-- **Leaflet in a WebView (current)** is being replaced: OSM's tile servers don't permit heavy app use and the inline WebView doesn't identify the app; Leaflet loads from unpkg at runtime; the WebView reloads on HTML changes, redraws every marker, has no clustering, and its markers are invisible to screen readers.
+- **Leaflet in a WebView (previous renderer)** was replaced: OSM's tile servers don't permit heavy app use and the inline WebView doesn't identify the app; Leaflet loads from unpkg at runtime; the WebView reloads on HTML changes, redraws every marker, has no clustering, and its markers are invisible to screen readers.
