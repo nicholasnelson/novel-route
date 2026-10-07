@@ -45,6 +45,12 @@
     ],
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b726aad7-00bc-4322-a18f-fbd379aa6aae"
+      }
+    },
+    "owner": "ausshb"
   }
 }
