@@ -72,3 +72,9 @@ export async function setCellFetchedAt(db: Db, geohash: string, fetchedAt: numbe
     [geohash, fetchedAt]
   );
 }
+
+/** Every cell the app has loaded at least once (stale or not: its libraries are on the device). */
+export async function getLoadedCells(db: Db): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ geohash: string }>('SELECT geohash FROM cells', []);
+  return new Set(rows.map((r) => r.geohash));
+}

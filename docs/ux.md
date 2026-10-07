@@ -156,3 +156,8 @@ No wizard. Instead, small, one-off nudges that appear at the moment they're usef
 - The compass is only read while the nearby card's arrow is showing (so the puck's heading beam only appears then too).
 - The detail panel and map key size to their content, up to the screen minus the margin.
 - The map's library layer refreshes freshness hourly rather than every minute.
+
+### Loading as you pan (2026-10-07)
+
+- Panning loads libraries from zoom 10: the 20 cells nearest the view's centre are requested once the camera has been still for 0.7 s. This is driven by `onCameraChanged`, because `onMapIdle` never fires after user gestures on Android (`@rnmapbox/maps` 10.3).
+- **Loaded vs not loaded:** cells in view whose libraries aren't on the device yet get a light grey veil, so an empty clear area means "no libraries here" and a veiled one means "not loaded yet". Pills: *Updating libraries…*, *Zoom in to load libraries here* (zoomed out over unloaded cells), *Part of this area hasn't loaded · Retry* (close enough but still unloaded), *No street libraries here yet* (everything in view loaded and empty).

@@ -37,8 +37,12 @@ export const CELL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const UPSTREAM_MIN_INTERVAL_MS = 2000;
 /** How long a cell refresh may hold its single-flight lock. */
 export const FILL_LOCK_MS = 30 * 1000;
-/** Upstream calls a single client request may wait for (never-filled cells only). */
-export const SYNC_FILL_BUDGET = 2;
+/**
+ * A request waits for at most one upstream call (never-filled cells only), so the middle of the
+ * view appears quickly. Further fills for the same request continue in the background, paced
+ * by the politeness interval; the app retries pending cells a few seconds later.
+ */
+export const BACKGROUND_FILLS = 3;
 /** The endpoint's page size: if it returns this many, more libraries exist further out. */
 export const UPSTREAM_RESULT_CAP = 200;
 
@@ -141,35 +145,32 @@ export function toApiLibrary(row: LibraryRow): ApiLibrary {
   };
 }
 
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /**
- * Serve the requested cells. Never-filled cells are filled synchronously (up to
- * SYNC_FILL_BUDGET upstream calls); one stale cell is refreshed in the background via `defer`.
+ * Serve the requested cells. One never-filled cell is filled synchronously; remaining unfilled
+ * cells (up to BACKGROUND_FILLS calls) and one stale cell are filled in the background via `defer`.
  */
 export async function getLibraries(
   db: D1Database,
   cells: string[],
   now: number,
   defer: (task: Promise<unknown>) => void,
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  sleep: (ms: number) => Promise<void> = realSleep
 ): Promise<LibrariesResponse> {
   let rows = await getCells(db, cells);
 
-  // A zoomed-out view can need more than one upstream call; wait out the politeness interval
-  // between them rather than leaving half the view pending.
   let unfilled = cells.filter((c) => !rows.get(c)?.fetched_at);
-  let fillTime = now;
-  for (let budget = SYNC_FILL_BUDGET; unfilled.length > 0 && budget > 0; budget--) {
-    const covered = await fillCell(db, unfilled[0], unfilled, fillTime);
-    if (!covered) break;
-    unfilled = unfilled.filter((c) => !covered.includes(c));
-    if (unfilled.length > 0 && budget > 1) {
-      await sleep(UPSTREAM_MIN_INTERVAL_MS);
-      fillTime += UPSTREAM_MIN_INTERVAL_MS;
-    }
+  if (unfilled.length > 0) {
+    const covered = await fillCell(db, unfilled[0], unfilled, now);
+    if (covered) unfilled = unfilled.filter((c) => !covered.includes(c));
   }
 
+  // Background work, paced so it never exceeds the upstream politeness limit.
   const stale = cells.filter((c) => cellStatus(rows.get(c), now) === 'stale');
-  if (stale.length > 0) defer(fillCell(db, stale[0], stale, now));
+  if (unfilled.length > 0 || stale.length > 0) {
+    defer(fillInBackground(db, unfilled, stale, now, sleep));
+  }
 
   rows = await getCells(db, cells);
   const cellInfo: CellInfo[] = cells.map((geohash) => {
@@ -183,6 +184,28 @@ export async function getLibraries(
 
   const libraries = (await librariesInCells(db, cells)).map(toApiLibrary);
   return { cells: cellInfo, libraries };
+}
+
+async function fillInBackground(
+  db: D1Database,
+  unfilled: string[],
+  stale: string[],
+  start: number,
+  sleep: (ms: number) => Promise<void>
+): Promise<void> {
+  let remaining = unfilled;
+  let time = start;
+  for (let i = 0; i < BACKGROUND_FILLS && remaining.length > 0; i++) {
+    await sleep(UPSTREAM_MIN_INTERVAL_MS);
+    time += UPSTREAM_MIN_INTERVAL_MS;
+    const covered = await fillCell(db, remaining[0], remaining, time);
+    if (!covered) return;
+    remaining = remaining.filter((c) => !covered.includes(c));
+  }
+  if (stale.length > 0) {
+    await sleep(UPSTREAM_MIN_INTERVAL_MS);
+    await fillCell(db, stale[0], stale, time + UPSTREAM_MIN_INTERVAL_MS);
+  }
 }
 
 export async function getHealth(db: D1Database) {

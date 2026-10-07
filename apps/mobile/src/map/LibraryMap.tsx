@@ -1,8 +1,9 @@
-import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Mapbox, {
   Camera,
   CircleLayer,
+  FillLayer,
   Images,
   LocationPuck,
   MapView,
@@ -11,6 +12,7 @@ import Mapbox, {
   SymbolLayer,
   type MapState,
 } from '@rnmapbox/maps';
+import { CELL_PRECISION, geohashBounds, geohashCenter, geohashesForBounds, isInServiceArea } from '@novel-route/shared';
 import { LatLng, Library, VisitSummary } from '../types';
 import { freshnessFor } from '../store/freshness';
 import { MAP_MARKER_IMAGES } from './markerImages';
@@ -39,6 +41,17 @@ const BASEMAP_CONFIG = {
 } as const;
 
 const FOLLOW_ZOOM = 16;
+/** How long the camera must be still before the visible region is reported (and loaded). */
+const REGION_SETTLE_MS = 400;
+/** The "not loaded" veil updates at most this often while the camera moves. */
+const VEIL_UPDATE_MS = 150;
+/**
+ * The veil covers this many view-widths beyond each edge, so ordinary drags move into area
+ * that's already veiled (camera events reach JS a little behind the screen).
+ */
+const VEIL_PADDING = 1;
+/** Skip the veil when the padded area spans more cells than this. */
+const MAX_VEIL_CELLS = 2500;
 
 export type MapBounds = { north: number; south: number; east: number; west: number };
 export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
@@ -55,6 +68,8 @@ type Props = {
   visitSummaries: Map<string, VisitSummary>;
   now: number;
   selectedId: string | null;
+  /** Cells whose libraries are on the device; every other cell in view gets a grey veil. */
+  loadedCells: Set<string>;
   initialCenter: LatLng;
   initialZoom: number;
   followUser: boolean;
@@ -82,6 +97,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     visitSummaries,
     now,
     selectedId,
+    loadedCells,
     initialCenter,
     initialZoom,
     followUser,
@@ -142,6 +158,49 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     [libraries, visitSummaries, now, selectedId]
   );
 
+  // The veil follows the camera (throttled) and extends a full view beyond every edge, so an
+  // unloaded area is already grey as it scrolls into view rather than after the map settles.
+  const [veilBounds, setVeilBounds] = useState<MapBounds | null>(null);
+  const lastVeilUpdateRef = useRef(0);
+  const updateVeilBounds = (state: MapState, force = false) => {
+    const now = Date.now();
+    if (!force && now - lastVeilUpdateRef.current < VEIL_UPDATE_MS) return;
+    lastVeilUpdateRef.current = now;
+    const { ne, sw } = state.properties.bounds;
+    const padLat = (ne[1] - sw[1]) * VEIL_PADDING;
+    const padLng = (ne[0] - sw[0]) * VEIL_PADDING;
+    setVeilBounds({ north: ne[1] + padLat, south: sw[1] - padLat, east: ne[0] + padLng, west: sw[0] - padLng });
+  };
+
+  const unloadedCells = useMemo(() => {
+    if (!veilBounds) return [];
+    // Empty when zoomed so far out that the area spans more cells than is worth drawing.
+    return geohashesForBounds(veilBounds, CELL_PRECISION, MAX_VEIL_CELLS).filter((cell) => {
+      if (loadedCells.has(cell)) return false;
+      const c = geohashCenter(cell);
+      return isInServiceArea(c.latitude, c.longitude);
+    });
+  }, [veilBounds, loadedCells]);
+
+  const veil = useMemo<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: unloadedCells.map((cell) => {
+        const b = geohashBounds(cell);
+        return {
+          type: 'Feature',
+          id: cell,
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[b.west, b.south], [b.east, b.south], [b.east, b.north], [b.west, b.north], [b.west, b.south]]],
+          },
+        };
+      }),
+    }),
+    [unloadedCells]
+  );
+
   const handlePress = async (event: { features: GeoJSON.Feature[] }) => {
     const feature = event.features[0];
     if (!feature) return;
@@ -156,6 +215,22 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
 
     const id = feature.properties?.id;
     if (typeof id === 'string') onLibraryPress(id);
+  };
+
+  // Report the region once the camera has been still for a moment. Driven by onCameraChanged
+  // because onMapIdle never fires after user gestures on Android (@rnmapbox/maps 10.3, Mapbox v11).
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCameraRef = useRef<MapState | null>(null);
+  const scheduleRegionReport = (state: MapState) => {
+    updateVeilBounds(state);
+    lastCameraRef.current = state;
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      if (lastCameraRef.current) {
+        updateVeilBounds(lastCameraRef.current, true);
+        handleMapIdle(lastCameraRef.current);
+      }
+    }, REGION_SETTLE_MS);
   };
 
   const handleMapIdle = (state: MapState) => {
@@ -178,7 +253,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       compassEnabled={false}
       logoPosition={{ top: ornamentTop, left: 8 }}
       attributionPosition={{ top: ornamentTop, left: 92 }}
-      onMapIdle={handleMapIdle}
+      onCameraChanged={scheduleRegionReport}
       onDidFinishLoadingStyle={() => {
         // Mapbox Standard carries its own default camera, which replaces Camera.defaultSettings
         // when the style loads. Re-apply our starting view unless we're following the user.
@@ -215,6 +290,14 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
           pulsing={{ isEnabled: true, color: colors.blue }}
         />
       )}
+
+      {/* Grey veil over areas whose libraries haven't loaded (beneath the library markers). */}
+      <ShapeSource id="unloaded-cells" shape={veil}>
+        <FillLayer
+          id="unloaded-cells-fill"
+          style={{ fillColor: colors.inkSoft, fillOpacity: 0.16, fillAntialias: false }}
+        />
+      </ShapeSource>
 
       <ShapeSource
         id="libraries"
