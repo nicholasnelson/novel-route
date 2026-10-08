@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Novel Route: find and track street libraries</title>
-  <meta name="description" content="Novel Route is a free Android app for finding the street libraries (free book boxes) near you, logging your visits and seeing which ones you haven't checked in a while.">
-  <meta name="theme-color" content="#1f8f3a">
+  <title>Novel Route · street libraries near you</title>
+  <meta name="description" content="Novel Route shows the street libraries around you and remembers the ones you've visited, so you know which are due for another look. Free, for Android.">
+  <meta name="theme-color" content="#f7f3ea">
   <meta property="og:title" content="Novel Route">
-  <meta property="og:description" content="Find the street libraries near you, log your visits, and see which ones are due for another look.">
+  <meta property="og:description" content="Street libraries near you, all on one map.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://novelroute.app/">
+  <meta property="og:image" content="https://novelroute.app/images/map.webp">
   <link rel="icon" type="image/png" href="images/favicon-64.png">
   <link rel="apple-touch-icon" href="images/icon-180.png">
   <link rel="stylesheet" href="styles.css">
@@ -18,110 +19,110 @@
   <header class="site-header">
     <div class="wrap">
       <a class="brand" href="/">
-        <img src="images/icon-180.png" alt="" width="36" height="36">
+        <img src="images/icon-180.png" alt="" width="32" height="32">
         Novel Route
       </a>
-      <nav>
-        <a href="#features">Features</a>
-        <a href="/privacy">Privacy</a>
-      </nav>
+      <a class="header-link" href="/privacy">Privacy</a>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div class="wrap">
-        <div>
-          <h1>Your round of local street libraries.</h1>
+        <div class="hero-text">
+          <h1>Street libraries near you, all on one map.</h1>
           <p class="lede">
-            Find the free book boxes near you, log each visit, and see at a glance
-            which ones you haven't checked in a while. New books turn up all the time.
+            Novel Route shows the little free libraries around you and remembers the ones
+            you've visited, so you know which are due for another look.
           </p>
-          <div class="cta">
-            <a class="button primary" href="mailto:hello@novelroute.app?subject=Novel%20Route%20testing">Help us test</a>
-            <a class="button secondary" href="#features">How it works</a>
-          </div>
-          <p class="status-note">Coming soon to Google Play. Android first; iPhone later.</p>
+          <p class="cta">
+            <a class="button" href="mailto:hello@novelroute.app?subject=Testing%20Novel%20Route">Help us test</a>
+            <span class="note">Coming soon to Google Play.</span>
+          </p>
         </div>
-        <div class="phone">
-          <img src="images/map.webp" width="540" height="1138"
-               alt="Novel Route map of central Adelaide showing street libraries as coloured dots, with the user's location">
-        </div>
+        <figure class="shot hero-shot">
+          <img src="images/map.webp" width="540" height="1160"
+               alt="The Novel Route map of Prospect in Adelaide. Street libraries are little book boxes on posts: amber ones not yet visited, green ones visited. A card at the bottom points to the nearest one due for a visit.">
+        </figure>
       </div>
     </section>
 
-    <section class="alt" id="features">
+    <section class="steps">
       <div class="wrap">
-        <h2>Made for regular visitors</h2>
-        <div class="features">
-          <div class="feature">
-            <h3>Every library on one map</h3>
-            <p>Street libraries across Australia, clustered when you zoom out so you can find the busy neighbourhoods.</p>
-          </div>
-          <div class="feature">
-            <h3>A log of every visit</h3>
-            <p>Log a visit in one tap. Your history shows when you last stopped by, and you can edit it any time.</p>
-          </div>
-          <div class="feature">
-            <h3>Nudges when you're close</h3>
-            <p>Walk within 100&nbsp;metres of a library you haven't checked in a month and Novel Route offers to log a visit.</p>
-          </div>
-          <div class="feature">
-            <h3>Yours, on your phone</h3>
-            <p>No account and no ads. Your visit history never leaves your device.</p>
-          </div>
-        </div>
+        <ol class="step-list">
+          <li>
+            <figure class="shot">
+              <img src="images/find.webp" width="540" height="1160" loading="lazy"
+                   alt="A library selected on the map of central Adelaide, with a card showing its name, how far away it is, and buttons to log a visit or get directions">
+            </figure>
+            <div class="step-text">
+              <h2>Find one</h2>
+              <p>Every library registered with Street Library Australia, with a note from its keeper and directions to the door.</p>
+            </div>
+          </li>
+          <li>
+            <figure class="shot">
+              <img src="images/library.webp" width="540" height="1160" loading="lazy"
+                   alt="A library's page in Novel Route: when you last visited, a Log visit button, its description and the dates of your past visits">
+            </figure>
+            <div class="step-text">
+              <h2>Log your visit</h2>
+              <p>One tap when you stop by. Novel Route keeps the date, so you can always see when you were last there.</p>
+            </div>
+          </li>
+          <li>
+            <figure class="shot">
+              <img src="images/due.webp" width="540" height="1160" loading="lazy"
+                   alt="A zoomed-out map of Adelaide with libraries grouped into circles: amber where some haven't been visited, green where they all have">
+            </figure>
+            <div class="step-text">
+              <h2>See what's due</h2>
+              <p>Libraries you haven't seen in a while stand out, so your next walk can take in the ones with new books waiting.</p>
+            </div>
+          </li>
+        </ol>
       </div>
     </section>
 
-    <section>
-      <div class="wrap split">
-        <div>
-          <h2>See what's due for a visit</h2>
-          <p>Each library's colour shows how long it's been since you last checked it, so planning a round is easy.</p>
-          <ul class="legend">
-            <li><span class="dot never"></span> Never visited</li>
-            <li><span class="dot fresh"></span> Visited in the last month</li>
-            <li><span class="dot recent"></span> Visited in the last six months</li>
-            <li><span class="dot old"></span> Not visited for over six months</li>
-          </ul>
-        </div>
-        <div class="sheet-shot">
-          <img src="images/library-sheet.webp" width="540" height="635"
-               alt="Library details in Novel Route: description, last visited today, buttons to log a visit and navigate, and the visit history">
-        </div>
-      </div>
-    </section>
-
-    <section class="alt">
+    <section class="doors">
       <div class="wrap">
-       <div class="about">
-        <h2>About</h2>
+        <h2>Read the doors</h2>
+        <p class="section-intro">A library's doors open once you've visited, then slowly close again as the weeks go by.</p>
+        <ul class="marker-key">
+          <li><img src="images/marker-never.webp" alt="" width="60" height="80">Not visited yet</li>
+          <li><img src="images/marker-fresh.webp" alt="" width="60" height="80">This month</li>
+          <li><img src="images/marker-recent.webp" alt="" width="60" height="80">In the last six months</li>
+          <li><img src="images/marker-old.webp" alt="" width="60" height="80">Longer ago</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="about">
+      <div class="wrap narrow">
+        <h2>The small print</h2>
+        <p>No account and no ads. Your visits stay on your phone.</p>
         <p>
-          Novel Route is a small independent project built by a street library fan.
-          It's free, and the source code is
-          <a href="https://github.com/nicholasnelson/novel-route">on GitHub</a>.
+          Library details come from <a href="https://streetlibrary.org.au/">Street Library Australia</a>.
+          If you look after a library that isn't on the map, register it with them and it'll turn up here.
+          Novel Route isn't affiliated with Street Library Australia.
         </p>
         <p>
-          Library locations come from <a href="https://streetlibrary.org.au/">Street Library Australia</a>.
-          If you look after a street library that isn't on the map, register it with them.
+          Novel Route is a small, free project made by a street library regular.
+          The code is <a href="https://github.com/nicholasnelson/novel-route">on GitHub</a>, and
+          <a href="mailto:hello@novelroute.app">hello@novelroute.app</a> reaches a person.
         </p>
-        <p class="disclaimer">
-          Novel Route is not affiliated with, endorsed by, or associated with Street Library Australia.
-        </p>
-       </div>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap">
-      <div>
-        <a href="/privacy">Privacy policy</a>
+      <span>&copy; 2026 Nicholas Nelson</span>
+      <nav>
+        <a href="/privacy">Privacy</a>
         <a href="https://github.com/nicholasnelson/novel-route">GitHub</a>
         <a href="mailto:hello@novelroute.app">Contact</a>
-      </div>
-      <div>&copy; 2026 Nicholas Nelson</div>
+      </nav>
     </div>
   </footer>
 </body>
