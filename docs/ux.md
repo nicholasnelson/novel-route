@@ -112,7 +112,7 @@ No wizard. Instead, small, one-off nudges that appear at the moment they're usef
 | Libraries first appear on the map | Bottom hint card: *"Tap a library to see details and log a visit."* Dismissed by tapping any marker. |
 | After the first visit is logged | *"Doors open when you visit, and slowly close over the months — a reminder to go back."* (with the four door states inline) |
 | Any time | **Map key** button (?) top-right: the marker legend plus one line on what the app does. |
-| Empty area (zoomed into a place with no libraries) | Pill: *"No street libraries here yet. Know one? Register it with Street Library Australia."* |
+| Empty area (zoomed into a place with no libraries) | Nothing: an empty map with no "Updating" pill already reads as "no libraries here". (A *No street libraries here yet* pill was removed on 2026-10-09: at street level it showed whenever the nearest library was just off-screen, contradicting the nearby card.) Registering a missing library is in the map key. |
 | Location denied | Pill: *"Location is off — you can still browse. Turn it on to see what's near you."* with a settings link. |
 
 ### 5. Smaller fixes
@@ -160,4 +160,4 @@ No wizard. Instead, small, one-off nudges that appear at the moment they're usef
 ### Loading as you pan (2026-10-07)
 
 - Panning loads libraries from zoom 10: the tiles (precision-4 geohashes, ~39 × 20 km; until 2026-10-08, 20 precision-5 cells) nearest the view's centre are requested, up to 12, once the camera has been still for 0.4 s. This is driven by `onCameraChanged`, because `onMapIdle` never fires after user gestures on Android (`@rnmapbox/maps` 10.3).
-- **Loaded vs not loaded:** tiles in view whose libraries aren't on the device yet get a light grey veil, so an empty clear area means "no libraries here" and a veiled one means "not loaded yet". Pills: *Updating libraries…*, *Zoom in to load libraries here* (zoomed out over unloaded cells), *Part of this area hasn't loaded · Retry* (close enough but still unloaded), *No street libraries here yet* (everything in view loaded and empty).
+- **Loaded vs not loaded:** tiles in view whose libraries aren't on the device yet get a light grey veil, so an empty clear area means "no libraries here" and a veiled one means "not loaded yet". Pills: *Updating libraries…*, *Zoom in to load libraries here* (zoomed out over unloaded cells) and *Some areas haven't loaded yet · Try again* (close enough but still unloaded after retries). No pill for an empty area (see the state table above).

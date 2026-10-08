@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 
-export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'empty-area';
+export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off';
 
 /** Small status message under the status bar. `onAction` retries, fixes location, or opens the link. */
 export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(): void }) {
@@ -43,13 +43,6 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
           <Ionicons name="location-outline" size={14} color="#fff" />
           <Text style={styles.text}>Location is off</Text>
           <Text style={styles.action}>Turn on</Text>
-        </Pressable>
-      );
-    case 'empty-area':
-      return (
-        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button">
-          <Text style={styles.text}>No street libraries here yet</Text>
-          <Text style={styles.action}>Know one?</Text>
         </Pressable>
       );
   }

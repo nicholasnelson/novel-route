@@ -5,7 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
 import LibraryMap, { LibraryMapHandle, MapRegion } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
-import MapKey, { REGISTER_LIBRARY_URL } from './overlays/MapKey';
+import MapKey from './overlays/MapKey';
 import {
   DirectionReference,
   HintCard,
@@ -77,8 +77,6 @@ const MAX_VIEW_TILES = 150;
  * so the app shows "Updating libraries…" throughout and only offers "Try again" after the last.
  */
 const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000, 15000, 15000, 15000];
-/** "No libraries here" is only worth saying at street-level zoom. */
-const MIN_EMPTY_AREA_ZOOM = 13;
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
 const MIN_COURSE_SPEED = 0.8;
 const UNDO_TIMEOUT_MS = 6000;
@@ -413,13 +411,6 @@ export default function MapScreen() {
     () => (viewTiles ? viewTiles.filter((c) => !loadedTiles.has(c)) : []),
     [viewTiles, loadedTiles]
   );
-  const librariesInView = useMemo(() => {
-    if (!region) return null;
-    const { north, south, east, west } = region.bounds;
-    return libraries.some(
-      (l) => l.latitude <= north && l.latitude >= south && l.longitude <= east && l.longitude >= west
-    );
-  }, [region, libraries]);
 
   const inServiceArea = !!region && isInServiceArea(region.center.latitude, region.center.longitude);
   const centreLoaded = !!region && loadedTiles.has(tileFor(region.center.latitude, region.center.longitude));
@@ -437,9 +428,6 @@ export default function MapScreen() {
     });
   }, [region, loadedTiles]);
   const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpTiles.has(c));
-  // Everything in view has loaded and there's nothing here.
-  const emptyArea =
-    !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && unloadedTiles.length === 0 && librariesInView === false;
 
   let pill: StatusPillKind | null = null;
   if (failedTiles || dbFailed) pill = 'error';
@@ -447,14 +435,12 @@ export default function MapScreen() {
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
-  else if (emptyArea) pill = 'empty-area';
 
   const handlePillAction = () => {
     if (pill === 'error') retrySync();
     else if (pill === 'zoom-in') mapRef.current?.zoomTo(MIN_SYNC_ZOOM + 1);
     else if (pill === 'not-loaded') retrySync();
     else if (pill === 'location-off') askForLocation();
-    else if (pill === 'empty-area') Linking.openURL(REGISTER_LIBRARY_URL);
   };
 
   // --- Bottom slot: one card at a time, highest priority first ---
