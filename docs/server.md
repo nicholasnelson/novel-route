@@ -173,11 +173,29 @@ If the request limit is ever reached, the Workers paid plan ($5/month) raises ev
 - The veil and the "not loaded" logic switch to tiles.
 - No released users yet, so `/v1/libraries?cells=` can be removed rather than kept alongside.
 
+### Measured coverage radii (2026-10-08)
+
+One upstream call at each capital's centre; distance to the 200th result (or the farthest, when fewer came back):
+
+| City | Results | 50th | 100th | 200th / farthest |
+|---|---|---|---|---|
+| Sydney | 200 | 2.7 km | 3.6 km | **4.7 km** |
+| Brisbane | 200 | 3.3 km | 5.1 km | 7.5 km |
+| Melbourne | 200 | 4.1 km | 5.9 km | 7.8 km |
+| Adelaide | 200 | 3.8 km | 6.0 km | 12.2 km |
+| Canberra | 200 | 6.9 km | 9.6 km | 13.9 km |
+| Perth | 200 | 5.7 km | 9.6 km | 15.6 km |
+| Hobart | 137 | 4.9 km | 20.8 km | 96 km |
+| Darwin | 7 | – | – | 16 km |
+
+What this means:
+- **Tiles stay at precision 4.** Even so, a cold inner-Sydney tile (~780 km²) needs ~15–20 calls to complete (a 4.7 km circle covers ~70 km²), and ~30–40 s at the 2 s limit. Precision 3 would need hundreds. So a pending tile returns **the libraries known so far**, and the app shows them while it waits. In practice the seeds keep these areas warm.
+- **The endpoint has a hidden search radius.** Hobart (137 results reaching 96 km) and Darwin (7 within 16 km; Katherine is ~270 km away) return partial pages, so the search stops somewhere between ~100 and ~270 km. Today a partial page counts as complete only out to the farthest result or the cell's corner. Probing the real limit once would let one call in a sparse area cover far more.
+- **Seed targets and cost (estimates):** Sydney 25 km (~40–60 calls/day), Melbourne 30 km (~20–30), Brisbane 25 km (~15–20), Adelaide 25 km (~5–8), Perth 25 km (~5), Canberra 15 km (~2–3), Hobart and Darwin 1 each. Roughly 100–130 calls/day in total; circles widen in the outer suburbs, so likely fewer.
+
 ### Before building
 
-Once D1's daily limit has reset, measure from stored data:
-- real coverage radii in each capital (sets each seed's target radius, and confirms precision 4 rather than 3 for tiles);
-- rows read per request today (D1 reports `rows_read` per query), as a baseline.
+Once D1's daily limit has reset, measure rows read per request today (D1 reports `rows_read` per query) as a baseline.
 
 ## Future (not v1)
 
