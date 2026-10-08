@@ -13,7 +13,7 @@ npm test                   # vitest (D1 stand-in on node:sqlite, fake upstream)
 npm run typecheck
 ```
 
-Try it: `curl "http://localhost:8787/v1/libraries?cells=r1f93,r1f96"` (Adelaide CBD). The first call fills from the real Street Library endpoint; repeats come from the cache.
+Try it: `curl "http://localhost:8787/v1/tiles/r1f9"` (central Adelaide). The first request fills from the real Street Library endpoint (`pending` until the tile is fully covered, a few seconds); repeats come from the cache. `npm run dev` also enables `/__scheduled` to trigger a seed run: `curl "http://localhost:8787/__scheduled"`.
 
 To point the app at a local server: `adb reverse tcp:8787 tcp:8787`, then start Metro with `EXPO_PUBLIC_API_URL=http://127.0.0.1:8787` (from `apps/mobile`).
 
@@ -28,7 +28,7 @@ Deployed at `https://api.novelroute.app` (also `https://novel-route-api.novel-ro
 3. `npm run db:migrate:remote`
 4. `npm run deploy`. Note the URL (`https://novel-route-api.<your-subdomain>.workers.dev`).
 5. **Check Street Library accepts requests from Cloudflare** (some sites block datacenter IPs):
-   `curl "https://novel-route-api.<subdomain>.workers.dev/v1/libraries?cells=r1f93"` should return libraries with cell status `fresh`, and `/v1/health` should show a recent `lastUpstreamSuccess`. If cells stay `pending`, check `npx wrangler tail` for the upstream error.
+   `curl "https://novel-route-api.<subdomain>.workers.dev/v1/tiles/r1f9"` should return libraries and, after a few seconds of retries, status `fresh`; `/v1/health` should show a recent `lastUpstreamSuccess`. If tiles stay `pending`, check `npx wrangler tail` for the upstream error.
 6. Point the app at it: add `EXPO_PUBLIC_API_URL` (string, plaintext) to the EAS `preview` and `production` environments, then rebuild.
 7. Update the privacy policy (`apps/site/privacy.html`) now that the server is the data source.
 

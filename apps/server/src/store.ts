@@ -1,11 +1,14 @@
-import { CELL_PRECISION, encodeGeohash, Library } from '@novel-route/shared';
+import { encodeGeohash, Library } from '@novel-route/shared';
+import { Circle } from './coverage';
 
 /** D1 access for the server. All times are epoch ms. */
 
-export type CellRow = {
+/** Libraries are indexed by their precision-5 geohash; a tile's are a prefix range of it. */
+export const LIBRARY_CELL_PRECISION = 5;
+
+export type TileRow = {
   geohash: string;
-  fetched_at: number | null;
-  truncated: number;
+  complete_at: number | null;
   refreshing_until: number | null;
   last_error: string | null;
 };
@@ -22,42 +25,71 @@ export type LibraryRow = {
   removed_at: number | null;
 };
 
-// D1 allows at most 100 bound parameters per query, and one fill can touch thousands of
-// cells, so lists are passed as a single JSON array and expanded with json_each.
+// D1 allows at most 100 bound parameters per query, so lists are passed as a single JSON
+// array and expanded with json_each.
 const jsonList = (values: string[]) => JSON.stringify(values);
 
-/** Writes are only repeated for unchanged libraries this often (keeps D1 writes low). */
-const LIBRARY_TOUCH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-/** A covered cell refreshed more recently than this isn't rewritten (overlapping circles). */
-const CELL_REWRITE_AFTER_MS = 12 * 60 * 60 * 1000;
-
-export async function getCells(db: D1Database, cells: string[]): Promise<Map<string, CellRow>> {
-  if (cells.length === 0) return new Map();
-  const { results } = await db
-    .prepare('SELECT * FROM cells WHERE geohash IN (SELECT value FROM json_each(?))')
-    .bind(jsonList(cells))
-    .all<CellRow>();
-  return new Map(results.map((row) => [row.geohash, row]));
+export async function getTile(db: D1Database, tile: string): Promise<TileRow | null> {
+  return db.prepare('SELECT * FROM tiles WHERE geohash = ?').bind(tile).first<TileRow>();
 }
 
-/** Single-flight: take the cell's refresh lock unless someone else holds it. */
-export async function acquireCellLock(db: D1Database, cell: string, now: number, lockMs: number): Promise<boolean> {
-  await db.prepare('INSERT OR IGNORE INTO cells (geohash) VALUES (?)').bind(cell).run();
+export async function setTileComplete(db: D1Database, tile: string, completeAt: number): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO tiles (geohash, complete_at) VALUES (?, ?)
+       ON CONFLICT(geohash) DO UPDATE SET complete_at = excluded.complete_at, last_error = NULL`
+    )
+    .bind(tile, completeAt)
+    .run();
+}
+
+/** Single-flight: take the tile's refresh lock unless someone else holds it. */
+export async function acquireTileLock(db: D1Database, tile: string, now: number, lockMs: number): Promise<boolean> {
   const { meta } = await db
     .prepare(
-      `UPDATE cells SET refreshing_until = ?
-       WHERE geohash = ? AND (refreshing_until IS NULL OR refreshing_until < ?)`
+      `INSERT INTO tiles (geohash, refreshing_until) VALUES (?, ?)
+       ON CONFLICT(geohash) DO UPDATE SET refreshing_until = excluded.refreshing_until
+       WHERE tiles.refreshing_until IS NULL OR tiles.refreshing_until < ?`
     )
-    .bind(now + lockMs, cell, now)
+    .bind(tile, now + lockMs, now)
     .run();
   return meta.changes === 1;
 }
 
-export async function releaseCellLock(db: D1Database, cell: string, error: string | null = null): Promise<void> {
+export async function releaseTileLock(db: D1Database, tile: string, error: string | null = null): Promise<void> {
   await db
-    .prepare('UPDATE cells SET refreshing_until = NULL, last_error = ? WHERE geohash = ?')
-    .bind(error, cell)
+    .prepare('UPDATE tiles SET refreshing_until = NULL, last_error = ? WHERE geohash = ?')
+    .bind(error, tile)
     .run();
+}
+
+/** Store a call's coverage circle under each area it overlaps, pruning those areas' old circles. */
+export async function insertCircle(db: D1Database, circle: Circle, areas: string[], pruneBefore: number): Promise<number> {
+  const results = await db.batch([
+    db
+      .prepare('DELETE FROM coverage WHERE area IN (SELECT value FROM json_each(?)) AND fetched_at < ?')
+      .bind(jsonList(areas), pruneBefore),
+    db
+      .prepare(
+        `INSERT INTO coverage (area, latitude, longitude, radius_m, fetched_at)
+         SELECT value, ?, ?, ?, ? FROM json_each(?)`
+      )
+      .bind(circle.latitude, circle.longitude, circle.radius, circle.fetchedAt, jsonList(areas)),
+  ]);
+  return results.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
+}
+
+/** Circles filed under any of `areas` since `since`, de-duplicated (one circle can span areas). */
+export async function circlesInAreas(db: D1Database, areas: string[], since: number): Promise<Circle[]> {
+  if (areas.length === 0) return [];
+  const { results } = await db
+    .prepare(
+      `SELECT DISTINCT latitude, longitude, radius_m, fetched_at FROM coverage
+       WHERE area IN (SELECT value FROM json_each(?)) AND fetched_at >= ?`
+    )
+    .bind(jsonList(areas), since)
+    .all<{ latitude: number; longitude: number; radius_m: number; fetched_at: number }>();
+  return results.map((r) => ({ latitude: r.latitude, longitude: r.longitude, radius: r.radius_m, fetchedAt: r.fetched_at }));
 }
 
 /**
@@ -86,29 +118,9 @@ export async function setMeta(db: D1Database, key: string, value: string): Promi
     .run();
 }
 
-/** Mark cells filled. Cells refreshed in the last CELL_REWRITE_AFTER_MS are left alone. Returns rows written. */
-export async function markCellsFetched(
-  db: D1Database,
-  cells: string[],
-  now: number,
-  truncatedCell: string | null
-): Promise<number> {
-  if (cells.length === 0) return 0;
-  const { meta } = await db
-    .prepare(
-      `INSERT INTO cells (geohash, fetched_at, truncated)
-       SELECT value, ?, CASE WHEN value = ? THEN 1 ELSE 0 END FROM json_each(?) WHERE true
-       ON CONFLICT(geohash) DO UPDATE SET fetched_at = excluded.fetched_at, truncated = excluded.truncated
-       WHERE cells.fetched_at IS NULL OR cells.fetched_at < ? OR cells.geohash = ?`
-    )
-    .bind(now, truncatedCell ?? '', jsonList(cells), now - CELL_REWRITE_AFTER_MS, truncatedCell ?? '')
-    .run();
-  return meta.changes ?? 0;
-}
-
 /**
- * Insert new libraries and update changed ones (or unchanged ones not confirmed for a week).
- * Returns rows written.
+ * Insert new libraries and update ones that changed (or came back after being removed).
+ * Unchanged libraries aren't written at all. Returns rows written.
  */
 export async function upsertLibraries(db: D1Database, libraries: Library[], now: number): Promise<number> {
   if (libraries.length === 0) return 0;
@@ -125,8 +137,7 @@ export async function upsertLibraries(db: D1Database, libraries: Library[], now:
              permalink = excluded.permalink, last_seen = excluded.last_seen, removed_at = NULL
            WHERE libraries.title IS NOT excluded.title OR libraries.excerpt IS NOT excluded.excerpt
               OR libraries.latitude <> excluded.latitude OR libraries.longitude <> excluded.longitude
-              OR libraries.permalink IS NOT excluded.permalink OR libraries.removed_at IS NOT NULL
-              OR libraries.last_seen < ?`
+              OR libraries.permalink IS NOT excluded.permalink OR libraries.removed_at IS NOT NULL`
         )
         .bind(
           lib.id,
@@ -134,11 +145,10 @@ export async function upsertLibraries(db: D1Database, libraries: Library[], now:
           lib.excerpt ?? null,
           lib.latitude,
           lib.longitude,
-          encodeGeohash(lib.latitude, lib.longitude, CELL_PRECISION),
+          encodeGeohash(lib.latitude, lib.longitude, LIBRARY_CELL_PRECISION),
           lib.permalink ?? null,
           now,
-          now,
-          now - LIBRARY_TOUCH_INTERVAL_MS
+          now
         )
     )
   );
@@ -154,11 +164,22 @@ export async function markRemoved(db: D1Database, ids: string[], now: number): P
   return meta.changes ?? 0;
 }
 
+/** Libraries in any of the given precision-5 cells. */
 export async function librariesInCells(db: D1Database, cells: string[]): Promise<LibraryRow[]> {
   if (cells.length === 0) return [];
   const { results } = await db
     .prepare('SELECT * FROM libraries WHERE cell IN (SELECT value FROM json_each(?)) ORDER BY id')
     .bind(jsonList(cells))
+    .all<LibraryRow>();
+  return results;
+}
+
+/** Libraries in a tile: their cell starts with the tile's geohash (an index range scan). */
+export async function librariesInTile(db: D1Database, tile: string): Promise<LibraryRow[]> {
+  // '{' sorts directly after 'z', the last geohash character.
+  const { results } = await db
+    .prepare('SELECT * FROM libraries WHERE cell >= ? AND cell < ? ORDER BY id')
+    .bind(tile, `${tile}{`)
     .all<LibraryRow>();
   return results;
 }

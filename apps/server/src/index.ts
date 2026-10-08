@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { ConfigResponse, isValidCell, MAX_CELLS_PER_REQUEST } from '@novel-route/shared';
-import { getHealth, getLibraries, toApiLibrary } from './cache';
+import { ConfigResponse, isValidTile } from '@novel-route/shared';
+import { getHealth, getTileData, toApiLibrary } from './cache';
+import { runSeeds } from './seeds';
 import { getLibrary } from './store';
-import { prewarm } from './prewarm';
 
 export type Env = {
   DB: D1Database;
@@ -15,7 +15,7 @@ export type Env = {
 
 const app = new Hono<{ Bindings: Env }>();
 
-/** Per-client limit. Upstream calls are only ever triggered by cell staleness, never by a client directly. */
+/** Per-client limit. Upstream calls are only ever triggered by tile staleness, never by a client directly. */
 app.use('/v1/*', async (c, next) => {
   const key = c.req.header('CF-Connecting-IP') ?? 'unknown';
   if (c.env.RATE_LIMITER) {
@@ -32,21 +32,37 @@ async function etagFor(body: string): Promise<string> {
   return `W/"${hex}"`;
 }
 
-app.get('/v1/libraries', async (c) => {
-  const cells = Array.from(
-    new Set((c.req.query('cells') ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
-  );
-  if (cells.length === 0) return c.json({ error: 'cells is required' }, 400);
-  if (cells.length > MAX_CELLS_PER_REQUEST) {
-    return c.json({ error: `At most ${MAX_CELLS_PER_REQUEST} cells per request` }, 400);
-  }
-  const invalid = cells.filter((cell) => !isValidCell(cell));
-  if (invalid.length > 0) return c.json({ error: `Invalid cells: ${invalid.join(', ')}` }, 400);
+/** Complete tiles are cached at the edge (per Cloudflare data centre) for this long. */
+const EDGE_CACHE_SECONDS = 60 * 60;
 
-  const result = await getLibraries(c.env.DB, cells, Date.now(), (task) => c.executionCtx.waitUntil(task));
-  const body = JSON.stringify(result);
-  const etag = await etagFor(body);
+app.get('/v1/tiles/:tile', async (c) => {
+  const tile = c.req.param('tile').toLowerCase();
+  if (!isValidTile(tile)) return c.json({ error: 'Invalid tile' }, 400);
+
+  // The Workers Cache API (absent in tests). Only complete tiles are stored, so a cached
+  // response is at most EDGE_CACHE_SECONDS behind the database and never hides a pending fill.
+  const cache = typeof caches === 'undefined' ? null : caches.default;
+  const cacheKey = new Request(new URL(`/v1/tiles/${tile}`, c.req.url).toString());
+  let body: string;
+  let etag: string;
+  const hit = await cache?.match(cacheKey);
+  if (hit) {
+    body = await hit.text();
+    etag = hit.headers.get('ETag') ?? (await etagFor(body));
+  } else {
+    const result = await getTileData(c.env.DB, tile, (task) => c.executionCtx.waitUntil(task));
+    body = JSON.stringify(result);
+    etag = await etagFor(body);
+    if (cache && result.status === 'fresh') {
+      const cached = new Response(body, {
+        headers: { 'Content-Type': 'application/json', ETag: etag, 'Cache-Control': `public, max-age=${EDGE_CACHE_SECONDS}` },
+      });
+      c.executionCtx.waitUntil(cache.put(cacheKey, cached));
+    }
+  }
+
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304, { ETag: etag });
+  // The app keeps its own copy; tell intermediaries and the HTTP client not to.
   return c.body(body, 200, { 'Content-Type': 'application/json', ETag: etag, 'Cache-Control': 'no-cache' });
 });
 
@@ -77,9 +93,9 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  /** Cron Trigger: warm one cell of the cache per run (see prewarm.ts). */
+  /** Cron Trigger: keep the seed cities covered (see seeds.ts). */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(prewarm(env.DB, Date.now()));
+    ctx.waitUntil(runSeeds(env.DB));
   },
 } satisfies ExportedHandler<Env>;
 

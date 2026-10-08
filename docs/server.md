@@ -12,7 +12,7 @@ Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (also `https:/
 ## Responsibilities split
 
 - **Server ↔ Street Library:** the server owns nonce handling, Referer/User-Agent, retries and upstream rate limiting. A change to the Street Library site is fixed here without an app release.
-- **App ↔ server:** the app caches server responses in SQLite and only re-requests a cell when its local copy is stale. The app uses the server whenever `EXPO_PUBLIC_API_URL` is set; without it (development) it calls the Street Library site directly, one cell at a time.
+- **App ↔ server:** the app caches server responses in SQLite and only re-requests a tile when its local copy is stale. The app uses the server whenever `EXPO_PUBLIC_API_URL` is set; without it (development) it calls the Street Library site directly, one call per tile at its centre.
 - **Shared code** (`packages/shared`): the Street Library client, HTML clean-up, geohash/distance helpers and the API types are used by both.
 
 ## Stack
@@ -22,158 +22,39 @@ Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (also `https:/
 - Host: **Cloudflare Workers + D1** (free tier), with the Workers rate limiting binding.
 - **Confirmed on deploy:** the Street Library endpoint accepts requests from Cloudflare's network (Adelaide: 3 cells / 37 libraries from one call; Melbourne: 2 cells / 28 libraries). If that ever changes (cells stuck `pending`, `wrangler tail` shows upstream errors), the same Hono app can run on Node with SQLite on a small VM.
 
-## Tiling and upstream fetching
+## Tiles and coverage circles
 
-The upstream returns the **200 nearest libraries** to a point, with no radius parameter. So the server tiles the map into geohash cells and fills each one:
+Built 2026-10-08, replacing per-cell freshness (see "Why tiles and circles" below).
 
-1. Cells are geohash precision 5 (~4.9 × 4.9 km).
-2. To fill a cell, query upstream at the cell centre.
-3. **Coverage radius:** with a full page (200 results) the results are only complete out to the 200th library; with fewer, at least out to the farthest result and the cell's far corner.
-4. **Every cell lying wholly inside the coverage circle** is marked filled by that one call, whether or not anyone asked for it (nearest first, up to 2,000 cells; enumeration capped at 150 km). In Adelaide's CBD the 200th library is ~12 km out (≈11 cells); a sparse area with results reaching 50 km marks ≈360 cells. Cell lists go to D1 as one JSON parameter (`json_each`), since D1 allows at most 100 bound parameters per query.
-5. All returned libraries are stored, wherever they are.
-6. If the radius doesn't reach the filled cell's own far corner (very dense area), the cell is flagged `truncated`. Splitting such cells into precision-6 children is deferred; no Australian area seen so far comes close.
+The upstream returns the **200 nearest libraries** to a point, searching up to **100 km**, with no radius parameter. Two different shapes matter:
+
+- **Circles (server only).** Each Street Library call proves its results complete within a circle: out to the 200th result with a full page, otherwise the whole 99 km search radius (`coverageRadius`). Each call adds one circle to the `coverage` table, filed under every precision-3 geohash area (~156 km) it overlaps (1 row usually, at most ~9), indexed on `(area, fetched_at)`. Circles older than 48 h are pruned when new ones are added to the same area.
+- **Tiles (what clients get).** Geohash precision 4, ~39 × 20 km. Zoomed in (a 3–6 km view) the app needs 1–4 tiles; at zoom 10 (~50 × 100 km) it loads up to 12, nearest the centre first. One request per tile, so whole responses are cacheable.
+
+**A tile is complete** when the circles from the last 24 h together cover it (`src/coverage.ts`). The check reads the circles of the tile's precision-3 parent area (one indexed query) and tests a grid of sample points ~800 m apart. Each circle is shrunk by the grid's margin (half a grid cell's diagonal), so when every sample point is inside a shrunk circle, every point of the tile is inside a real one: slivers between circles can't be missed. Points outside Australia/NZ are ignored (the endpoint doesn't answer there).
+
+**Filling a tile.** If it isn't complete, the next query point is chosen from the uncovered sample points: estimate the next circle's reach from the nearest existing circle, then pick the point that covers the most uncovered ground while still reaching the gap nearest the tile's centre (`nextQueryPoint`). Querying the gap itself wastes half of every circle; this placement cut a simulated dense tile from 53 calls to 33. When a tile becomes complete, `tiles.complete_at` is set to its oldest covering circle's time, so for the next 24 h it's served without reading circles.
+
+**Libraries** are stored by location with their precision-5 geohash (`libraries.cell`); a tile's libraries are an index range scan on that prefix. Rows are **only written when something changed**. If a library previously seen inside a new circle is missing from that call's results, `removed_at` is set instead of deleting it (it stays in users' visit history); the API returns it with `removed: true` and the app hides it.
 
 Freshness and politeness:
-- A cell is fresh for **24 hours** after a successful fill.
-- **Single-flight per cell:** a lock (`cells.refreshing_until`, 30 s) taken with an atomic conditional update.
-- **Global upstream limit:** at most 1 call every 2 seconds across the whole server (atomic compare-and-set on `meta.upstream_last_call`). A request that can't get a slot isn't queued; its cells come back `pending` and the app retries on its next sync.
-- A request waits for at most **one** upstream call (never-filled cells); remaining unfilled cells (up to 3 more calls) and one stale cell are filled in the background (`waitUntil`), paced by the 2 s interval. The app retries `pending` cells every 4 s (up to 3 times).
-- **Seed warming** (Cron Trigger, every 5 minutes, `src/prewarm.ts`): loads each major AU/NZ city once (one call per run, stops after a 20k-row daily write budget); after that everything, including the seeds, is refreshed only when viewed. A full crawl was tried and exhausted D1's free-tier daily read limit, so background work stays minimal.
+- A tile is `fresh` for **24 hours** from its oldest covering call.
+- **Single-flight per tile:** a lock (`tiles.refreshing_until`, 30 s) taken with an atomic conditional upsert.
+- **Global upstream limit:** at most 1 call every 2 seconds across the whole server (atomic compare-and-set on `meta.upstream_last_call`). A request that can't get a slot isn't queued; the tile comes back `pending` and the app retries.
+- A request waits for at most **one** upstream call (never-complete tiles only). Remaining gaps, or a stale tile's refresh, are filled in the background (`waitUntil`, up to 4 calls per request), paced by the 2 s interval. The app re-requests pending tiles with growing gaps for about 90 s.
 - Nonce cached server-side; on nonce expiry refresh and retry once.
-- If a library previously seen inside the coverage radius is missing from a refresh, set `removed_at` instead of deleting it (it stays in users' visit history). The API returns it with `removed: true`; the app hides it from the map.
 
-## API (v1)
+**Edge cache.** Complete (`fresh`) tile responses are stored in the Workers Cache API for 1 hour, keyed by tile. It's per Cloudflare data centre, free, and doesn't touch D1; Australian users go through a handful of data centres, so popular tiles are nearly always cached. Pending tiles are never cached. A cached response can be up to an hour behind the database, which is fine for data that changes daily at most. (The Cache API only works on the custom domain, not on workers.dev.)
 
-All responses JSON. Versioned under `/v1`.
+### Seed areas
 
-### `GET /v1/libraries?cells=<geohash>,<geohash>,…`
+A Cron Trigger (every 5 minutes, `src/seeds.ts`) keeps a disc around each major city fully covered, so most users never wait for Street Library. Only each city's **centre and target radius** are fixed (e.g. Sydney 25 km, Melbourne 30 km, Adelaide 25 km, plus regional cities and Auckland, Wellington and Christchurch). Each run finds the first seed with a point not covered by a circle from the last **20 h** and queries there: first any of yesterday's centres in the disc that's now uncovered (they usually still fit), otherwise a point chosen as for tiles, aiming at the gap nearest the city centre. As density changes, circles shrink or grow and new gaps get filled; there are no hand-placed circles to maintain. Refreshing at 20 h keeps seeded tiles from ever going stale.
 
-The app computes which cells cover the visible map area and asks for them (max ~20 per request). Cell-based requests make server and app caching simple and keep responses cacheable.
+Guard rails: up to 3 calls per run; a per-city cap of 40 calls/day and 300 in total; a 20k-row daily write budget; all tracked in `meta.seed_stats`. Past a city's cap its outer edge just loads when viewed. Each call is logged with the city and the radius reached (`npx wrangler tail`).
 
-```json
-{
-  "cells": [
-    { "geohash": "r1f93", "fetchedAt": "2026-10-07T02:10:00Z", "status": "fresh" }
-  ],
-  "libraries": [
-    {
-      "id": "sl:45760",
-      "title": "Flinders St Baptist Courtyard Library",
-      "latitude": -34.9272319,
-      "longitude": 138.6031511,
-      "excerpt": "Let's Get Reading!! Free books to Take, Read and Share…",
-      "permalink": "https://streetlibrary.org.au/library/flinders-st-baptist-courtyard-library/",
-      "updatedAt": "2026-10-07T02:10:00Z",
-      "removed": false
-    }
-  ]
-}
-```
+Tested locally against the real endpoint (2026-10-08): Adelaide's central tile was complete after 4 calls (about 8 s, 173 libraries, 5 coverage rows written); Sydney's seed placed a 4.7 km circle at the CBD, then 5.9–8.7 km circles around it.
 
-- Only libraries inside the requested cells are returned (by their own precision-5 cell).
-- `status`: `fresh` | `stale` (served from cache, refresh started in the background) | `pending` (not filled yet: rate limited or upstream failed; the app leaves it stale and retries later).
-- The server normalises data: numeric lat/lng, HTML stripped and entities decoded in `excerpt`, whitespace trimmed in `title`.
-- `ETag` / `If-None-Match` supported so unchanged responses are a cheap `304`.
-
-### `GET /v1/libraries/:id`
-
-Single library (for deep links / detail refresh).
-
-### `GET /v1/config`
-
-Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported app version, a message banner. Lets us switch base style or show a notice without an app release.
-
-### `GET /v1/health`
-
-Liveness + last successful upstream call time.
-
-## App-side caching rules
-
-- App stores libraries and per-cell `fetchedAt` in SQLite.
-- On map idle at zoom ≥ 12 or app open: compute the visible cells (centre first, max 20); request only cells whose local copy is older than **24 h** (or missing), in one batched request.
-- Render from SQLite immediately; merge server results when they arrive.
-- On network failure: keep showing cached data, show a small offline indicator, back off before retrying.
-
-## Abuse protection (server)
-
-- Per-IP rate limit: 60 requests/min on `/v1/*` (Workers rate limiting binding).
-- Cap cells per request.
-- Upstream calls are only ever triggered by cell staleness, never directly by a client parameter, so clients can't make us hammer the Street Library site.
-
-## Data model
-
-See `apps/server/migrations/0001_init.sql`: `libraries` (with its precision-5 `cell`, `first_seen`, `last_seen`, `removed_at`), `cells` (`fetched_at`, `truncated`, `refreshing_until`, `last_error`) and `meta` (upstream nonce, rate-limit slot, last upstream success).
-
-## Privacy / logging
-
-- The server receives the cells the user is viewing (approximate location) and their IP.
-- The server stores nothing about clients: no IPs or cells against IPs in D1. Request logs exist only in Cloudflare Workers observability (default retention) and the rate limiter's short window. Reflect this in the privacy policy when the app switches to the server.
-
-## Planned redesign: tiles and coverage circles
-
-Status: **agreed, not built** (2026-10-08). Replaces "Tiling and upstream fetching", the cells part of "App-side caching rules" and seed warming above once built.
-
-### Why
-
-On 2026-10-07 the API went down for the rest of the UTC day after D1's free-tier **daily row-read limit** (5M) was hit. The cause was background warming that scanned whole tables every 2 minutes, made worse by the `cells` table growing quickly once circle coverage marked every cell inside each call's radius (fixed in `4cc7f4e` and `132f502`: index-only queries, seed-only warming, write budget, JSON 503). The design still has three structural problems:
-
-- **Writes:** marking every covered cell writes up to 600 rows per call in sparse areas, so ~170 rural loads would use the whole 100k/day write limit.
-- **Reads:** a zoomed-out view asks for 20 small cells, and every request (including the app's retries) reads every library in all of them from D1. Roughly 300–400 rows per request in a city puts the free-tier ceiling at ~12–15k requests/day.
-- **Caching:** requests are arbitrary sets of up to 20 cells, so whole responses are rarely reusable.
-
-The root cause is one grid doing two jobs. Precision 5 was chosen so a single 200-library call could always fill a cell (needed when the app called Street Library directly). But the unit the upstream naturally covers is a **circle** whose size depends on density, while the unit clients and caches want is a **tile** sized to the map view. The redesign separates them.
-
-### Design
-
-**1. The server stores coverage as circles.** Each successful upstream call adds one row to a new `coverage` table: centre, radius (the coverage radius as now: the 200th result with a full page, otherwise at least the farthest result), time, and the precision-3 geohash areas (~156 km) the circle overlaps. A circle is filed under each such area (1 row usually, at most ~9 even for a 150 km radius), indexed on `(area, fetched_at)`. Libraries are stored by location as now, but rows are **only written when something changed** (no weekly touch). Removal detection is unchanged (missing from a call whose radius contains it → `removed_at`).
-
-Writes per upstream call: ~1–9 coverage rows + the changed libraries. No more per-cell marking.
-
-**2. Clients get tiles of geohash precision 4 (~39 × 20 km).**
-
-- `GET /v1/tiles/:geohash4` → `{ tile, status, fetchedAt, libraries }`, one tile per request (the existing response shape, minus the cell list).
-- A tile is **complete** when the circles from the last 24 h together cover it. This is checked in code: read the recent circles for the tile's precision-3 area (one indexed query, tens of rows even in a city), then test a grid of sample points across the tile against them.
-- If the tile isn't complete, the server queries upstream at the **uncovered sample point nearest the tile centre** (the request waits for at most one call; further gaps are filled in the background, paced, as now) and returns `pending` or `stale` as today.
-- **Whole-response edge caching:** complete tiles are put in the Workers Cache API (per data centre, free) for ~1 h, keyed by tile. Pending tiles are never cached. A cached response may be up to an hour behind a refresh; acceptable for data that changes daily at most.
-
-Zoomed in (street level, a 3–6 km view) the app needs 1–4 tiles. At zoom 10 (~50 × 100 km on a phone) it needs ~15 and loads the ones nearest the centre first. A dense metro tile is roughly 300+ libraries, ~100 KB raw / ~30 KB compressed.
-
-**Why tiles for clients rather than circles:** tiles are cache keys, "is this loaded?" is a row lookup on the phone, the grey "not loaded" veil stays a set of squares, and freshness is one timestamp per tile. Circles stay a server-side detail.
-
-**3. Self-placing seed circles keep the cities warm.** Each seed is `{ centre, targetRadius }` (e.g. Adelaide ~25 km, Sydney ~35 km; set from measured radii). Once a day the cron keeps each seed disc fully covered:
-
-1. Re-query yesterday's circle centres for that city first (they usually still cover the disc).
-2. Sample points across the target disc; find any not covered by a circle from the last 24 h.
-3. Query the uncovered point nearest the seed centre, add its circle, repeat until covered.
-
-As density grows, circles shrink, gaps appear in step 2 and get filled. No hand-placed circles to maintain. It is the same coverage check and next-point logic tiles use.
-
-Guard rails:
-- One call per cron run (every 5 minutes, so 288 slots a day), starting early morning AU time. Circles are refreshed at ~20 h old so seeded areas never go stale.
-- Per-city daily call cap (~40) and a global daily cap. If a city outgrows its cap, the outer edge just falls back to on-view loading.
-- The daily write budget stays as a backstop.
-- Calls and the radius reached per city are logged, to see when a city's cost is creeping up.
-
-Rough cost: inner Sydney at ~6 km per circle with a 30 km target is ~25 circles, ~35–40 with overlap. Adelaide ~3–6. In total ~100–150 calls and ~1–1.5k rows written per day.
-
-### Budget after the redesign (estimates, to be measured)
-
-| Limit (free tier) | Expected use |
-|---|---|
-| D1 reads, 5M/day | Only edge-cache misses reach D1: ~tens of coverage rows + the tile's libraries per miss. |
-| D1 writes, 100k/day | ~10 rows per upstream call, bounded by our own 1 call per 2 s limit. Seeds ~1.5k/day. |
-| Worker requests, 100k/day | Becomes the ceiling (every tile request runs the Worker even on a cache hit). |
-| Street Library | Seeds ~100–150 calls/day, plus on-view refreshes (at most one per area per 24 h, independent of user count). |
-
-If the request limit is ever reached, the Workers paid plan ($5/month) raises every limit far beyond what the app will need.
-
-### App changes
-
-- Local cache unit becomes the precision-4 tile: a new SQLite migration for per-tile `fetchedAt` (CLAUDE.md's "precision-5 cell" rule updated to "precision-4 tile"). One request per stale tile instead of one batched request.
-- The veil and the "not loaded" logic switch to tiles.
-- No released users yet, so `/v1/libraries?cells=` can be removed rather than kept alongside.
-
-### Measured coverage radii (2026-10-08)
+### Measured coverage (2026-10-08)
 
 One upstream call at each capital's centre; distance to the 200th result (or the farthest, when fewer came back):
 
@@ -189,13 +70,100 @@ One upstream call at each capital's centre; distance to the 200th result (or the
 | Darwin | 7 | – | – | 16 km |
 
 What this means:
-- **Tiles stay at precision 4.** Even so, a cold inner-Sydney tile (~780 km²) needs ~15–20 calls to complete (a 4.7 km circle covers ~70 km²), and ~30–40 s at the 2 s limit. Precision 3 would need hundreds. So a pending tile returns **the libraries known so far**, and the app shows them while it waits. In practice the seeds keep these areas warm.
-- **The endpoint searches within 100 km.** Probed by querying points out to sea west of Darwin: from 101 km out one library came back (at 99.6 km), from 102 km none (nearest ~100.6 km). The `distance` field matches our own calculation. So **a partial page (< 200 results) is complete out to 100 km**: in the redesign its circle radius is 99 km (a small margin for rounding), whatever the farthest result. One call then covers e.g. all of southern Tasmania or the whole Darwin area. Not applied to the current cell marking: a 100 km circle holds ~1,300 precision-5 cells, which is exactly the write cost the redesign removes.
-- **Seed targets and cost (estimates):** Sydney 25 km (~40–60 calls/day), Melbourne 30 km (~20–30), Brisbane 25 km (~15–20), Adelaide 25 km (~5–8), Perth 25 km (~5), Canberra 15 km (~2–3), Hobart and Darwin 1 each. Roughly 100–130 calls/day in total; circles widen in the outer suburbs, so likely fewer.
+- **Tiles are precision 4.** Even so, a cold inner-Sydney tile needs tens of calls to complete (a 4.7 km circle covers ~70 km²), about a minute at the 2 s limit; precision 3 would need hundreds. So a pending tile returns **the libraries known so far**, and the app shows them while it waits. In practice the seeds keep these areas warm.
+- **The endpoint searches within 100 km.** Probed by querying points out to sea west of Darwin: from 101 km out one library came back (at 99.6 km), from 102 km none (nearest ~100.6 km). The `distance` field matches our own calculation. So **a partial page (< 200 results) is complete out to 100 km**: its circle radius is 99 km (a small margin for rounding), whatever the farthest result. One call covers e.g. all of southern Tasmania or the whole Darwin area.
+- **Seed targets and cost (estimates, see `src/seeds.ts`):** Sydney 25 km (~40–60 calls/day), Melbourne 30 km (~20–30), Brisbane 25 km (~15–20), Adelaide 25 km (~5–8), Perth 25 km (~5), Canberra 15 km (~2–3), Hobart and Darwin 1 each. Roughly 100–130 calls/day in total; circles widen in the outer suburbs, so likely fewer.
 
-### Before building
+### Budget (free tier, estimates)
 
-Once D1's daily limit has reset, measure rows read per request today (D1 reports `rows_read` per query) as a baseline.
+| Limit | Expected use |
+|---|---|
+| D1 reads, 5M/day | Only edge-cache misses reach D1. A fresh tile: 1 tile row + its libraries (up to a few hundred in a city). A non-fresh tile adds its area's recent circles (tens to ~100 rows). |
+| D1 writes, 100k/day | ~1–9 circle rows per call + changed libraries + a tile row, bounded by our own 1 call per 2 s. Seeds: ~100–150 calls, ~1.5k rows/day. |
+| Worker requests, 100k/day | Likely the first ceiling: every tile request runs the Worker, even on an edge-cache hit. |
+| Street Library | Seeds ~100–150 calls/day, plus on-view refreshes (at most once per area per 24 h, whatever the number of users). |
+
+If a limit is ever reached, the Workers paid plan ($5/month) raises all of them far beyond what the app will need.
+
+### Why tiles and circles
+
+On 2026-10-07 the API went down for the rest of the UTC day after D1's free-tier **daily row-read limit** (5M) was hit: background warming scanned whole tables every 2 minutes, made worse by a `cells` table that grew quickly once each call marked every precision-5 cell inside its circle. The emergency fix (`4cc7f4e`, `132f502`) used index-only queries and seed-only warming. The per-cell design still had three structural problems:
+
+- **Writes:** marking every covered cell wrote up to 600 rows per call in sparse areas, so ~170 rural loads would use the whole 100k/day write limit.
+- **Reads:** a zoomed-out view asked for 20 small cells, and every request (including retries) read every library in all of them.
+- **Caching:** requests were arbitrary sets of up to 20 cells, so whole responses were rarely reusable.
+
+The root cause was one grid doing two jobs. Precision 5 was chosen so a single 200-library call could always fill a cell (needed when the app called Street Library directly). But the unit the upstream naturally covers is a **circle** whose size depends on density, while the unit clients and caches want is a **tile** sized to the map view. Circles stay a server-side detail: tiles are cache keys, "is this loaded?" is a row lookup on the phone, the grey "not loaded" veil stays a set of squares, and freshness is one timestamp per tile.
+
+## API (v1)
+
+All responses JSON. Versioned under `/v1`.
+
+### `GET /v1/tiles/:tile`
+
+One precision-4 geohash tile (e.g. `r1f9`, central Adelaide).
+
+```json
+{
+  "tile": "r1f9",
+  "status": "fresh",
+  "fetchedAt": "2026-10-08T00:37:02Z",
+  "libraries": [
+    {
+      "id": "sl:45760",
+      "title": "Flinders St Baptist Courtyard Library",
+      "latitude": -34.9272319,
+      "longitude": 138.6031511,
+      "excerpt": "Let's Get Reading!! Free books to Take, Read and Share…",
+      "permalink": "https://streetlibrary.org.au/library/flinders-st-baptist-courtyard-library/",
+      "updatedAt": "2026-10-08T00:37:02Z",
+      "removed": false
+    }
+  ]
+}
+```
+
+- `status`: `fresh` (complete within 24 h) | `stale` (was complete; served as-is while a refresh runs in the background) | `pending` (never complete yet: still filling, rate limited or upstream failed; the libraries found so far are included, and the app retries).
+- `fetchedAt`: the time of the tile's oldest covering call, or null if never complete. `updatedAt`: when the library last changed.
+- Only libraries inside the tile are returned. Tiles outside Australia/NZ answer `fresh` and empty without calling upstream.
+- The server normalises data: numeric lat/lng, HTML stripped and entities decoded in `excerpt`, whitespace trimmed in `title`.
+- `ETag` / `If-None-Match` supported so unchanged responses are a cheap `304`.
+
+### `GET /v1/libraries/:id`
+
+Single library (for deep links / detail refresh).
+
+### `GET /v1/config`
+
+Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported app version, a message banner. Lets us switch base style or show a notice without an app release.
+
+### `GET /v1/health`
+
+Liveness + last successful upstream call time.
+
+Errors (e.g. the database unavailable) are a JSON `503`.
+
+## App-side caching rules
+
+- The app stores libraries and per-tile `fetchedAt` in SQLite.
+- On pan (from zoom 10) or a location change: the visible tiles, nearest the centre first, up to 12. Only tiles whose local copy is older than **24 h** (or missing) are requested, one request per tile, up to 6 in parallel.
+- Render from SQLite immediately; merge server results when they arrive. A pending tile's libraries are shown, but the tile stays unloaded (grey veil) and is re-requested.
+- On network failure: keep showing cached data, show the error pill, retry on tap.
+
+## Abuse protection (server)
+
+- Per-IP rate limit: 300 requests/min on `/v1/*` (Workers rate limiting binding). It's one request per tile, so a zoomed-out view with retries can need a few dozen a minute.
+- Tile IDs are validated (precision 4, geohash alphabet).
+- Upstream calls are only ever triggered by tile staleness, never directly by a client parameter, so clients can't make us hammer the Street Library site.
+
+## Data model
+
+`apps/server/migrations/`: `libraries` (with its precision-5 `cell`, `first_seen`, `last_seen` = last change, `removed_at`), `coverage` (`area`, centre, `radius_m`, `fetched_at`), `tiles` (`complete_at`, `refreshing_until`, `last_error`) and `meta` (upstream nonce, rate-limit slot, last upstream success, seed stats). `0002_coverage_circles.sql` replaced the old `cells` table.
+
+## Privacy / logging
+
+- The server receives the tiles the user is viewing (approximate location, ~39 × 20 km) and their IP.
+- The server stores nothing about clients: no IPs or tiles against IPs in D1 (the `tiles` table records which tiles anyone has requested, not who). Request logs exist only in Cloudflare Workers observability (default retention) and the rate limiter's short window.
 
 ## Future (not v1)
 

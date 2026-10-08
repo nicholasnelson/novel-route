@@ -12,7 +12,7 @@ import Mapbox, {
   SymbolLayer,
   type MapState,
 } from '@rnmapbox/maps';
-import { CELL_PRECISION, geohashBounds, geohashCenter, geohashesForBounds, isInServiceArea } from '@novel-route/shared';
+import { TILE_PRECISION, geohashBounds, geohashCenter, geohashesForBounds, isInServiceArea } from '@novel-route/shared';
 import { LatLng, Library, VisitSummary } from '../types';
 import { freshnessFor } from '../store/freshness';
 import { MAP_MARKER_IMAGES } from './markerImages';
@@ -50,8 +50,8 @@ const VEIL_UPDATE_MS = 150;
  * that's already veiled (camera events reach JS a little behind the screen).
  */
 const VEIL_PADDING = 1;
-/** Skip the veil when the padded area spans more cells than this. */
-const MAX_VEIL_CELLS = 2500;
+/** Skip the veil when the padded area spans more tiles than this. */
+const MAX_VEIL_TILES = 2500;
 
 export type MapBounds = { north: number; south: number; east: number; west: number };
 export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
@@ -68,8 +68,8 @@ type Props = {
   visitSummaries: Map<string, VisitSummary>;
   now: number;
   selectedId: string | null;
-  /** Cells whose libraries are on the device; every other cell in view gets a grey veil. */
-  loadedCells: Set<string>;
+  /** Tiles whose libraries are on the device; every other tile in view gets a grey veil. */
+  loadedTiles: Set<string>;
   initialCenter: LatLng;
   initialZoom: number;
   followUser: boolean;
@@ -97,7 +97,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     visitSummaries,
     now,
     selectedId,
-    loadedCells,
+    loadedTiles,
     initialCenter,
     initialZoom,
     followUser,
@@ -172,24 +172,24 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     setVeilBounds({ north: ne[1] + padLat, south: sw[1] - padLat, east: ne[0] + padLng, west: sw[0] - padLng });
   };
 
-  const unloadedCells = useMemo(() => {
+  const unloadedTiles = useMemo(() => {
     if (!veilBounds) return [];
-    // Empty when zoomed so far out that the area spans more cells than is worth drawing.
-    return geohashesForBounds(veilBounds, CELL_PRECISION, MAX_VEIL_CELLS).filter((cell) => {
-      if (loadedCells.has(cell)) return false;
-      const c = geohashCenter(cell);
+    // Empty when zoomed so far out that the area spans more tiles than is worth drawing.
+    return geohashesForBounds(veilBounds, TILE_PRECISION, MAX_VEIL_TILES).filter((tile) => {
+      if (loadedTiles.has(tile)) return false;
+      const c = geohashCenter(tile);
       return isInServiceArea(c.latitude, c.longitude);
     });
-  }, [veilBounds, loadedCells]);
+  }, [veilBounds, loadedTiles]);
 
   const veil = useMemo<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(
     () => ({
       type: 'FeatureCollection',
-      features: unloadedCells.map((cell) => {
-        const b = geohashBounds(cell);
+      features: unloadedTiles.map((tile) => {
+        const b = geohashBounds(tile);
         return {
           type: 'Feature',
-          id: cell,
+          id: tile,
           properties: {},
           geometry: {
             type: 'Polygon',
@@ -198,7 +198,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         };
       }),
     }),
-    [unloadedCells]
+    [unloadedTiles]
   );
 
   const handlePress = async (event: { features: GeoJSON.Feature[] }) => {
@@ -292,9 +292,9 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       )}
 
       {/* Grey veil over areas whose libraries haven't loaded (beneath the library markers). */}
-      <ShapeSource id="unloaded-cells" shape={veil}>
+      <ShapeSource id="unloaded-tiles" shape={veil}>
         <FillLayer
-          id="unloaded-cells-fill"
+          id="unloaded-tiles-fill"
           style={{ fillColor: colors.inkSoft, fillOpacity: 0.16, fillAntialias: false }}
         />
       </ShapeSource>

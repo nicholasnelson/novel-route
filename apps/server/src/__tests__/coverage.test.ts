@@ -1,73 +1,78 @@
-import { encodeGeohash, geohashCenter } from '@novel-route/shared';
-import { cellsWithinRadius, farCornerDistance, getLibraries, MAX_COVERED_CELLS } from '../cache';
-import { getCells } from '../store';
-import { createTestD1, libraryQueries, mockUpstream } from './helpers';
+import { distanceMeters, encodeGeohash, geohashBounds, geohashCenter, TILE_PRECISION } from '@novel-route/shared';
+import { circleAreas, discGrid, tileGrid, uncoveredPoints } from '../coverage';
 
-const NOW = Date.UTC(2026, 9, 7, 2);
-const noDefer = () => {};
-const HOME = encodeGeohash(-34.9285, 138.6007, 5);
-const centre = geohashCenter(HOME);
+const ADELAIDE = { latitude: -34.9285, longitude: 138.6007 };
+const TILE = encodeGeohash(ADELAIDE.latitude, ADELAIDE.longitude, TILE_PRECISION);
+const centre = geohashCenter(TILE);
 const KM = 1000;
+const circle = (latitude: number, longitude: number, radius: number) => ({ latitude, longitude, radius, fetchedAt: 0 });
 
-describe('cellsWithinRadius', () => {
-  it('returns cells wholly inside the circle, nearest first', () => {
-    const cells = cellsWithinRadius(centre, 20 * KM);
-    // A 20 km circle is ~1,257 km²; cells here are ~4 x 4.9 km, so roughly 40-60 fit wholly inside.
-    expect(cells.length).toBeGreaterThan(30);
-    expect(cells.length).toBeLessThan(80);
-    expect(cells[0]).toBe(HOME);
-    for (const c of cells) expect(farCornerDistance(centre, c)).toBeLessThanOrEqual(20 * KM);
-    const distances = cells.map((c) => farCornerDistance(centre, c));
-    expect([...distances].sort((a, b) => a - b)).toEqual(distances);
+describe('tile sample grid', () => {
+  it('covers the tile with points under a kilometre apart', () => {
+    const grid = tileGrid(TILE);
+    // A precision-4 tile at Adelaide's latitude is ~32 x 20 km.
+    expect(grid.points.length).toBeGreaterThan(800);
+    expect(grid.points.length).toBeLessThan(1500);
+    expect(grid.margin).toBeGreaterThan(500);
+    expect(grid.margin).toBeLessThan(600);
   });
 
-  it('is capped for very large circles, and empty for no radius', () => {
-    const t0 = Date.now();
-    expect(cellsWithinRadius(centre, 500 * KM)).toHaveLength(MAX_COVERED_CELLS);
-    expect(Date.now() - t0).toBeLessThan(500);
-    expect(cellsWithinRadius(centre, 0)).toEqual([]);
+  it('every point of the tile lies within the margin of a sample point', () => {
+    const grid = tileGrid(TILE);
+    const b = geohashBounds(TILE);
+    for (const [lat, lng] of [[b.south, b.west], [b.north, b.east], [b.south, b.east], [(b.south + b.north) / 2, b.west]]) {
+      const nearest = Math.min(...grid.points.map((p) => distanceMeters(lat, lng, p.latitude, p.longitude)));
+      expect(nearest).toBeLessThanOrEqual(grid.margin);
+    }
   });
 });
 
-describe('circle coverage in fills', () => {
-  // Sparse area: a handful of libraries, the farthest ~30 km from the queried cell's centre.
-  const sparse = [
-    { id: '1', latitude: centre.latitude, longitude: centre.longitude },
-    { id: '2', latitude: centre.latitude + 0.1, longitude: centre.longitude + 0.1 },
-    { id: '3', latitude: centre.latitude - 0.27, longitude: centre.longitude },
-  ];
-
-  it('marks every cell inside the radius fresh, not just the requested ones', async () => {
-    const db = createTestD1();
-    const upstream = mockUpstream(sparse);
-    await getLibraries(db, [HOME], NOW, noDefer);
-    expect(libraryQueries(upstream)).toBe(1);
-
-    // A cell ~15 km away that was never requested is now fresh, served without another call.
-    const elsewhere = encodeGeohash(centre.latitude + 0.13, centre.longitude, 5);
-    const result = await getLibraries(db, [elsewhere], NOW + 60_000, noDefer);
-    expect(result.cells[0].status).toBe('fresh');
-    expect(libraryQueries(upstream)).toBe(1);
-
-    const rows = await getCells(db, cellsWithinRadius(centre, 25 * KM));
-    expect(rows.size).toBeGreaterThan(50);
+describe('uncoveredPoints', () => {
+  it('a circle reaching past every corner covers the tile', () => {
+    expect(uncoveredPoints(tileGrid(TILE), [circle(centre.latitude, centre.longitude, 30 * KM)])).toEqual([]);
   });
 
-  it('detects removals anywhere inside the radius', async () => {
-    const db = createTestD1();
-    mockUpstream(sparse);
-    await getLibraries(db, [HOME], NOW, noDefer);
+  it('a circle that only just reaches the corners does not (circles are shrunk by the margin)', () => {
+    const b = geohashBounds(TILE);
+    const corner = distanceMeters(centre.latitude, centre.longitude, b.north, b.east);
+    const grid = tileGrid(TILE);
+    expect(uncoveredPoints(grid, [circle(centre.latitude, centre.longitude, corner)]).length).toBeGreaterThan(0);
+    expect(uncoveredPoints(grid, [circle(centre.latitude, centre.longitude, corner + grid.margin * 1.01 + 50)])).toEqual([]);
+  });
 
-    // Library 2 (~14 km away, in a cell nobody requested) disappears upstream.
-    mockUpstream(sparse.filter((l) => l.id !== '2'));
-    const later = NOW + 25 * 60 * 60 * 1000;
-    await getLibraries(db, [HOME], later, noDefer); // stale: refresh runs in the background...
-    const deferred: Promise<unknown>[] = [];
-    await getLibraries(db, [HOME], later, (t) => deferred.push(t), async () => {});
-    await Promise.all(deferred);
+  it('finds the gap between two circles that each cover half', () => {
+    const b = geohashBounds(TILE);
+    const west = { latitude: centre.latitude, longitude: (b.west + centre.longitude) / 2 };
+    const east = { latitude: centre.latitude, longitude: (centre.longitude + b.east) / 2 };
+    const grid = tileGrid(TILE);
+    // Each reaches just past the centre line; with the margin they leave a band uncovered.
+    const halfWidth = distanceMeters(centre.latitude, west.longitude, centre.latitude, centre.longitude);
+    const r = Math.hypot(halfWidth, distanceMeters(b.south, 0, b.north, 0) / 2) + 100;
+    const gaps = uncoveredPoints(grid, [circle(west.latitude, west.longitude, r), circle(east.latitude, east.longitude, r)]);
+    expect(gaps.length).toBeGreaterThan(0);
+    // Generous circles close it.
+    const big = r + 2 * grid.margin;
+    expect(uncoveredPoints(grid, [circle(west.latitude, west.longitude, big), circle(east.latitude, east.longitude, big)])).toEqual([]);
+  });
+});
 
-    const cellOf2 = encodeGeohash(centre.latitude + 0.1, centre.longitude + 0.1, 5);
-    const result = await getLibraries(db, [cellOf2], later + 60_000, noDefer);
-    expect(result.libraries.find((l) => l.id === 'sl:2')?.removed).toBe(true);
+describe('circleAreas', () => {
+  it('files even a 99 km circle under a handful of areas', () => {
+    const areas = circleAreas({ ...ADELAIDE, radius: 99 * KM });
+    expect(areas.length).toBeGreaterThan(1);
+    expect(areas.length).toBeLessThanOrEqual(9);
+    expect(areas).toContain(TILE.slice(0, 3));
+  });
+});
+
+describe('discGrid', () => {
+  it('only samples inside the disc', () => {
+    const grid = discGrid(ADELAIDE, 10 * KM);
+    for (const p of grid.points) {
+      expect(distanceMeters(p.latitude, p.longitude, ADELAIDE.latitude, ADELAIDE.longitude)).toBeLessThanOrEqual(10 * KM + 1);
+    }
+    // ~314 km² at 0.64 km² per point.
+    expect(grid.points.length).toBeGreaterThan(400);
+    expect(grid.points.length).toBeLessThan(560);
   });
 });

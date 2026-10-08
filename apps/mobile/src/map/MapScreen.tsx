@@ -17,16 +17,16 @@ import { MapControls, StatusPill, StatusPillKind } from './overlays/chrome';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
 import {
-  CELL_PRECISION,
+  TILE_PRECISION,
   distanceMeters,
   geohashCenter,
   geohashesForBounds,
   geohashesNearCenter,
   isInServiceArea,
-  MAX_CELLS_PER_REQUEST,
+  MAX_TILES_PER_VIEW,
 } from '@novel-route/shared';
-import { cellFor, refreshCells } from '../data/librarySync';
-import { getAllLibraries, getLoadedCells } from '../store/libraryStore';
+import { tileFor, refreshTiles } from '../data/librarySync';
+import { getAllLibraries, getLoadedTiles } from '../store/libraryStore';
 import {
   clearVisits,
   deleteVisit,
@@ -57,8 +57,8 @@ const AUSTRALIA: LatLng = { latitude: -27.5, longitude: 134 };
 const AUSTRALIA_ZOOM = 3.4;
 /**
  * Panning loads libraries at this zoom or closer (about a 40 km wide view on a phone). Zoomed
- * out that far, the view spans more cells than one request allows, so the cells nearest the
- * centre are requested.
+ * out that far, the view can span more tiles than are loaded at once (MAX_TILES_PER_VIEW), so
+ * the ones nearest the centre are loaded.
  */
 const MIN_SYNC_ZOOM = 10;
 /** Fixed bottom padding while following the user, so the map doesn't jump as cards change. */
@@ -68,14 +68,15 @@ const TAP_HINT_MS = 10000;
 /** Logging a visit from further away than this asks for confirmation. */
 const FAR_VISIT_CONFIRM_M = 200;
 const HOUR_MS = 60 * 60 * 1000;
-/** Loaded/not-loaded status is only worked out while the view spans at most this many cells. */
-const MAX_VIEW_CELLS = 400;
+/** Loaded/not-loaded status is only worked out while the view spans at most this many tiles. */
+const MAX_VIEW_TILES = 150;
 /**
- * Delays before re-requesting cells the server reports as pending (it fills them in the
- * background, roughly one Street Library call every 3.5 s). Waiting is normal when zoomed out,
+ * Delays before re-requesting tiles the server reports as pending (it fills them in the
+ * background, roughly one Street Library call every 2-3.5 s; an unseen tile in a dense city
+ * can need ~30, though the seeded cities are normally ready). Waiting is normal when zoomed out,
  * so the app shows "Updating libraries…" throughout and only offers "Try again" after the last.
  */
-const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000];
+const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000, 15000, 15000, 15000];
 /** "No libraries here" is only worth saying at street-level zoom. */
 const MIN_EMPTY_AREA_ZOOM = 13;
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
@@ -113,19 +114,19 @@ export default function MapScreen() {
   const [bottomHeight, setBottomHeight] = useState(0);
 
   const [inFlightCount, setInFlightCount] = useState(0);
-  const [failedCells, setFailedCells] = useState<string[] | null>(null);
-  /** Cells whose libraries are on the device (loaded at least once). */
-  const [loadedCells, setLoadedCells] = useState<Set<string>>(new Set());
+  const [failedTiles, setFailedTiles] = useState<string[] | null>(null);
+  /** Tiles whose libraries are on the device (loaded at least once). */
+  const [loadedTiles, setLoadedTiles] = useState<Set<string>>(new Set());
   const [dbFailed, setDbFailed] = useState(false);
-  const userCellRef = useRef<string | null>(null);
-  const regionCellRef = useRef<string | null>(null);
-  const inFlightCellsRef = useRef(new Set<string>());
+  const userTileRef = useRef<string | null>(null);
+  const regionTileRef = useRef<string | null>(null);
+  const inFlightTilesRef = useRef(new Set<string>());
   const retryAttemptsRef = useRef(new Map<string, number>());
   /** Retries scheduled but not yet sent; counts as "updating" for the status pill. */
   const [retriesScheduled, setRetriesScheduled] = useState(0);
-  /** Cells that ran out of retries while still pending. */
-  const [gaveUpCells, setGaveUpCells] = useState<Set<string>>(new Set());
-  const syncCellsRef = useRef<((database: Db, cells: string[]) => Promise<void>) | null>(null);
+  /** Tiles that ran out of retries while still pending. */
+  const [gaveUpTiles, setGaveUpTiles] = useState<Set<string>>(new Set());
+  const syncTilesRef = useRef<((database: Db, tiles: string[]) => Promise<void>) | null>(null);
   const syncing = inFlightCount > 0 || retriesScheduled > 0;
 
   const location: LatLng | null = position;
@@ -150,36 +151,42 @@ export default function MapScreen() {
     setSelectedVisits(libraryId ? await getVisits(database, libraryId) : []);
   }, []);
 
-  const syncCells = useCallback(async (database: Db, requested: string[]) => {
-    const cells = requested.filter((c) => !inFlightCellsRef.current.has(c));
-    if (cells.length === 0) return;
-    cells.forEach((c) => inFlightCellsRef.current.add(c));
+  const syncTiles = useCallback(async (database: Db, requested: string[]) => {
+    const tiles = requested.filter((c) => !inFlightTilesRef.current.has(c));
+    if (tiles.length === 0) return;
+    tiles.forEach((c) => inFlightTilesRef.current.add(c));
     setInFlightCount((n) => n + 1);
     try {
-      const { updated, pending } = await refreshCells(database, cells);
+      const { updated, pending, failed } = await refreshTiles(database, tiles);
       if (updated) setLibraries(await getAllLibraries(database));
-      setLoadedCells(await getLoadedCells(database));
-      setFailedCells((failed) => (failed && failed.some((c) => cells.includes(c)) ? null : failed));
-      // The server fills a few cells per request (it paces calls to Street Library); keep
-      // re-requesting the rest with growing gaps so a zoomed-out view fills in by itself.
+      setLoadedTiles(await getLoadedTiles(database));
+      setFailedTiles((prev) => {
+        // These tiles' outcome replaces any earlier failure for them.
+        const rest = (prev ?? []).filter((c) => !tiles.includes(c));
+        const next = [...rest, ...failed];
+        return next.length > 0 ? next : null;
+      });
+      // A tile in a dense city can take tens of Street Library calls, which the server paces
+      // (and shows the libraries found so far); keep re-requesting pending tiles with growing
+      // gaps so the view fills in by itself.
       const attempts = retryAttemptsRef.current;
       const retry = pending.filter((c) => (attempts.get(c) ?? 0) < PENDING_RETRY_DELAYS_MS.length);
       const exhausted = pending.filter((c) => (attempts.get(c) ?? 0) >= PENDING_RETRY_DELAYS_MS.length);
-      if (exhausted.length > 0) setGaveUpCells((prev) => new Set([...prev, ...exhausted]));
+      if (exhausted.length > 0) setGaveUpTiles((prev) => new Set([...prev, ...exhausted]));
       if (retry.length > 0) {
         const delay = PENDING_RETRY_DELAYS_MS[Math.max(...retry.map((c) => attempts.get(c) ?? 0))];
         retry.forEach((c) => attempts.set(c, (attempts.get(c) ?? 0) + 1));
         setRetriesScheduled((n) => n + 1);
         setTimeout(() => {
           setRetriesScheduled((n) => n - 1);
-          syncCellsRef.current?.(database, retry);
+          syncTilesRef.current?.(database, retry);
         }, delay);
       }
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
-      setFailedCells(cells);
+      setFailedTiles(tiles);
     } finally {
-      cells.forEach((c) => inFlightCellsRef.current.delete(c));
+      tiles.forEach((c) => inFlightTilesRef.current.delete(c));
       setInFlightCount((n) => n - 1);
     }
   }, []);
@@ -200,14 +207,14 @@ export default function MapScreen() {
         const database = await getDb();
         const [libs, loaded, visitSummaries, hints, perm] = await Promise.all([
           getAllLibraries(database),
-          getLoadedCells(database),
+          getLoadedTiles(database),
           getVisitSummaries(database),
           getSeenHints(database),
           getLocationPermission(),
         ]);
         if (cancelled) return;
         setLibraries(libs);
-        setLoadedCells(loaded);
+        setLoadedTiles(loaded);
         setSummaries(visitSummaries);
         setSeenHints(hints);
         setPermission(perm);
@@ -244,14 +251,14 @@ export default function MapScreen() {
     return () => { cancelled = true; subscription?.remove(); };
   }, [locationGranted, appActive]);
 
-  // Refresh the user's cache cell whenever they enter a new one (no-op if it's fresh).
+  // Refresh the user's cache tile whenever they enter a new one (no-op if it's fresh).
   useEffect(() => {
     if (!db || !location) return;
-    const cell = cellFor(location.latitude, location.longitude);
-    if (cell === userCellRef.current) return;
-    userCellRef.current = cell;
-    syncCells(db, [cell]);
-  }, [db, location, syncCells]);
+    const tile = tileFor(location.latitude, location.longitude);
+    if (tile === userTileRef.current) return;
+    userTileRef.current = tile;
+    syncTiles(db, [tile]);
+  }, [db, location, syncTiles]);
 
   const askForLocation = async () => {
     if (permission?.status === 'denied' && !permission.canAskAgain) {
@@ -301,7 +308,7 @@ export default function MapScreen() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => { syncCellsRef.current = syncCells; }, [syncCells]);
+  useEffect(() => { syncTilesRef.current = syncTiles; }, [syncTiles]);
 
   const recordVisit = async (libraryId: string, source: VisitSource, visitedAt?: number) => {
     if (!db) return;
@@ -356,15 +363,15 @@ export default function MapScreen() {
   const handleRegionChange = (next: MapRegion) => {
     setRegion(next);
     if (!db || next.zoom < MIN_SYNC_ZOOM) return;
-    // Nearest the centre first: in direct (development) mode only the first stale cell is fetched.
-    const cells = geohashesNearCenter(next.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST);
-    const key = [...cells].sort().join(',');
-    if (key === regionCellRef.current) return;
-    regionCellRef.current = key;
-    // A new pan gives these cells a fresh set of retries.
-    cells.forEach((c) => retryAttemptsRef.current.delete(c));
-    setGaveUpCells((prev) => (cells.some((c) => prev.has(c)) ? new Set([...prev].filter((c) => !cells.includes(c))) : prev));
-    syncCells(db, cells);
+    // Nearest the centre first: in direct (development) mode only the first stale tile is fetched.
+    const tiles = geohashesNearCenter(next.bounds, TILE_PRECISION, MAX_TILES_PER_VIEW);
+    const key = [...tiles].sort().join(',');
+    if (key === regionTileRef.current) return;
+    regionTileRef.current = key;
+    // A new pan gives these tiles a fresh set of retries.
+    tiles.forEach((c) => retryAttemptsRef.current.delete(c));
+    setGaveUpTiles((prev) => (tiles.some((c) => prev.has(c)) ? new Set([...prev].filter((c) => !tiles.includes(c))) : prev));
+    syncTiles(db, tiles);
   };
 
   const focusLibrary = (library: Library) => {
@@ -372,39 +379,39 @@ export default function MapScreen() {
     if (location) mapRef.current?.frame([location, library]);
   };
 
-  /** The cells panning would load for the current view (nearest the centre first). */
-  const cellsToLoadForView = (): string[] =>
-    region ? geohashesNearCenter(region.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST) : [];
+  /** The tiles panning would load for the current view (nearest the centre first). */
+  const tilesToLoadForView = (): string[] =>
+    region ? geohashesNearCenter(region.bounds, TILE_PRECISION, MAX_TILES_PER_VIEW) : [];
 
   const retrySync = () => {
     if (!db) return;
     // Clear the error now so the tap visibly does something ("Updating libraries…"); it comes
     // back if this attempt fails too.
-    setFailedCells(null);
-    setGaveUpCells(new Set());
+    setFailedTiles(null);
+    setGaveUpTiles(new Set());
     retryAttemptsRef.current.clear();
-    const userCell = location ? [cellFor(location.latitude, location.longitude)] : [];
-    const cells = Array.from(new Set([...(failedCells ?? []), ...cellsToLoadForView(), ...userCell]));
-    if (cells.length > 0) syncCells(db, cells.slice(0, MAX_CELLS_PER_REQUEST));
+    const userTile = location ? [tileFor(location.latitude, location.longitude)] : [];
+    const tiles = Array.from(new Set([...(failedTiles ?? []), ...tilesToLoadForView(), ...userTile]));
+    if (tiles.length > 0) syncTiles(db, tiles.slice(0, MAX_TILES_PER_VIEW));
   };
 
   // --- Status pill (top) ---
 
-  // Which parts of the view have library data on the device. Cells that haven't loaded get a
+  // Which parts of the view have library data on the device. Tiles that haven't loaded get a
   // grey veil on the map, so "no libraries here" and "not loaded yet" look different.
-  const viewCells = useMemo(() => {
+  const viewTiles = useMemo(() => {
     if (!region) return null;
-    // null when zoomed so far out that the view spans more cells than is worth drawing.
-    const cells = geohashesForBounds(region.bounds, CELL_PRECISION, MAX_VIEW_CELLS);
-    if (cells.length === 0) return null;
-    return cells.filter((c) => {
+    // null when zoomed so far out that the view spans more tiles than is worth drawing.
+    const tiles = geohashesForBounds(region.bounds, TILE_PRECISION, MAX_VIEW_TILES);
+    if (tiles.length === 0) return null;
+    return tiles.filter((c) => {
       const centre = geohashCenter(c);
       return isInServiceArea(centre.latitude, centre.longitude);
     });
   }, [region]);
-  const unloadedCells = useMemo(
-    () => (viewCells ? viewCells.filter((c) => !loadedCells.has(c)) : []),
-    [viewCells, loadedCells]
+  const unloadedTiles = useMemo(
+    () => (viewTiles ? viewTiles.filter((c) => !loadedTiles.has(c)) : []),
+    [viewTiles, loadedTiles]
   );
   const librariesInView = useMemo(() => {
     if (!region) return null;
@@ -415,27 +422,27 @@ export default function MapScreen() {
   }, [region, libraries]);
 
   const inServiceArea = !!region && isInServiceArea(region.center.latitude, region.center.longitude);
-  const centreLoaded = !!region && loadedCells.has(cellFor(region.center.latitude, region.center.longitude));
+  const centreLoaded = !!region && loadedTiles.has(tileFor(region.center.latitude, region.center.longitude));
   // Zoomed out too far to load, with unloaded areas in view (or too much in view to tell).
   const needsZoomIn =
     !!region && region.zoom < MIN_SYNC_ZOOM && inServiceArea &&
-    (viewCells === null ? !centreLoaded : unloadedCells.length > 0);
-  // Close enough to load, and cells panning should have loaded (the ones nearest the centre)
+    (viewTiles === null ? !centreLoaded : unloadedTiles.length > 0);
+  // Close enough to load, and tiles panning should have loaded (the ones nearest the centre)
   // ran out of retries. Edges of a zoomed-out view load as you pan, so they only get the veil.
   const unloadedNearCentre = useMemo(() => {
     if (!region || region.zoom < MIN_SYNC_ZOOM) return [];
-    return geohashesNearCenter(region.bounds, CELL_PRECISION, MAX_CELLS_PER_REQUEST).filter((c) => {
+    return geohashesNearCenter(region.bounds, TILE_PRECISION, MAX_TILES_PER_VIEW).filter((c) => {
       const centre = geohashCenter(c);
-      return isInServiceArea(centre.latitude, centre.longitude) && !loadedCells.has(c);
+      return isInServiceArea(centre.latitude, centre.longitude) && !loadedTiles.has(c);
     });
-  }, [region, loadedCells]);
-  const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpCells.has(c));
+  }, [region, loadedTiles]);
+  const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpTiles.has(c));
   // Everything in view has loaded and there's nothing here.
   const emptyArea =
-    !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && unloadedCells.length === 0 && librariesInView === false;
+    !!region && region.zoom >= MIN_EMPTY_AREA_ZOOM && !syncing && unloadedTiles.length === 0 && librariesInView === false;
 
   let pill: StatusPillKind | null = null;
-  if (failedCells || dbFailed) pill = 'error';
+  if (failedTiles || dbFailed) pill = 'error';
   else if (syncing) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
@@ -571,7 +578,7 @@ export default function MapScreen() {
         visitSummaries={summaries}
         now={Math.floor(now / HOUR_MS) * HOUR_MS}
         selectedId={selectedId}
-        loadedCells={loadedCells}
+        loadedTiles={loadedTiles}
         initialCenter={AUSTRALIA}
         initialZoom={AUSTRALIA_ZOOM}
         followUser={followUser}

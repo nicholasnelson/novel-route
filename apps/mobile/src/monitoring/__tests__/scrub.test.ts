@@ -5,6 +5,9 @@ describe('scrubLocation', () => {
     expect(scrubLocation('GET https://api.novelroute.app/v1/libraries?cells=r1f93,r1f96 failed')).toBe(
       'GET https://api.novelroute.app/v1/libraries?cells=[removed] failed'
     );
+    expect(scrubLocation('GET https://api.novelroute.app/v1/tiles/r1f9 failed: HTTP 503')).toBe(
+      'GET https://api.novelroute.app/v1/tiles/[removed] failed: HTTP 503'
+    );
     expect(scrubLocation('near -34.92723,138.6031511')).toBe('near [coord],[coord]');
   });
 
