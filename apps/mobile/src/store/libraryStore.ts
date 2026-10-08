@@ -58,23 +58,23 @@ export async function getAllLibraries(db: Db): Promise<Library[]> {
   return rows.map(fromRow);
 }
 
-export async function getCellFetchedAt(db: Db, geohash: string): Promise<number | null> {
+export async function getTileFetchedAt(db: Db, geohash: string): Promise<number | null> {
   const row = await db.getFirstAsync<{ fetched_at: number }>(
-    'SELECT fetched_at FROM cells WHERE geohash = ?',
+    'SELECT fetched_at FROM tiles WHERE geohash = ?',
     [geohash]
   );
   return row?.fetched_at ?? null;
 }
 
-export async function setCellFetchedAt(db: Db, geohash: string, fetchedAt: number): Promise<void> {
+export async function setTileFetchedAt(db: Db, geohash: string, fetchedAt: number): Promise<void> {
   await db.runAsync(
-    'INSERT INTO cells (geohash, fetched_at) VALUES (?, ?) ON CONFLICT(geohash) DO UPDATE SET fetched_at = excluded.fetched_at',
+    'INSERT INTO tiles (geohash, fetched_at) VALUES (?, ?) ON CONFLICT(geohash) DO UPDATE SET fetched_at = excluded.fetched_at',
     [geohash, fetchedAt]
   );
 }
 
-/** Every cell the app has loaded at least once (stale or not: its libraries are on the device). */
-export async function getLoadedCells(db: Db): Promise<Set<string>> {
-  const rows = await db.getAllAsync<{ geohash: string }>('SELECT geohash FROM cells', []);
+/** Every tile the app has loaded at least once (stale or not: its libraries are on the device). */
+export async function getLoadedTiles(db: Db): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ geohash: string }>('SELECT geohash FROM tiles', []);
   return new Set(rows.map((r) => r.geohash));
 }

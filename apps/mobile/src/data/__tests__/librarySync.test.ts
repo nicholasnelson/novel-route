@@ -1,8 +1,9 @@
 import { createTestDb } from '../../test/testDb';
-import { getAllLibraries, getCellFetchedAt } from '../../store/libraryStore';
+import { getAllLibraries, getTileFetchedAt } from '../../store/libraryStore';
 
-const NOW = Date.UTC(2026, 9, 7);
-const ADELAIDE_CELL = 'r1f93';
+const NOW = Date.UTC(2026, 9, 8);
+const ADELAIDE = 'r1f9';
+const NORTH = 'r1fd';
 
 const lib = (id: string, removed = false) => ({
   id,
@@ -23,56 +24,66 @@ function loadSync(apiUrl: string | undefined): typeof import('../librarySync') {
   return mod;
 }
 
-function respond(body: unknown) {
-  const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => body });
+/** A fake server answering each tile request from `tiles` (tile -> response). */
+function serve(tiles: Record<string, unknown>) {
+  const fetchMock = jest.fn(async (url: string) => {
+    const tile = url.split('/').pop()!;
+    return tiles[tile] ? { ok: true, json: async () => tiles[tile] } : { ok: false, status: 503 };
+  });
   global.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
 }
 
+const tileBody = (tile: string, status: string, libraries: unknown[] = []) => ({ tile, status, fetchedAt: null, libraries });
+
 afterEach(() => { delete process.env.EXPO_PUBLIC_API_URL; });
 
-describe('refreshCells (server mode)', () => {
-  it('batches stale cells into one request and stores the results', async () => {
-    const { refreshCells } = loadSync('https://api.example/');
+describe('refreshTiles (server mode)', () => {
+  it('requests each stale tile and stores the results', async () => {
+    const { refreshTiles } = loadSync('https://api.example/');
     const db = await createTestDb();
-    const fetchMock = respond({
-      cells: [
-        { geohash: ADELAIDE_CELL, status: 'fresh', fetchedAt: null },
-        { geohash: 'r1f96', status: 'fresh', fetchedAt: null },
-      ],
-      libraries: [lib('sl:1'), lib('sl:2', true)],
+    const fetchMock = serve({
+      [ADELAIDE]: tileBody(ADELAIDE, 'fresh', [lib('sl:1'), lib('sl:2', true)]),
+      [NORTH]: tileBody(NORTH, 'stale'),
     });
 
-    expect(await refreshCells(db, [ADELAIDE_CELL, 'r1f96'], NOW)).toEqual({ updated: true, pending: [] });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe(`https://api.example/v1/libraries?cells=${ADELAIDE_CELL},r1f96`);
+    expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: true, pending: [], failed: [] });
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([
+      `https://api.example/v1/tiles/${ADELAIDE}`,
+      `https://api.example/v1/tiles/${NORTH}`,
+    ]);
     expect((await getAllLibraries(db)).map((l) => l.id)).toEqual(['sl:1']); // removed one is hidden
-    expect(await getCellFetchedAt(db, ADELAIDE_CELL)).toBe(NOW);
+    expect(await getTileFetchedAt(db, ADELAIDE)).toBe(NOW);
+    expect(await getTileFetchedAt(db, NORTH)).toBe(NOW);
   });
 
-  it('leaves pending cells stale so they are retried', async () => {
-    const { refreshCells } = loadSync('https://api.example');
+  it('shows the libraries found so far for a pending tile, but leaves it stale so it is retried', async () => {
+    const { refreshTiles } = loadSync('https://api.example');
     const db = await createTestDb();
-    respond({ cells: [{ geohash: ADELAIDE_CELL, status: 'pending', fetchedAt: null }], libraries: [] });
-    expect(await refreshCells(db, [ADELAIDE_CELL], NOW)).toEqual({ updated: false, pending: [ADELAIDE_CELL] });
-    expect(await getCellFetchedAt(db, ADELAIDE_CELL)).toBeNull();
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'pending', [lib('sl:1')]) });
+    expect(await refreshTiles(db, [ADELAIDE], NOW)).toEqual({ updated: true, pending: [ADELAIDE], failed: [] });
+    expect((await getAllLibraries(db)).map((l) => l.id)).toEqual(['sl:1']);
+    expect(await getTileFetchedAt(db, ADELAIDE)).toBeNull();
   });
 
-  it('skips fresh cells and cells outside Australia/NZ', async () => {
-    const { refreshCells } = loadSync('https://api.example');
+  it('skips fresh tiles and tiles outside Australia/NZ', async () => {
+    const { refreshTiles } = loadSync('https://api.example');
     const db = await createTestDb();
-    const fetchMock = respond({ cells: [{ geohash: ADELAIDE_CELL, status: 'fresh', fetchedAt: null }], libraries: [] });
-    await refreshCells(db, [ADELAIDE_CELL], NOW);
+    const fetchMock = serve({ [ADELAIDE]: tileBody(ADELAIDE, 'fresh') });
+    await refreshTiles(db, [ADELAIDE], NOW);
     fetchMock.mockClear();
 
-    expect(await refreshCells(db, [ADELAIDE_CELL, 's0000'], NOW + 1000)).toEqual({ updated: false, pending: [] });
+    expect(await refreshTiles(db, [ADELAIDE, 's000'], NOW + 1000)).toEqual({ updated: false, pending: [], failed: [] });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('throws on HTTP errors', async () => {
-    const { refreshCells } = loadSync('https://api.example');
+  it('reports failed tiles and still stores the others', async () => {
+    const { refreshTiles } = loadSync('https://api.example');
     const db = await createTestDb();
-    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
-    await expect(refreshCells(db, [ADELAIDE_CELL], NOW)).rejects.toThrow('HTTP 503');
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'fresh', [lib('sl:1')]) }); // NORTH gets a 503
+    expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: true, pending: [], failed: [NORTH] });
+    expect(await getTileFetchedAt(db, ADELAIDE)).toBe(NOW);
+    expect(await getTileFetchedAt(db, NORTH)).toBeNull();
   });
 });

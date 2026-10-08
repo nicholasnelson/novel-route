@@ -1,167 +1,166 @@
-import { encodeGeohash, geohashCenter } from '@novel-route/shared';
-import {
-  CELL_MAX_AGE_MS,
-  coverageRadius,
-  farCornerDistance,
-  fillCell,
-  getLibraries,
-  UPSTREAM_MIN_INTERVAL_MS,
-} from '../cache';
-import { acquireCellLock, acquireUpstreamSlot } from '../store';
-import { createTestD1, libraryQueries, mockUpstream } from './helpers';
+import { encodeGeohash, geohashBounds, geohashCenter, TILE_PRECISION } from '@novel-route/shared';
+import { coverageRadius, getTileData, TILE_MAX_AGE_MS, UPSTREAM_SEARCH_RADIUS_M, UPSTREAM_MIN_INTERVAL_MS } from '../cache';
+import { acquireUpstreamSlot, getTile } from '../store';
+import { createTestD1, deferred, fakeTiming, libraryQueries, mockUpstream, UpstreamLibrary } from './helpers';
 
-const NOW = Date.UTC(2026, 9, 7, 2);
-const ADELAIDE = { latitude: -34.9285, longitude: 138.6007 };
-const cellAt = (lat: number, lng: number) => encodeGeohash(lat, lng, 5);
-const HOME = cellAt(ADELAIDE.latitude, ADELAIDE.longitude);
-const MELBOURNE = cellAt(-37.8136, 144.9631);
-
-// A handful of libraries around the Adelaide cell's centre (~100 m to ~1.5 km away).
+const NOW = Date.UTC(2026, 9, 8, 2);
+const tileAt = (lat: number, lng: number) => encodeGeohash(lat, lng, TILE_PRECISION);
+const HOME = tileAt(-34.9285, 138.6007); // Adelaide
 const centre = geohashCenter(HOME);
-const nearby = Array.from({ length: 6 }, (_, i) => ({
-  id: String(100 + i),
-  latitude: centre.latitude + 0.002 * (i + 1) * (i % 2 ? 1 : -1),
-  longitude: centre.longitude + 0.002 * i,
-}));
-const melbourne = [{ id: '900', latitude: -37.8136, longitude: 144.9631 }];
+const bounds = geohashBounds(HOME);
+const inTile = (l: { latitude: number; longitude: number }) =>
+  l.latitude >= bounds.south && l.latitude < bounds.north && l.longitude >= bounds.west && l.longitude < bounds.east;
 
-const noDefer = () => {};
+// A sparse area: a few libraries, so one call (a partial page) covers 99 km.
+const sparse: UpstreamLibrary[] = [
+  { id: '1', latitude: centre.latitude, longitude: centre.longitude },
+  { id: '2', latitude: centre.latitude + 0.05, longitude: centre.longitude + 0.05 },
+  { id: '3', latitude: centre.latitude - 0.6, longitude: centre.longitude }, // ~67 km south, another tile
+];
 
-describe('coverage', () => {
-  it('a partial page covers at least the queried cell', () => {
-    expect(coverageRadius(centre, [100, 200], HOME)).toBeCloseTo(farCornerDistance(centre, HOME));
-  });
+/** A dense city: libraries every ~500 m across the tile and 6 km around it (200 reach ~4 km). */
+function denseCity(): UpstreamLibrary[] {
+  const libs: UpstreamLibrary[] = [];
+  let id = 1000;
+  for (let lat = bounds.south - 0.054; lat <= bounds.north + 0.054; lat += 0.0045) {
+    for (let lng = bounds.west - 0.066; lng <= bounds.east + 0.066; lng += 0.0055) {
+      libs.push({ id: String(id++), latitude: lat, longitude: lng });
+    }
+  }
+  return libs;
+}
 
-  it('a full page only covers up to its farthest result', () => {
-    const distances = Array.from({ length: 200 }, (_, i) => i * 10); // up to 1990 m
-    expect(coverageRadius(centre, distances, HOME)).toBe(1990);
+describe('coverageRadius', () => {
+  it('a full page is complete to its farthest result; a partial page to the search radius', () => {
+    expect(coverageRadius(Array.from({ length: 200 }, (_, i) => i * 10))).toBe(1990);
+    expect(coverageRadius([100, 200])).toBe(UPSTREAM_SEARCH_RADIUS_M);
+    expect(coverageRadius([])).toBe(UPSTREAM_SEARCH_RADIUS_M);
   });
 });
 
-describe('getLibraries', () => {
-  it('fills a never-seen cell synchronously and serves its libraries', async () => {
+describe('getTileData', () => {
+  it('fills a never-seen sparse tile with one call and serves only its own libraries', async () => {
     const db = createTestD1();
-    const upstream = mockUpstream([...nearby, ...melbourne]);
+    const upstream = mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
 
-    const result = await getLibraries(db, [HOME], NOW, noDefer);
-
+    const result = await getTileData(db, HOME, () => {}, timing);
     expect(libraryQueries(upstream)).toBe(1);
-    expect(result.cells).toEqual([{ geohash: HOME, status: 'fresh', fetchedAt: new Date(NOW).toISOString() }]);
-    const ids = result.libraries.map((l) => l.id).sort();
-    expect(ids.length).toBeGreaterThan(0);
-    expect(ids.every((id) => id.startsWith('sl:1'))).toBe(true); // nothing from Melbourne
-    expect(result.libraries.every((l) => !l.removed)).toBe(true);
+    expect(result.status).toBe('fresh');
+    expect(result.fetchedAt).toBe(new Date(NOW).toISOString());
+    expect(result.libraries.map((l) => l.id).sort()).toEqual(['sl:1', 'sl:2']);
   });
 
-  it('serves fresh cells from the cache without calling upstream', async () => {
+  it('serves fresh tiles without reading circles or calling upstream', async () => {
     const db = createTestD1();
-    const upstream = mockUpstream(nearby);
-    await getLibraries(db, [HOME], NOW, noDefer);
+    const upstream = mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
+    await getTileData(db, HOME, () => {}, timing);
     upstream.mockClear();
 
-    const result = await getLibraries(db, [HOME], NOW + 60_000, noDefer);
+    timing.advance(60_000);
+    expect((await getTileData(db, HOME, () => {}, timing)).status).toBe('fresh');
     expect(libraryQueries(upstream)).toBe(0);
-    expect(result.cells[0].status).toBe('fresh');
   });
 
-  it('covers neighbouring requested cells with one call when results reach them', async () => {
+  it('a neighbouring tile inside the same circle is complete without another call', async () => {
     const db = createTestD1();
-    // Few results, so the endpoint's whole radius is complete: neighbours within it are covered.
-    const upstream = mockUpstream([...nearby, { id: '200', latitude: centre.latitude + 0.08, longitude: centre.longitude }]);
-    const neighbour = cellAt(centre.latitude + 0.05, centre.longitude);
+    const upstream = mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
+    await getTileData(db, HOME, () => {}, timing);
 
-    const result = await getLibraries(db, [HOME, neighbour], NOW, noDefer);
+    const south = tileAt(centre.latitude - 0.6, centre.longitude); // ~67 km away
+    const result = await getTileData(db, south, () => {}, timing);
     expect(libraryQueries(upstream)).toBe(1);
-    expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'fresh']);
+    expect(result.status).toBe('fresh');
+    expect(result.libraries.map((l) => l.id)).toEqual(['sl:3']);
   });
 
-  it('returns after one fill and fills the rest in the background, paced', async () => {
+  it('fills a dense tile over several calls and ends up with every library in it', async () => {
     const db = createTestD1();
-    const upstream = mockUpstream([...nearby, ...melbourne]);
-    const sleep = vi.fn(async () => {});
-    const deferred: Promise<unknown>[] = [];
+    const world = denseCity();
+    const upstream = mockUpstream(world); // a full page reaches ~4 km: like inner Sydney
+    const timing = fakeTiming(NOW);
+    const background = deferred();
 
-    const result = await getLibraries(db, [HOME, MELBOURNE], NOW, (t) => deferred.push(t), sleep);
-    expect(libraryQueries(upstream)).toBe(1);
-    expect(result.cells.map((c) => c.status)).toEqual(['fresh', 'pending']);
+    const first = await getTileData(db, HOME, background.defer, timing);
+    expect(first.status).toBe('pending');
+    expect(first.libraries.length).toBeGreaterThan(0); // what's known so far
 
-    await Promise.all(deferred);
-    expect(libraryQueries(upstream)).toBe(2);
-    expect(sleep).toHaveBeenCalledWith(UPSTREAM_MIN_INTERVAL_MS);
-    const later = await getLibraries(db, [MELBOURNE], NOW + 10_000, noDefer);
-    expect(later.cells[0].status).toBe('fresh');
-    expect(later.libraries.map((l) => l.id)).toEqual(['sl:900']);
+    let result = first;
+    for (let i = 0; i < 20 && result.status !== 'fresh'; i++) {
+      await background.settle();
+      timing.advance(3000);
+      result = await getTileData(db, HOME, background.defer, timing);
+    }
+    expect(result.status).toBe('fresh');
+    expect(result.libraries.map((l) => l.id).sort()).toEqual(world.filter(inTile).map((l) => `sl:${l.id}`).sort());
+    // A ~640 km² tile in ~50 km² circles: ~25-35 calls with good placement, not hundreds.
+    expect(libraryQueries(upstream)).toBeLessThan(36);
   });
 
-  it('keeps going in the background when the slot is briefly held elsewhere', async () => {
+  it('leaves the tile pending when another request holds the upstream slot, then fills it in the background', async () => {
     const db = createTestD1();
-    const upstream = mockUpstream([...nearby, ...melbourne]);
-    const deferred: Promise<unknown>[] = [];
-    // Another request's fill takes the slot just before our first background attempt.
-    let slept = 0;
-    const sleep = async () => {
-      slept++;
-      if (slept === 1) await acquireUpstreamSlot(db, NOW + UPSTREAM_MIN_INTERVAL_MS, UPSTREAM_MIN_INTERVAL_MS);
-    };
-    await getLibraries(db, [HOME, MELBOURNE], NOW, (t) => deferred.push(t), sleep);
-    await Promise.all(deferred);
-
-    expect(slept).toBeGreaterThan(1); // the busy attempt was retried rather than abandoned
-
-    expect(libraryQueries(upstream)).toBe(2);
-    const later = await getLibraries(db, [MELBOURNE], NOW + 60_000, noDefer);
-    expect(later.cells[0].status).toBe('fresh');
-  });
-
-  it('leaves cells pending when another request holds the upstream slot', async () => {
-    const db = createTestD1();
-    const upstream = mockUpstream(melbourne);
+    const upstream = mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
+    const background = deferred();
     expect(await acquireUpstreamSlot(db, NOW, UPSTREAM_MIN_INTERVAL_MS)).toBe(true);
 
-    const result = await getLibraries(db, [MELBOURNE], NOW + 500, noDefer);
+    timing.advance(500);
+    expect((await getTileData(db, HOME, background.defer, timing)).status).toBe('pending');
     expect(libraryQueries(upstream)).toBe(0);
-    expect(result.cells[0].status).toBe('pending');
 
-    // After the interval, the pending cell fills.
-    const later = await getLibraries(db, [MELBOURNE], NOW + UPSTREAM_MIN_INTERVAL_MS, noDefer);
-    expect(later.cells[0].status).toBe('fresh');
-    expect(later.libraries.map((l) => l.id)).toEqual(['sl:900']);
-  });
-
-  it('serves stale cells immediately and refreshes them in the background', async () => {
-    const db = createTestD1();
-    mockUpstream(nearby);
-    await getLibraries(db, [HOME], NOW, noDefer);
-
-    // Upstream drops a library.
-    const upstream = mockUpstream(nearby.slice(1));
-    const deferred: Promise<unknown>[] = [];
-    const stale = await getLibraries(db, [HOME], NOW + CELL_MAX_AGE_MS, (t) => deferred.push(t), async () => {});
-    expect(stale.cells[0].status).toBe('stale');
-    expect(stale.libraries.find((l) => l.id === 'sl:100')?.removed).toBe(false);
-
-    await Promise.all(deferred);
+    await background.settle(); // waits out the politeness interval, then fills
     expect(libraryQueries(upstream)).toBe(1);
-    const refreshed = await getLibraries(db, [HOME], NOW + CELL_MAX_AGE_MS + 1000, noDefer);
-    expect(refreshed.cells[0].status).toBe('fresh');
-    expect(refreshed.libraries.find((l) => l.id === 'sl:100')?.removed).toBe(true);
+    expect((await getTileData(db, HOME, background.defer, timing)).status).toBe('fresh');
   });
 
-  it('does not refill a cell another request is already filling', async () => {
+  it('serves stale tiles immediately, refreshes them in the background and detects removals', async () => {
     const db = createTestD1();
-    const upstream = mockUpstream(nearby);
-    expect(await acquireCellLock(db, HOME, NOW, 30_000)).toBe(true);
+    mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
+    await getTileData(db, HOME, () => {}, timing);
 
-    expect(await fillCell(db, HOME, [HOME], NOW)).toBeNull();
-    expect(libraryQueries(upstream)).toBe(0);
+    const upstream = mockUpstream(sparse.filter((l) => l.id !== '2'));
+    timing.advance(TILE_MAX_AGE_MS + 1000);
+    const background = deferred();
+    const stale = await getTileData(db, HOME, background.defer, timing);
+    expect(stale.status).toBe('stale');
+    expect(stale.libraries.find((l) => l.id === 'sl:2')?.removed).toBe(false);
+
+    await background.settle();
+    expect(libraryQueries(upstream)).toBe(1);
+    const refreshed = await getTileData(db, HOME, () => {}, timing);
+    expect(refreshed.status).toBe('fresh');
+    expect(refreshed.libraries.find((l) => l.id === 'sl:2')?.removed).toBe(true);
   });
 
-  it('records upstream failures and leaves the cell pending', async () => {
+  it('records upstream failures and leaves the tile pending', async () => {
     const db = createTestD1();
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const result = await getLibraries(db, [HOME], NOW, noDefer);
-    expect(result.cells[0].status).toBe('pending');
+    const background = deferred();
+    expect((await getTileData(db, HOME, background.defer, fakeTiming(NOW))).status).toBe('pending');
+    await background.settle();
+    expect((await getTile(db, HOME))?.last_error).toBeTruthy();
+  });
+
+  it('answers tiles outside Australia/NZ without calling upstream', async () => {
+    const db = createTestD1();
+    const upstream = mockUpstream(sparse);
+    const result = await getTileData(db, tileAt(51.5, -0.12), () => {}, fakeTiming(NOW));
+    expect(result).toMatchObject({ status: 'fresh', libraries: [] });
+    expect(libraryQueries(upstream)).toBe(0);
+  });
+
+  it('a sparse fill writes a handful of rows, not hundreds', async () => {
+    const db = createTestD1();
+    mockUpstream(sparse);
+    const timing = fakeTiming(NOW);
+    await getTileData(db, HOME, () => {}, timing);
+    const count = (sql: string) => (db as unknown as { prepare(s: string): { first<T>(): Promise<T> } }).prepare(sql).first<{ n: number }>();
+    expect((await count('SELECT COUNT(*) AS n FROM coverage'))!.n).toBeLessThanOrEqual(9);
+    expect((await count('SELECT COUNT(*) AS n FROM tiles'))!.n).toBe(1);
   });
 });

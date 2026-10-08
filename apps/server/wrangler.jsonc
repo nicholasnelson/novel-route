@@ -7,7 +7,7 @@
   // Served at api.novelroute.app (Cloudflare creates the DNS record and certificate) and on workers.dev.
   "routes": [{ "pattern": "api.novelroute.app", "custom_domain": true }],
   "workers_dev": true,
-  // Seed warming: loads each major city once, one call per run at most (src/prewarm.ts).
+  // Seed areas: keeps the major cities covered, up to 3 Street Library calls per run (src/seeds.ts).
   "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
     {
@@ -17,9 +17,10 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Per-client request limit (see docs/server.md "Abuse protection").
+  // Per-client request limit (see docs/server.md "Abuse protection"). One request per tile, so
+  // a zoomed-out view with retries can need a few dozen a minute.
   "ratelimits": [
-    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }
   ],
   "vars": {
     "MAP_STYLE_URL": "mapbox://styles/mapbox/standard",

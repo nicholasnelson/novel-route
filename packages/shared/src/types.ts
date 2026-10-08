@@ -13,29 +13,26 @@ export type Library = {
 // --- Novel Route API v1 (docs/server.md) ---
 
 /**
- * fresh: filled within the last 24 h.
- * stale: older; served as-is while a refresh runs in the background.
- * pending: never filled yet, or the fill failed / was rate limited; try again later.
+ * fresh: fully covered by Street Library calls within the last 24 h.
+ * stale: was complete, now older; served as-is while a refresh runs in the background.
+ * pending: never complete yet (still filling, rate limited or upstream failed). The libraries
+ *   found so far are included; try again shortly.
  */
-export type CellStatus = 'fresh' | 'stale' | 'pending';
-
-export type CellInfo = {
-  geohash: string;
-  status: CellStatus;
-  /** ISO 8601 time of the last successful fill, or null if never filled. */
-  fetchedAt: string | null;
-};
+export type TileStatus = 'fresh' | 'stale' | 'pending';
 
 export type ApiLibrary = Library & {
-  /** ISO 8601 time the server last saw this library upstream. */
+  /** ISO 8601 time the server last saw this library change upstream. */
   updatedAt: string;
   /** True when the library has disappeared upstream; clients should hide it. */
   removed: boolean;
 };
 
-/** GET /v1/libraries?cells=… */
-export type LibrariesResponse = {
-  cells: CellInfo[];
+/** GET /v1/tiles/:tile */
+export type TileResponse = {
+  tile: string;
+  status: TileStatus;
+  /** ISO 8601 time the tile's data dates from (its oldest covering call), or null if never complete. */
+  fetchedAt: string | null;
   libraries: ApiLibrary[];
 };
 
@@ -46,12 +43,12 @@ export type ConfigResponse = {
   message: string | null;
 };
 
-/** Cells are geohash precision 5 (~4.9 km). */
-export const CELL_PRECISION = 5;
-/** Max cells per /v1/libraries request. */
-export const MAX_CELLS_PER_REQUEST = 20;
-const CELL_PATTERN = /^[0-9bcdefghjkmnpqrstuvwxyz]{5}$/;
+/** Tiles (the unit the app requests and caches) are geohash precision 4, ~39 x 20 km. */
+export const TILE_PRECISION = 4;
+/** Most tiles the app loads for one view (nearest the centre first). */
+export const MAX_TILES_PER_VIEW = 12;
+const TILE_PATTERN = /^[0-9bcdefghjkmnpqrstuvwxyz]{4}$/;
 
-export function isValidCell(cell: string): boolean {
-  return CELL_PATTERN.test(cell);
+export function isValidTile(tile: string): boolean {
+  return TILE_PATTERN.test(tile);
 }

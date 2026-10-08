@@ -1,6 +1,6 @@
 /**
- * Minimal geohash implementation for cache cells.
- * Precision 5 cells are ~4.9km x 4.9km; precision 6 cells are ~1.2km x 0.6km.
+ * Minimal geohash implementation for map tiles.
+ * Precision 3 ~156 x 156 km, 4 ~39 x 20 km, 5 ~4.9 x 4.9 km, 6 ~1.2 x 0.6 km (at the equator).
  */
 
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';

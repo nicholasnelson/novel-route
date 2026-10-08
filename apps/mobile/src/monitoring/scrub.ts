@@ -5,11 +5,16 @@
 
 // Decimal coordinates such as -34.92723 or 138.6031511 (three or more decimal places).
 const COORDINATE = /-?\b\d{1,3}\.\d{3,}\b/g;
-// Geohash cells sent to the API, e.g. cells=r1f93,r1f96
+// Geohash cells sent to the old API, e.g. cells=r1f93,r1f96
 const CELLS_PARAM = /cells=[^&\s"]*/g;
+// Geohash tiles in API paths, e.g. /v1/tiles/r1f9
+const TILE_PATH = /\/tiles\/[0-9a-z]+/gi;
 
 export function scrubLocation(text: string): string {
-  return text.replace(CELLS_PARAM, 'cells=[removed]').replace(COORDINATE, '[coord]');
+  return text
+    .replace(CELLS_PARAM, 'cells=[removed]')
+    .replace(TILE_PATH, '/tiles/[removed]')
+    .replace(COORDINATE, '[coord]');
 }
 
 /** Recursively scrub every string in a JSON-like value. */

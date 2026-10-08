@@ -53,8 +53,8 @@ export function createTestD1(): D1Database {
 export type UpstreamLibrary = { id: string; latitude: number; longitude: number; title?: string };
 
 /**
- * Fake Street Library endpoint. `libraries` is the whole "world"; each query returns the
- * nearest `cap` to the requested point, like the real endpoint. Returns the fetch mock.
+ * Fake Street Library endpoint. `libraries` is the whole "world"; like the real endpoint, each
+ * query returns the nearest `cap` within 100 km of the requested point. Returns the fetch mock.
  */
 export function mockUpstream(libraries: UpstreamLibrary[], cap = 200) {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -71,7 +71,8 @@ export function mockUpstream(libraries: UpstreamLibrary[], cap = 200) {
 
     const lat = Number(form.get('lat'));
     const lng = Number(form.get('lng'));
-    const nearest = [...libraries]
+    const nearest = libraries
+      .filter((l) => dist(l, lat, lng) <= 100_000)
       .sort((a, b) => dist(a, lat, lng) - dist(b, lat, lng))
       .slice(0, cap)
       .map((l) => ({
@@ -91,4 +92,20 @@ export function mockUpstream(libraries: UpstreamLibrary[], cap = 200) {
 export function libraryQueries(fetchMock: ReturnType<typeof mockUpstream>): number {
   return fetchMock.mock.calls.filter(([, init]) => init.body.get('action') === 'library_locator_fetch_libraries')
     .length;
+}
+
+/** A controllable clock: sleeping advances it. */
+export function fakeTiming(start: number) {
+  let t = start;
+  return {
+    now: () => t,
+    sleep: async (ms: number) => { t += ms; },
+    advance: (ms: number) => { t += ms; },
+  };
+}
+
+/** Collects deferred background work so a test can await it. */
+export function deferred() {
+  const tasks: Promise<unknown>[] = [];
+  return { defer: (task: Promise<unknown>) => { tasks.push(task); }, settle: () => Promise.all(tasks.splice(0)) };
 }

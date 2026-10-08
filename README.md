@@ -67,7 +67,7 @@ npm test
 ```
 apps/
 ├── mobile/            # Expo app
-│   ├── src/data/      # Cache refresh (batched cells from the API, or Street Library directly in dev)
+│   ├── src/data/      # Cache refresh (tiles from the API, or Street Library directly in dev)
 │   ├── src/db/        # SQLite open and schema migrations
 │   ├── src/location/  # Location permission, GPS and compass
 │   ├── src/map/       # Map screen, Mapbox map, cards and panels

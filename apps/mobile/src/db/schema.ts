@@ -44,6 +44,15 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE libraries ADD COLUMN removed INTEGER NOT NULL DEFAULT 0;
   `,
+  // 3: libraries are loaded per precision-4 tile instead of precision-5 cell (docs/server.md).
+  // Libraries stay; the old cells only meant "loaded", so tiles reload once.
+  `
+  DROP TABLE cells;
+  CREATE TABLE tiles (
+    geohash    TEXT PRIMARY KEY,
+    fetched_at INTEGER NOT NULL
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
