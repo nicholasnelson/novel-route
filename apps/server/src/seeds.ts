@@ -50,6 +50,12 @@ export const DAILY_CALL_CAP = 300;
 export const DAILY_WRITE_BUDGET = 20_000;
 
 const STATS_KEY = 'seed_stats';
+/**
+ * When each covered seed next needs checking (epoch ms by name): its oldest relevant circle
+ * reaching SEED_REFRESH_AGE_MS. Until then runs skip it, so an idle run is one meta read
+ * instead of re-checking every disc (which cost ~60 ms CPU against the free plan's 10 ms).
+ */
+const SCHEDULE_KEY = 'seed_schedule';
 type SeedStats = { day: string; calls: Record<string, number>; total: number; writes: number };
 
 const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
@@ -60,14 +66,22 @@ async function loadStats(db: D1Database, now: number): Promise<SeedStats> {
   return stats?.day === utcDay(now) ? stats : { day: utcDay(now), calls: {}, total: 0, writes: 0 };
 }
 
-/** The next point to query for `seed`, or null if its disc is covered by recent circles. */
-export async function nextSeedPoint(db: D1Database, seed: Seed, now: number): Promise<LatLngLike | null> {
+type SeedState = { point: LatLngLike } | { point: null; coveredUntil: number };
+
+/**
+ * The next point to query for `seed`, or, if recent circles cover its disc, when that may stop
+ * being true (the earliest any circle touching the disc reaches the refresh age).
+ */
+export async function seedState(db: D1Database, seed: Seed, now: number): Promise<SeedState> {
   const disc = { latitude: seed.latitude, longitude: seed.longitude, radius: seed.radiusKm * 1000 };
   const all = await circlesInAreas(db, circleAreas(disc), now - CIRCLE_RETENTION_MS);
   const recent = all.filter((c) => c.fetchedAt >= now - SEED_REFRESH_AGE_MS);
   const grid = discGrid(seed, disc.radius);
   const uncovered = uncoveredPoints(grid, recent);
-  if (uncovered.length === 0) return null;
+  if (uncovered.length === 0) {
+    const touching = recent.filter((c) => approxDistance(c, seed) < c.radius + disc.radius);
+    return { point: null, coveredUntil: Math.min(...touching.map((c) => c.fetchedAt)) + SEED_REFRESH_AGE_MS };
+  }
 
   // Yesterday's centres inside the disc that nothing recent covers: they usually still fit.
   const covers = (c: Circle, p: LatLngLike) => approxDistance(c, p) <= c.radius;
@@ -75,22 +89,35 @@ export async function nextSeedPoint(db: D1Database, seed: Seed, now: number): Pr
     .filter((c) => c.fetchedAt < now - SEED_REFRESH_AGE_MS && approxDistance(c, seed) <= disc.radius)
     .filter((c) => !recent.some((r) => covers(r, c)));
   const again = nearestTo(seed, previous);
-  if (again) return { latitude: again.latitude, longitude: again.longitude };
-  return nextQueryPoint(grid, uncovered, recent, seed);
+  if (again) return { point: { latitude: again.latitude, longitude: again.longitude } };
+  return { point: nextQueryPoint(grid, uncovered, recent, seed)! };
+}
+
+/** The next point to query for `seed`, or null if its disc is covered by recent circles. */
+export async function nextSeedPoint(db: D1Database, seed: Seed, now: number): Promise<LatLngLike | null> {
+  return (await seedState(db, seed, now)).point;
 }
 
 /** One cron run: up to CALLS_PER_RUN calls for the first seeds with gaps, within today's caps. */
 export async function runSeeds(db: D1Database, timing: Timing = realTiming): Promise<number> {
+  const schedule = JSON.parse((await getMeta(db, SCHEDULE_KEY)) ?? '{}') as Record<string, number>;
+  let scheduleChanged = false;
   let calls = 0;
-  for (const seed of SEEDS) {
+  seeds: for (const seed of SEEDS) {
+    if ((schedule[seed.name] ?? 0) > timing.now()) continue;
     while (calls < CALLS_PER_RUN) {
       const now = timing.now();
       const stats = await loadStats(db, now);
-      if (stats.total >= DAILY_CALL_CAP || stats.writes >= DAILY_WRITE_BUDGET) return calls;
+      if (stats.total >= DAILY_CALL_CAP || stats.writes >= DAILY_WRITE_BUDGET) break seeds;
       if ((stats.calls[seed.name] ?? 0) >= SEED_DAILY_CALL_CAP) break;
 
-      const point = await nextSeedPoint(db, seed, now);
-      if (!point) break;
+      const state = await seedState(db, seed, now);
+      if (!state.point) {
+        schedule[seed.name] = state.coveredUntil;
+        scheduleChanged = true;
+        break;
+      }
+      const point = state.point;
       if (calls > 0) await timing.sleep(UPSTREAM_MIN_INTERVAL_MS);
 
       const written = { writes: 0 };
@@ -99,9 +126,9 @@ export async function runSeeds(db: D1Database, timing: Timing = realTiming): Pro
         circle = await fillAt(db, point, timing.now(), written);
       } catch (err) {
         console.error('Seed fill failed', seed.name, err);
-        return calls;
+        break seeds;
       }
-      if (!circle) return calls; // politeness slot taken by a user request; try next run
+      if (!circle) break seeds; // politeness slot taken by a user request; try next run
       calls++;
       stats.calls[seed.name] = (stats.calls[seed.name] ?? 0) + 1;
       stats.total++;
@@ -114,5 +141,6 @@ export async function runSeeds(db: D1Database, timing: Timing = realTiming): Pro
     }
     if (calls >= CALLS_PER_RUN) break;
   }
+  if (scheduleChanged) await setMeta(db, SCHEDULE_KEY, JSON.stringify(schedule));
   return calls;
 }

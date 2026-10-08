@@ -66,6 +66,21 @@ describe('runSeeds', () => {
     expect(await runSeeds(db, timing)).toBeGreaterThan(0);
   });
 
+  it('skips covered cities until their circles age: an idle run is a couple of queries', async () => {
+    const db = createTestD1();
+    mockUpstream([]);
+    const timing = fakeTiming(NOW);
+    for (let run = 0; run < 10 && (await runSeeds(db, timing)) > 0; run++) timing.advance(5 * 60 * 1000);
+    await runSeeds(db, timing); // records when each city next needs checking
+
+    timing.advance(5 * 60 * 1000);
+    const prepare = db.prepare.bind(db);
+    let statements = 0;
+    db.prepare = ((sql: string) => { statements++; return prepare(sql); }) as typeof db.prepare;
+    expect(await runSeeds(db, timing)).toBe(0);
+    expect(statements).toBeLessThanOrEqual(2);
+  });
+
   it('fills a dense city with several self-placed circles that cover its disc', async () => {
     const db = createTestD1();
     const upstream = mockUpstream(denseSydney());
