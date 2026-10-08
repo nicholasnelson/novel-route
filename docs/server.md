@@ -109,6 +109,76 @@ See `apps/server/migrations/0001_init.sql`: `libraries` (with its precision-5 `c
 - The server receives the cells the user is viewing (approximate location) and their IP.
 - The server stores nothing about clients: no IPs or cells against IPs in D1. Request logs exist only in Cloudflare Workers observability (default retention) and the rate limiter's short window. Reflect this in the privacy policy when the app switches to the server.
 
+## Planned redesign: tiles and coverage circles
+
+Status: **agreed, not built** (2026-10-08). Replaces "Tiling and upstream fetching", the cells part of "App-side caching rules" and seed warming above once built.
+
+### Why
+
+On 2026-10-07 the API went down for the rest of the UTC day after D1's free-tier **daily row-read limit** (5M) was hit. The cause was background warming that scanned whole tables every 2 minutes, made worse by the `cells` table growing quickly once circle coverage marked every cell inside each call's radius (fixed in `4cc7f4e` and `132f502`: index-only queries, seed-only warming, write budget, JSON 503). The design still has three structural problems:
+
+- **Writes:** marking every covered cell writes up to 600 rows per call in sparse areas, so ~170 rural loads would use the whole 100k/day write limit.
+- **Reads:** a zoomed-out view asks for 20 small cells, and every request (including the app's retries) reads every library in all of them from D1. Roughly 300–400 rows per request in a city puts the free-tier ceiling at ~12–15k requests/day.
+- **Caching:** requests are arbitrary sets of up to 20 cells, so whole responses are rarely reusable.
+
+The root cause is one grid doing two jobs. Precision 5 was chosen so a single 200-library call could always fill a cell (needed when the app called Street Library directly). But the unit the upstream naturally covers is a **circle** whose size depends on density, while the unit clients and caches want is a **tile** sized to the map view. The redesign separates them.
+
+### Design
+
+**1. The server stores coverage as circles.** Each successful upstream call adds one row to a new `coverage` table: centre, radius (the coverage radius as now: the 200th result with a full page, otherwise at least the farthest result), time, and the precision-3 geohash areas (~156 km) the circle overlaps. A circle is filed under each such area (1 row usually, at most ~9 even for a 150 km radius), indexed on `(area, fetched_at)`. Libraries are stored by location as now, but rows are **only written when something changed** (no weekly touch). Removal detection is unchanged (missing from a call whose radius contains it → `removed_at`).
+
+Writes per upstream call: ~1–9 coverage rows + the changed libraries. No more per-cell marking.
+
+**2. Clients get tiles of geohash precision 4 (~39 × 20 km).**
+
+- `GET /v1/tiles/:geohash4` → `{ tile, status, fetchedAt, libraries }`, one tile per request (the existing response shape, minus the cell list).
+- A tile is **complete** when the circles from the last 24 h together cover it. This is checked in code: read the recent circles for the tile's precision-3 area (one indexed query, tens of rows even in a city), then test a grid of sample points across the tile against them.
+- If the tile isn't complete, the server queries upstream at the **uncovered sample point nearest the tile centre** (the request waits for at most one call; further gaps are filled in the background, paced, as now) and returns `pending` or `stale` as today.
+- **Whole-response edge caching:** complete tiles are put in the Workers Cache API (per data centre, free) for ~1 h, keyed by tile. Pending tiles are never cached. A cached response may be up to an hour behind a refresh; acceptable for data that changes daily at most.
+
+Zoomed in (street level, a 3–6 km view) the app needs 1–4 tiles. At zoom 10 (~50 × 100 km on a phone) it needs ~15 and loads the ones nearest the centre first. A dense metro tile is roughly 300+ libraries, ~100 KB raw / ~30 KB compressed.
+
+**Why tiles for clients rather than circles:** tiles are cache keys, "is this loaded?" is a row lookup on the phone, the grey "not loaded" veil stays a set of squares, and freshness is one timestamp per tile. Circles stay a server-side detail.
+
+**3. Self-placing seed circles keep the cities warm.** Each seed is `{ centre, targetRadius }` (e.g. Adelaide ~25 km, Sydney ~35 km; set from measured radii). Once a day the cron keeps each seed disc fully covered:
+
+1. Re-query yesterday's circle centres for that city first (they usually still cover the disc).
+2. Sample points across the target disc; find any not covered by a circle from the last 24 h.
+3. Query the uncovered point nearest the seed centre, add its circle, repeat until covered.
+
+As density grows, circles shrink, gaps appear in step 2 and get filled. No hand-placed circles to maintain. It is the same coverage check and next-point logic tiles use.
+
+Guard rails:
+- One call per cron run (every 5 minutes, so 288 slots a day), starting early morning AU time. Circles are refreshed at ~20 h old so seeded areas never go stale.
+- Per-city daily call cap (~40) and a global daily cap. If a city outgrows its cap, the outer edge just falls back to on-view loading.
+- The daily write budget stays as a backstop.
+- Calls and the radius reached per city are logged, to see when a city's cost is creeping up.
+
+Rough cost: inner Sydney at ~6 km per circle with a 30 km target is ~25 circles, ~35–40 with overlap. Adelaide ~3–6. In total ~100–150 calls and ~1–1.5k rows written per day.
+
+### Budget after the redesign (estimates, to be measured)
+
+| Limit (free tier) | Expected use |
+|---|---|
+| D1 reads, 5M/day | Only edge-cache misses reach D1: ~tens of coverage rows + the tile's libraries per miss. |
+| D1 writes, 100k/day | ~10 rows per upstream call, bounded by our own 1 call per 2 s limit. Seeds ~1.5k/day. |
+| Worker requests, 100k/day | Becomes the ceiling (every tile request runs the Worker even on a cache hit). |
+| Street Library | Seeds ~100–150 calls/day, plus on-view refreshes (at most one per area per 24 h, independent of user count). |
+
+If the request limit is ever reached, the Workers paid plan ($5/month) raises every limit far beyond what the app will need.
+
+### App changes
+
+- Local cache unit becomes the precision-4 tile: a new SQLite migration for per-tile `fetchedAt` (CLAUDE.md's "precision-5 cell" rule updated to "precision-4 tile"). One request per stale tile instead of one batched request.
+- The veil and the "not loaded" logic switch to tiles.
+- No released users yet, so `/v1/libraries?cells=` can be removed rather than kept alongside.
+
+### Before building
+
+Once D1's daily limit has reset, measure from stored data:
+- real coverage radii in each capital (sets each seed's target radius, and confirms precision 4 rather than 3 for tiles);
+- rows read per request today (D1 reports `rows_read` per query), as a baseline.
+
 ## Future (not v1)
 
 - `POST /v1/submissions` with moderation queue, duplicate detection (~30 m), per-install token + rate limits, later Play Integrity / App Attest.
