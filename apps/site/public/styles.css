@@ -182,7 +182,7 @@ p {
 }
 
 .hero h1 {
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  font-size: clamp(2.4rem, 4.6vw, 3.4rem);
 }
 
 .hero h1 .line {
@@ -194,9 +194,56 @@ p {
   white-space: nowrap;
 }
 
-/* The word that flicks through genres on load (see index.html). */
+/* The word that riffles through genres on load, like turning pages (see index.html). */
 .spin {
+  position: relative;
+  display: inline-block;
   color: var(--green);
+  white-space: nowrap;
+}
+
+.spin-text {
+  display: inline-block;
+}
+
+.spin .book {
+  position: absolute;
+  top: -0.08em;
+  bottom: -0.22em;
+  left: 0;
+  right: 0;
+  /* Close perspective, so the page lifts towards you as it turns. */
+  perspective: 5em;
+  pointer-events: none;
+}
+
+.spin .half,
+.spin .face {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.spin .strip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+}
+
+.spin .face {
+  backface-visibility: hidden;
+}
+
+.spin .face.back {
+  transform: rotateY(180deg);
+}
+
+.spin .ink {
+  position: absolute;
+  top: 0.08em;
   white-space: nowrap;
 }
 
