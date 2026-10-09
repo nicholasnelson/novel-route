@@ -1,6 +1,6 @@
 # Novel Route
 
-A mobile app for finding and keeping track of the street libraries (little free book boxes) near you across Australia. Explore the map, log your visits, and see at a glance which boxes you haven't checked in a while.
+A mobile app for finding and keeping track of the street libraries (free book boxes) near you across Australia. Explore the map, log your visits, and see at a glance which boxes you haven't checked in a while.
 
 > **Early WIP / Testing** — This project is under active development and is not yet available on any app store.
 

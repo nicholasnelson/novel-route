@@ -176,14 +176,28 @@ p {
 
 .hero .wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
   gap: 64px;
   align-items: center;
 }
 
 .hero h1 {
-  font-size: clamp(2.4rem, 5.6vw, 3.9rem);
-  max-width: 12em;
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+}
+
+.hero h1 .line {
+  display: block;
+}
+
+/* Wide screens: "Find your next …" stays on one line whatever the word. */
+.hero h1 .line + .line {
+  white-space: nowrap;
+}
+
+/* The word that flicks through genres on load (see index.html). */
+.spin {
+  color: var(--green);
+  white-space: nowrap;
 }
 
 .lede {
@@ -355,7 +369,16 @@ p {
   overflow-x: auto;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
+  /* Narrow screens: the changing word gets its own line, so the headline never reflows. */
+  .hero h1 .line + .line {
+    white-space: normal;
+  }
+
+  .hero h1 .word {
+    display: block;
+  }
+
   .hero .wrap {
     grid-template-columns: 1fr;
     gap: 48px;
