@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Novel Route · street libraries near you</title>
+  <title>Novel Route · find your next read</title>
   <meta name="description" content="Novel Route shows the street libraries around you and remembers the ones you've visited, so you know which are due for another look. Free, for Android.">
   <meta name="theme-color" content="#f7f3ea">
   <meta property="og:title" content="Novel Route">
-  <meta property="og:description" content="Street libraries near you, all on one map.">
+  <meta property="og:description" content="Street libraries near you. Find your next read.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://novelroute.app/">
   <meta property="og:image" content="https://novelroute.app/images/map.webp">
@@ -30,10 +30,10 @@
     <section class="hero">
       <div class="wrap">
         <div class="hero-text">
-          <h1>Street libraries near you, all on one map.</h1>
+          <h1><span class="line">Street libraries near you.</span> <span class="line">Find your next <span class="word"><span class="spin" id="spin">read</span>.</span></span></h1>
           <p class="lede">
-            Novel Route shows the little free libraries around you and remembers the ones
-            you've visited, so you know which are due for another look.
+            Novel Route maps the street libraries around you and keeps track of the ones
+            you've visited, so you always know which shelves are due another look.
           </p>
           <p class="cta">
             <a class="button" href="mailto:hello@novelroute.app?subject=Testing%20Novel%20Route">Help us test</a>
@@ -56,8 +56,8 @@
                    alt="A library selected on the map of central Adelaide, with a card showing its name, how far away it is, and buttons to log a visit or get directions">
             </figure>
             <div class="step-text">
-              <h2>Find one</h2>
-              <p>Every library registered with Street Library Australia, with a note from its keeper and directions to the door.</p>
+              <h2>Find a library</h2>
+              <p>Every street library registered with Street Library Australia, with a note from its keeper and directions to the door.</p>
             </div>
           </li>
           <li>
@@ -66,8 +66,8 @@
                    alt="A library's page in Novel Route: when you last visited, a Log visit button, its description and the dates of your past visits">
             </figure>
             <div class="step-text">
-              <h2>Log your visit</h2>
-              <p>One tap when you stop by. Novel Route keeps the date, so you can always see when you were last there.</p>
+              <h2>Record your visit</h2>
+              <p>One tap when you stop by. Novel Route remembers when you were last there, so you don't have to.</p>
             </div>
           </li>
           <li>
@@ -76,8 +76,8 @@
                    alt="A zoomed-out map of Adelaide with libraries grouped into circles: amber where some haven't been visited, green where they all have">
             </figure>
             <div class="step-text">
-              <h2>See what's due</h2>
-              <p>Libraries you haven't seen in a while stand out, so your next walk can take in the ones with new books waiting.</p>
+              <h2>Repeat</h2>
+              <p>Shelves change all the time. Libraries you haven't seen in a while stand out on the map, ready for another browse.</p>
             </div>
           </li>
         </ol>
@@ -114,6 +114,23 @@
       </div>
     </section>
   </main>
+
+  <script>
+    // The headline's last word flicks through some genres before settling on "read".
+    (function () {
+      var el = document.getElementById('spin');
+      if (!el || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var words = ['mystery', 'romance', 'western', 'thriller', 'cookbook', 'memoir', 'fantasy', 'poetry', 'classic', 'sci-fi', 'read'];
+      var i = 0;
+      el.setAttribute('aria-hidden', 'true');
+      (function next() {
+        el.textContent = words[i];
+        if (i === words.length - 1) { el.removeAttribute('aria-hidden'); return; }
+        i += 1;
+        setTimeout(next, 70 + i * i * 4); // slows down like a wheel coming to rest
+      })();
+    })();
+  </script>
 
   <footer class="site-footer">
     <div class="wrap">
