@@ -164,7 +164,6 @@ Plan:
 - [ ] Check Mapbox usage against the free tier before launch
 - [ ] `eas submit` service account configured (`eas.json` → `submit.production`)
 - [ ] Production release
-- [ ] Update CLAUDE.md to reflect the new architecture (server, visit log, freshness colours)
 
 ---
 
