@@ -80,6 +80,8 @@ const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000, 15000, 15
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
 const MIN_COURSE_SPEED = 0.8;
 const UNDO_TIMEOUT_MS = 6000;
+/** With the whole map on the device, a first look at an area shows "Updating" after this long. */
+const SLOW_FIRST_LOAD_MS = 1200;
 
 function directionsUrl(library: Library) {
   return `https://www.google.com/maps/dir/?api=1&destination=${library.latitude},${library.longitude}&travelmode=walking`;
@@ -126,6 +128,18 @@ export default function MapScreen() {
   const retryAttemptsRef = useRef(new Map<string, number>());
   /** Retries scheduled but not yet sent; counts as "updating" for the status pill. */
   const [retriesScheduled, setRetriesScheduled] = useState(0);
+  /**
+   * Tiles the server is filling for the first time (pending, retry scheduled). With a snapshot
+   * on the device these are the only refreshes worth showing: new libraries may still appear.
+   */
+  const [pendingTiles, setPendingTiles] = useState<Set<string>>(new Set());
+  /**
+   * Requests for tiles this device has never loaded (a first look at an area) that have taken
+   * longer than SLOW_FIRST_LOAD_MS: the server is asking Street Library.
+   */
+  const [slowFirstLoads, setSlowFirstLoads] = useState(0);
+  const loadedTilesRef = useRef(loadedTiles);
+  useEffect(() => { loadedTilesRef.current = loadedTiles; }, [loadedTiles]);
   /** Tiles that ran out of retries while still pending. */
   const [gaveUpTiles, setGaveUpTiles] = useState<Set<string>>(new Set());
   const syncTilesRef = useRef<((database: Db, tiles: string[]) => Promise<void>) | null>(null);
@@ -158,6 +172,11 @@ export default function MapScreen() {
     if (tiles.length === 0) return;
     tiles.forEach((c) => inFlightTilesRef.current.add(c));
     setInFlightCount((n) => n + 1);
+    // Quick answers (the server's cache) don't flash the pill; only a slow first look counts.
+    let slow = false;
+    const slowTimer = tiles.some((c) => !loadedTilesRef.current.has(c))
+      ? setTimeout(() => { slow = true; setSlowFirstLoads((n) => n + 1); }, SLOW_FIRST_LOAD_MS)
+      : null;
     try {
       const { updated, pending, failed } = await refreshTiles(database, tiles);
       if (updated) setLibraries(await getAllLibraries(database));
@@ -175,6 +194,11 @@ export default function MapScreen() {
       const retry = pending.filter((c) => (attempts.get(c) ?? 0) < PENDING_RETRY_DELAYS_MS.length);
       const exhausted = pending.filter((c) => (attempts.get(c) ?? 0) >= PENDING_RETRY_DELAYS_MS.length);
       if (exhausted.length > 0) setGaveUpTiles((prev) => new Set([...prev, ...exhausted]));
+      setPendingTiles((prev) => {
+        const next = new Set([...prev].filter((c) => !tiles.includes(c)));
+        retry.forEach((c) => next.add(c));
+        return next;
+      });
       if (retry.length > 0) {
         const delay = PENDING_RETRY_DELAYS_MS[Math.max(...retry.map((c) => attempts.get(c) ?? 0))];
         retry.forEach((c) => attempts.set(c, (attempts.get(c) ?? 0) + 1));
@@ -187,9 +211,12 @@ export default function MapScreen() {
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
       setFailedTiles(tiles);
+      setPendingTiles((prev) => new Set([...prev].filter((c) => !tiles.includes(c))));
     } finally {
       tiles.forEach((c) => inFlightTilesRef.current.delete(c));
       setInFlightCount((n) => n - 1);
+      if (slowTimer) clearTimeout(slowTimer);
+      if (slow) setSlowFirstLoads((n) => n - 1);
     }
   }, []);
 
@@ -456,11 +483,12 @@ export default function MapScreen() {
   }, [region, loadedTiles, snapshotReady]);
   const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpTiles.has(c));
 
-  // With a snapshot on the device, tile refreshes (and their failures, e.g. offline) happen
-  // quietly in the background: the map already has every library.
+  // With a snapshot on the device, routine tile refreshes (and their failures, e.g. offline)
+  // happen quietly: the map already has every library the server knows. Only a first look at an
+  // area (slow, or still filling on the server) shows "Updating": libraries may still appear.
   let pill: StatusPillKind | null = null;
   if (dbFailed || (failedTiles && !snapshotReady)) pill = 'error';
-  else if ((syncing || snapshotLoading) && !snapshotReady) pill = 'loading';
+  else if (snapshotReady ? pendingTiles.size > 0 || slowFirstLoads > 0 : syncing || snapshotLoading) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
