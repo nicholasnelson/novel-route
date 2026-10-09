@@ -50,9 +50,9 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         <Text style={styles.paragraph}>• When you&apos;re standing at one, log your visit in one tap.</Text>
         <Text style={styles.paragraph}>• Your visit history stays on this phone.</Text>
 
-        <Text style={styles.heading}>Tell us what you think</Text>
+        <Text style={styles.heading}>What do you think?</Text>
         <Text style={styles.paragraph}>
-          Something not working, or an idea to make it better? We read every note.
+          Something not working, or an idea to make it better? Every note gets read.
         </Text>
         <Pressable style={styles.feedback} onPress={sendFeedback} accessibilityRole="button">
           <Ionicons name="mail-outline" size={18} color={colors.green} />

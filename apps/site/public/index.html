@@ -30,13 +30,13 @@
     <section class="hero">
       <div class="wrap">
         <div class="hero-text">
-          <h1><span class="line">Street libraries near you.</span> <span class="line">Find your next <span class="word"><span class="spin" id="spin">read</span>.</span></span></h1>
+          <h1><span class="line">Street libraries near you.</span> <span class="line">Find your next <span class="word"><span class="spin" id="spin"><span class="spin-text">read.</span></span></span></span></h1>
           <p class="lede">
             Novel Route maps the street libraries around you and keeps track of the ones
             you've visited, so you always know which shelves are due another look.
           </p>
           <p class="cta">
-            <a class="button" href="/testing">Help us test</a>
+            <a class="button" href="/testing">Help test Novel Route</a>
             <span class="note">Coming soon to Google Play.</span>
           </p>
         </div>
@@ -116,19 +116,123 @@
   </main>
 
   <script>
-    // The headline's last word flicks through some genres before settling on "read".
+    // The headline's last word starts on "adventure", riffles through a random handful of genres
+    // (slow, fast, then slow) and settles on "read", like turning
+    // the pages of a book. The word sits on an open spread with the spine at the middle of a box as
+    // wide as the longest word, so the fold never moves. Each turn lifts the right-hand page over the
+    // spine: its front carries the right half of the old word, its back the left half of the new
+    // one. The page is a chain of strips, each angled a little more than the last, so it curls as
+    // it turns. Pages are ink only (nothing around the word is ever covered): the new word's right
+    // half fades in as the page lifts, and the old word's left half fades out as it lands.
+    // Runs once; skipped for reduced motion.
     (function () {
       var el = document.getElementById('spin');
-      if (!el || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      var words = ['mystery', 'romance', 'western', 'thriller', 'cookbook', 'memoir', 'fantasy', 'poetry', 'classic', 'sci-fi', 'read'];
-      var i = 0;
+      var text = el && el.querySelector('.spin-text');
+      if (!text || !window.requestAnimationFrame || !window.matchMedia ||
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      var GENRES = [
+        'mystery', 'romance', 'thriller', 'western', 'fantasy', 'sci-fi', 'horror', 'memoir', 'poetry',
+        'classic', 'cookbook', 'crime', 'fable', 'satire', 'drama', 'comedy', 'history', 'biography',
+        'gothic', 'saga', 'epic', 'novella', 'whodunit', 'manga', 'comic', 'atlas', 'travel', 'legend',
+        'dystopia', 'folklore', 'mythology', 'anthology', 'essay', 'almanac', 'spy story'
+      ];
+      var FLIPS = 14; // genres between "adventure" and "read"
+      var STRIPS = 6;
+      var BEND = 12; // degrees between neighbouring strips at mid-turn
+
       el.setAttribute('aria-hidden', 'true');
-      (function next() {
-        el.textContent = words[i];
-        if (i === words.length - 1) { el.removeAttribute('aria-hidden'); return; }
+      function measure(word) {
+        text.textContent = word + '.';
+        return text.getBoundingClientRect().width;
+      }
+      // The spread is as wide as "adventure", so the fold never moves; wider genres sit this one out.
+      var width = measure('adventure');
+      var pool = GENRES.filter(function (g) { return measure(g) <= width; });
+      var picks = [];
+      while (picks.length < FLIPS && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      var words = ['adventure'].concat(picks, ['read']).map(function (w) { return w + '.'; });
+      width = Math.ceil(width) + 2;
+      var spine = width / 2;
+      var stripWidth = spine / STRIPS;
+      text.style.width = width + 'px';
+      text.textContent = words[0];
+
+      function box(className, left, w) {
+        var b = document.createElement('span');
+        b.className = className;
+        b.style.left = left + 'px';
+        b.style.width = w + 'px';
+        return b;
+      }
+      function ink(word, left) {
+        var s = document.createElement('span');
+        s.className = 'ink';
+        s.textContent = word;
+        s.style.left = left + 'px';
+        return s;
+      }
+      function turn(from, to, duration, done) {
+        var book = document.createElement('span');
+        book.className = 'book';
+        var leftPage = box('half', 0, spine);
+        leftPage.appendChild(ink(from, 0));
+        var rightPage = box('half', spine, spine);
+        rightPage.appendChild(ink(to, -spine));
+        book.appendChild(leftPage);
+        book.appendChild(rightPage);
+
+        var strips = [];
+        var parent = book;
+        for (var k = 0; k < STRIPS; k++) {
+          var strip = box('strip', k === 0 ? spine : stripWidth, stripWidth);
+          var front = box('face', 0, stripWidth);
+          front.appendChild(ink(from, -(spine + k * stripWidth)));
+          var back = box('face back', 0, stripWidth);
+          back.appendChild(ink(to, -(spine - (k + 1) * stripWidth)));
+          strip.appendChild(front);
+          strip.appendChild(back);
+          parent.appendChild(strip);
+          strips.push(strip);
+          parent = strip;
+        }
+
+        text.textContent = to; // underneath, for layout and the final frame
+        text.style.color = 'transparent';
+        el.appendChild(book);
+        var start = null;
+        requestAnimationFrame(function frame(now) {
+          if (start === null) start = now;
+          var t = Math.min(1, (now - start) / duration);
+          var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(2 - 2 * t, 2) / 2;
+          var bend = -BEND * Math.sin(Math.PI * t); // the free edge leads, then the page flattens
+          for (var k = 0; k < STRIPS; k++) {
+            strips[k].style.transform = 'rotateY(' + (k === 0 ? -180 * eased : bend) + 'deg)';
+          }
+          rightPage.style.opacity = Math.min(1, eased * 2); // uncovered as the page lifts
+          leftPage.style.opacity = Math.min(1, 2 - eased * 2); // covered as the page lands
+          if (t < 1) requestAnimationFrame(frame);
+          else { book.remove(); done(); }
+        });
+      }
+
+      var i = 0;
+      function next() {
+        if (i === words.length - 1) {
+          text.style.width = '';
+          text.style.color = '';
+          el.removeAttribute('aria-hidden');
+          return;
+        }
+        var from = words[i];
+        var to = words[i + 1];
+        // Slow, fast, then slow: from ~520 ms per page down to ~130 ms mid-riffle and back up.
+        var x = i / (words.length - 2);
+        var duration = 130 + 390 * Math.pow(1 - Math.sin(Math.PI * x), 1.6);
         i += 1;
-        setTimeout(next, 70 + i * i * 4); // slows down like a wheel coming to rest
-      })();
+        turn(from, to, duration, next);
+      }
+      setTimeout(next, 900); // let "adventure" be read first
     })();
   </script>
 
