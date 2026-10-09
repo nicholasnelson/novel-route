@@ -207,9 +207,7 @@ p {
 }
 
 .spin .book {
-  position: absolute;
-  top: -0.08em;
-  bottom: -0.22em;
+  position: absolute; /* top and bottom are set in whole pixels by the script */
   left: 0;
   right: 0;
   /* Close perspective, so the page lifts towards you as it turns. */
@@ -243,7 +241,6 @@ p {
 
 .spin .ink {
   position: absolute;
-  top: 0.08em;
   white-space: nowrap;
 }
 

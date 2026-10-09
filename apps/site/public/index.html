@@ -153,11 +153,21 @@
       var picks = [];
       while (picks.length < FLIPS && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
       var words = ['adventure'].concat(picks, ['read']).map(function (w) { return w + '.'; });
-      width = Math.ceil(width) + 2;
+      // Everything sits on whole device pixels: the turning page is drawn on its own 3D layer,
+      // which snaps to them, so anything fractional would visibly jump as a turn starts.
+      var dpr = window.devicePixelRatio || 1;
+      var snap = function (px) { return Math.round(px * dpr) / dpr; };
+      var fontSize = parseFloat(getComputedStyle(el).fontSize);
+      width = Math.ceil((width + 2) * dpr / (2 * STRIPS)) * (2 * STRIPS) / dpr; // halves and strips whole too
       var spine = width / 2;
       var stripWidth = spine / STRIPS;
+      var padTop = snap(0.08 * fontSize); // room above and below the line for ascenders and descenders
+      var padBottom = snap(0.22 * fontSize);
       text.style.width = width + 'px';
       text.textContent = words[0];
+      var at = el.getBoundingClientRect();
+      el.style.left = (snap(at.left) - at.left) + 'px';
+      el.style.top = (snap(at.top) - at.top) + 'px';
 
       function box(className, left, w) {
         var b = document.createElement('span');
@@ -171,11 +181,14 @@
         s.className = 'ink';
         s.textContent = word;
         s.style.left = left + 'px';
+        s.style.top = padTop + 'px';
         return s;
       }
       function turn(from, to, duration, done) {
         var book = document.createElement('span');
         book.className = 'book';
+        book.style.top = -padTop + 'px';
+        book.style.bottom = -padBottom + 'px';
         var leftPage = box('half', 0, spine);
         leftPage.appendChild(ink(from, 0));
         var rightPage = box('half', spine, spine);
@@ -200,6 +213,11 @@
           parent = strip;
         }
 
+        // The curl makes the free edge overshoot and settle back as the page lands, so coverage only
+        // ever moves forward: once part of the old word is covered (or the new one uncovered), it
+        // stays that way.
+        var covered = spine;
+        var landed = 0;
         function render(t) {
           var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(2 - 2 * t, 2) / 2;
           var bend = -BEND * Math.sin(Math.PI * t); // the free edge leads, then the page flattens
@@ -217,10 +235,10 @@
             faces[k][1].style.visibility = facing > 0 ? 'hidden' : '';
           }
           // Right page: hidden between the spine and the edge while the page lies over it.
-          var covered = Math.max(0, Math.min(spine, edge - spine));
+          covered = Math.min(covered, Math.max(0, edge - spine));
           rightPage.style.clipPath = 'inset(0 0 0 ' + covered + 'px)';
           // Left page: hidden between the edge and the spine once the page comes down over it.
-          var landed = Math.max(0, Math.min(spine, spine - edge));
+          landed = Math.max(landed, Math.min(spine, spine - edge));
           leftPage.style.clipPath = 'inset(0 ' + landed + 'px 0 0)';
         }
 
