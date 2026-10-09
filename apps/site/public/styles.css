@@ -389,6 +389,10 @@ p {
   margin-top: 1.8em;
 }
 
+.doc .cta {
+  margin: 28px 0 0;
+}
+
 .notice {
   margin: 28px 0 8px;
   padding: 16px 20px;
