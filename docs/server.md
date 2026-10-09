@@ -87,7 +87,7 @@ If a limit is ever reached, the Workers paid plan ($5/month) raises all of them 
 
 ### Why tiles and circles
 
-On 2026-10-07 the API went down for the rest of the UTC day after D1's free-tier **daily row-read limit** (5M) was hit: background warming scanned whole tables every 2 minutes, made worse by a `cells` table that grew quickly once each call marked every precision-5 cell inside its circle. The emergency fix (`4cc7f4e`, `132f502`) used index-only queries and seed-only warming. The per-cell design still had three structural problems:
+On 2026-10-07 the API went down for the rest of the UTC day after D1's free-tier **daily row-read limit** (5M) was hit: background warming scanned whole tables every 2 minutes, made worse by a `cells` table that grew quickly once each call marked every precision-5 cell inside its circle. The emergency fix (`f19f387`, `dd555cb`) used index-only queries and seed-only warming. The per-cell design still had three structural problems:
 
 - **Writes:** marking every covered cell wrote up to 600 rows per call in sparse areas, so ~170 rural loads would use the whole 100k/day write limit.
 - **Reads:** a zoomed-out view asked for 20 small cells, and every request (including retries) read every library in all of them.

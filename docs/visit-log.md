@@ -50,7 +50,6 @@ Derived values (computed with a single `GROUP BY library_id` query, cached in me
 
 Rendering: each library feature carries a `freshness` property, and the Mapbox `CircleLayer` picks the colour with a `match` expression (see maps.md). Thresholds live in one config object so they're easy to tune. A boolean-only view (red/green) can be offered as a map filter/toggle.
 
-Note: CLAUDE.md currently states markers are strictly green/red — update it when this ships.
 
 ## Library detail sheet
 
