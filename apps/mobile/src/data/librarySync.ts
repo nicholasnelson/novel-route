@@ -4,11 +4,12 @@ import {
   geohashCenter,
   isInServiceArea,
   MAX_TILES_PER_VIEW,
+  SnapshotResponse,
   TILE_PRECISION,
   TileResponse,
 } from '@novel-route/shared';
 import { Db } from '../db/db';
-import { getTileFetchedAt, setTileFetchedAt, upsertLibraries } from '../store/libraryStore';
+import { getTileFetchedAt, importSnapshot, setTileFetchedAt, upsertLibraries } from '../store/libraryStore';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
 
 /**
@@ -117,6 +118,55 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
   await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_REQUESTS, tiles.length) }, worker));
 
   return { updated, pending, failed };
+}
+
+/** The server is asked for a newer snapshot at most this often. */
+export const SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** A few hundred KB compressed, so allow for a slow connection. */
+const SNAPSHOT_TIMEOUT_MS = 60000;
+
+/** True once a server snapshot is on the device: every area then has libraries to show. */
+export async function hasSnapshot(db: Db): Promise<boolean> {
+  return (await getKv(db, KV_KEYS.snapshotVersion)) !== null;
+}
+
+/**
+ * Download every library the server knows (GET /v1/snapshot), at most once a day and only if it
+ * changed (ETag), so the whole map is on the device without waiting for tiles. Tiles are still
+ * refreshed as they're viewed; that's what keeps the server (and so the snapshot) up to date.
+ * Returns true if new library data was stored. Server mode only.
+ */
+export async function refreshSnapshot(db: Db, now = Date.now()): Promise<boolean> {
+  if (!API_URL) return false;
+  const [version, checkedAt] = await Promise.all([
+    getKv(db, KV_KEYS.snapshotVersion),
+    getKv(db, KV_KEYS.snapshotCheckedAt),
+  ]);
+  if (version !== null && checkedAt !== null && now - Number(checkedAt) < SNAPSHOT_MAX_AGE_MS) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/v1/snapshot`, {
+      headers: { Accept: 'application/json', ...(version ? { 'If-None-Match': version } : {}) },
+      signal: controller.signal,
+    });
+    if (res.status === 304) {
+      await setKv(db, KV_KEYS.snapshotCheckedAt, String(now));
+      return false;
+    }
+    if (!res.ok) throw new Error(`Novel Route API failed: HTTP ${res.status}`);
+    const body = (await res.json()) as SnapshotResponse;
+    await db.withTransactionAsync(async () => {
+      await importSnapshot(db, body.libraries, Date.parse(body.generatedAt) || now);
+      await setKv(db, KV_KEYS.snapshotVersion, res.headers.get('ETag') ?? `W/"${body.version}"`);
+      await setKv(db, KV_KEYS.snapshotCheckedAt, String(now));
+    });
+    return true;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function refreshFromStreetLibrary(db: Db, tile: string, now: number): Promise<RefreshResult> {

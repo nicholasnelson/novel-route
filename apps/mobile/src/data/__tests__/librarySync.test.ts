@@ -87,3 +87,73 @@ describe('refreshTiles (server mode)', () => {
     expect(await getTileFetchedAt(db, NORTH)).toBeNull();
   });
 });
+
+describe('refreshSnapshot', () => {
+  const GENERATED = NOW - 60 * 60 * 1000;
+  const snapshot = (version: string, libraries: unknown[]) => ({
+    version,
+    generatedAt: new Date(GENERATED).toISOString(),
+    libraries,
+  });
+
+  /** A fake /v1/snapshot honouring If-None-Match. */
+  function serveSnapshot(body: { version: string }) {
+    const fetchMock = jest.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+      const etag = `W/"${body.version}"`;
+      const headers = { get: (name: string) => (name === 'ETag' ? etag : null) };
+      if (init?.headers?.['If-None-Match'] === etag) return { ok: false, status: 304, headers };
+      return { ok: true, status: 200, headers, json: async () => body };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
+  }
+
+  it('stores every library, hides removed ones, and then waits a day before asking again', async () => {
+    const { refreshSnapshot, hasSnapshot, SNAPSHOT_MAX_AGE_MS } = loadSync('https://api.example');
+    const db = await createTestDb();
+    expect(await hasSnapshot(db)).toBe(false);
+    const fetchMock = serveSnapshot(
+      snapshot('3-1-1', [
+        ['sl:1', 'One', -34.92, 138.6, 'Says "hi"\nthere', 'https://streetlibrary.org.au/one/', 0],
+        ['sl:2', 'Two', -33.87, 151.21, null, null, 0],
+        ['sl:3', 'Gone', -37.81, 144.96, null, null, 1],
+      ])
+    );
+
+    expect(await refreshSnapshot(db, NOW)).toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example/v1/snapshot');
+    expect(await hasSnapshot(db)).toBe(true);
+    expect(await getAllLibraries(db)).toEqual([
+      { id: 'sl:1', title: 'One', latitude: -34.92, longitude: 138.6, excerpt: 'Says "hi"\nthere', permalink: 'https://streetlibrary.org.au/one/' },
+      { id: 'sl:2', title: 'Two', latitude: -33.87, longitude: 151.21, excerpt: undefined, permalink: undefined },
+    ]);
+
+    // Checked recently: no request.
+    expect(await refreshSnapshot(db, NOW + 1000)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A day later: asks with its version, and an unchanged snapshot isn't downloaded again.
+    expect(await refreshSnapshot(db, NOW + SNAPSHOT_MAX_AGE_MS)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1]?.headers?.['If-None-Match']).toBe('W/"3-1-1"');
+  });
+
+  it("doesn't overwrite libraries loaded from a tile after the snapshot was made", async () => {
+    const { refreshSnapshot, refreshTiles } = loadSync('https://api.example');
+    const db = await createTestDb();
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'fresh', [{ ...lib('sl:1'), title: 'Newer' }]) });
+    await refreshTiles(db, [ADELAIDE], NOW);
+
+    serveSnapshot(snapshot('1-1-0', [['sl:1', 'Older', -34.92, 138.6, null, null, 0]]));
+    await refreshSnapshot(db, NOW);
+    expect((await getAllLibraries(db)).map((l) => l.title)).toEqual(['Newer']);
+  });
+
+  it('does nothing without a server (development mode)', async () => {
+    const { refreshSnapshot } = loadSync(undefined);
+    const db = await createTestDb();
+    const fetchMock = serveSnapshot(snapshot('0-0-0', []));
+    expect(await refreshSnapshot(db, NOW)).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

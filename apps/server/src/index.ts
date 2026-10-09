@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { ConfigResponse, isValidTile } from '@novel-route/shared';
 import { getHealth, getTileData, toApiLibrary } from './cache';
 import { runSeeds } from './seeds';
-import { getLibrary } from './store';
+import { getLibrary, snapshotParts } from './store';
 
 export type Env = {
   DB: D1Database;
@@ -64,6 +64,43 @@ app.get('/v1/tiles/:tile', async (c) => {
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304, { ETag: etag });
   // The app keeps its own copy; tell intermediaries and the HTTP client not to.
   return c.body(body, 200, { 'Content-Type': 'application/json', ETag: etag, 'Cache-Control': 'no-cache' });
+});
+
+/** The snapshot is cached at the edge for this long, so each data centre reads D1 a few times a day. */
+const SNAPSHOT_CACHE_SECONDS = 6 * 60 * 60;
+
+/**
+ * Every library, for the app to start from (docs/server.md "Snapshot"). Tiles stay the way
+ * freshness is checked; this just means the whole map is on the phone from the first launch.
+ */
+app.get('/v1/snapshot', async (c) => {
+  const cache = typeof caches === 'undefined' ? null : caches.default;
+  const cacheKey = new Request(new URL('/v1/snapshot', c.req.url).toString());
+  const hit = await cache?.match(cacheKey);
+  let etag = hit?.headers.get('ETag') ?? null;
+  // Answer an unchanged client before touching the (large) body.
+  if (etag && c.req.header('If-None-Match') === etag) return c.body(null, 304, { ETag: etag });
+
+  let body: string;
+  if (hit) {
+    body = await hit.text();
+  } else {
+    const { parts, version } = await snapshotParts(c.env.DB);
+    // Weak, like the tile ETags: Cloudflare would weaken a strong one when it compresses the body.
+    etag = `W/"${version}"`;
+    if (c.req.header('If-None-Match') === etag) return c.body(null, 304, { ETag: etag });
+    // Each part is a JSON array; splice their contents into one.
+    const rows = parts.map((p) => p.slice(1, -1)).filter((p) => p.length > 0).join(',');
+    body = `{"version":${JSON.stringify(version)},"generatedAt":"${new Date().toISOString()}","libraries":[${rows}]}`;
+    if (cache) {
+      const cached = new Response(body, {
+        headers: { 'Content-Type': 'application/json', ETag: etag, 'Cache-Control': `public, max-age=${SNAPSHOT_CACHE_SECONDS}` },
+      });
+      c.executionCtx.waitUntil(cache.put(cacheKey, cached));
+    }
+  }
+  // Cloudflare compresses it on the way out (about 1.6 MB of JSON, a few hundred KB sent).
+  return c.body(body, 200, { 'Content-Type': 'application/json', ETag: etag!, 'Cache-Control': 'no-cache' });
 });
 
 app.get('/v1/libraries/:id', async (c) => {

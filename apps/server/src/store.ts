@@ -184,6 +184,29 @@ export async function librariesInTile(db: D1Database, tile: string): Promise<Lib
   return results;
 }
 
+/** Snapshot rows are built as JSON in this many groups, each well under D1's 2 MB value limit. */
+const SNAPSHOT_GROUPS = 8;
+
+/**
+ * Every library as SnapshotRow JSON arrays, plus a version that changes whenever any library
+ * does. SQLite builds the JSON so the Worker only joins strings (its CPU time is limited).
+ */
+export async function snapshotParts(db: D1Database): Promise<{ parts: string[]; version: string }> {
+  const { results } = await db
+    .prepare(
+      `SELECT json_group_array(json_array(
+                id, title, latitude, longitude, excerpt, permalink,
+                CASE WHEN removed_at IS NULL THEN 0 ELSE 1 END)) AS part,
+              count(*) AS n, max(last_seen) AS seen, max(coalesce(removed_at, 0)) AS removed
+       FROM libraries GROUP BY rowid % ${SNAPSHOT_GROUPS} ORDER BY rowid % ${SNAPSHOT_GROUPS}`
+    )
+    .all<{ part: string; n: number; seen: number; removed: number }>();
+  const count = results.reduce((sum, r) => sum + r.n, 0);
+  const seen = Math.max(0, ...results.map((r) => r.seen));
+  const removed = Math.max(0, ...results.map((r) => r.removed));
+  return { parts: results.map((r) => r.part), version: `${count}-${seen}-${removed}` };
+}
+
 export async function getLibrary(db: D1Database, id: string): Promise<LibraryRow | null> {
   return db.prepare('SELECT * FROM libraries WHERE id = ?').bind(id).first<LibraryRow>();
 }

@@ -52,6 +52,7 @@ const VEIL_UPDATE_MS = 150;
 const VEIL_PADDING = 1;
 /** Skip the veil when the padded area spans more tiles than this. */
 const MAX_VEIL_TILES = 2500;
+const HOUR_MS = 60 * 60 * 1000;
 
 export type MapBounds = { north: number; south: number; east: number; west: number };
 export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
@@ -70,6 +71,8 @@ type Props = {
   selectedId: string | null;
   /** Tiles whose libraries are on the device; every other tile in view gets a grey veil. */
   loadedTiles: Set<string>;
+  /** Every library is on the device (a server snapshot), so nothing gets the veil. */
+  allLoaded: boolean;
   initialCenter: LatLng;
   initialZoom: number;
   followUser: boolean;
@@ -98,6 +101,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     now,
     selectedId,
     loadedTiles,
+    allLoaded,
     initialCenter,
     initialZoom,
     followUser,
@@ -137,11 +141,15 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     },
   }));
 
+  // The whole country can be thousands of markers, so the shape is only rebuilt when libraries or
+  // visits change, or hourly for freshness (its steps are days apart). Selection is a style
+  // expression rather than a feature property, so tapping a marker doesn't rebuild it.
+  const freshnessHour = Math.floor(now / HOUR_MS);
   const shape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
     () => ({
       type: 'FeatureCollection',
       features: libraries.map((lib) => {
-        const freshness = freshnessFor(visitSummaries.get(lib.id), now);
+        const freshness = freshnessFor(visitSummaries.get(lib.id), freshnessHour * HOUR_MS);
         return {
           type: 'Feature',
           id: lib.id,
@@ -150,12 +158,11 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
             id: lib.id,
             icon: `marker-${freshness}`,
             unvisited: freshness === 'never' ? 1 : 0,
-            selected: lib.id === selectedId,
           },
         };
       }),
     }),
-    [libraries, visitSummaries, now, selectedId]
+    [libraries, visitSummaries, freshnessHour]
   );
 
   // The veil follows the camera (throttled) and extends a full view beyond every edge, so an
@@ -173,14 +180,14 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
   };
 
   const unloadedTiles = useMemo(() => {
-    if (!veilBounds) return [];
+    if (!veilBounds || allLoaded) return [];
     // Empty when zoomed so far out that the area spans more tiles than is worth drawing.
     return geohashesForBounds(veilBounds, TILE_PRECISION, MAX_VEIL_TILES).filter((tile) => {
       if (loadedTiles.has(tile)) return false;
       const c = geohashCenter(tile);
       return isInServiceArea(c.latitude, c.longitude);
     });
-  }, [veilBounds, loadedTiles]);
+  }, [veilBounds, loadedTiles, allLoaded]);
 
   const veil = useMemo<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(
     () => ({
@@ -200,6 +207,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     }),
     [unloadedTiles]
   );
+
+  const isSelected = ['==', ['get', 'id'], selectedId ?? ''];
 
   const handlePress = async (event: { features: GeoJSON.Feature[] }) => {
     const feature = event.features[0];
@@ -340,12 +349,12 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            symbolSortKey: ['case', ['get', 'selected'], 1, 0],
+            symbolSortKey: ['case', isSelected, 1, 0],
             // Zoom expressions must be top-level, so the selected scale goes inside each stop.
             iconSize: [
               'interpolate', ['linear'], ['zoom'],
-              12, ['case', ['get', 'selected'], 0.95, 0.7],
-              16, ['case', ['get', 'selected'], 1.35, 1],
+              12, ['case', isSelected, 0.95, 0.7],
+              16, ['case', isSelected, 1.35, 1],
             ],
           }}
         />

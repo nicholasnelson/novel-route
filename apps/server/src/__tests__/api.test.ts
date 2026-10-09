@@ -1,5 +1,6 @@
-import { encodeGeohash, TileResponse } from '@novel-route/shared';
+import { encodeGeohash, SnapshotResponse, TileResponse } from '@novel-route/shared';
 import { app } from '../index';
+import { markRemoved, upsertLibraries } from '../store';
 import { createTestD1, mockUpstream } from './helpers';
 
 const HOME = encodeGeohash(-34.9285, 138.6007, 4);
@@ -43,6 +44,44 @@ describe('GET /v1/tiles/:tile', () => {
     const res = await request(`/v1/tiles/${HOME}`, env);
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'Service temporarily unavailable' });
+  });
+});
+
+describe('GET /v1/snapshot', () => {
+  it('returns every library, marking removed ones, with a version ETag and 304 when unchanged', async () => {
+    const DB = createTestD1();
+    const env = { DB };
+    const empty = (await (await request('/v1/snapshot', env)).json()) as SnapshotResponse;
+    expect(empty.libraries).toEqual([]);
+
+    // Enough libraries to land in every group.
+    const libs = Array.from({ length: 20 }, (_, i) => ({
+      id: `sl:${i}`,
+      title: `Library "${i}"`,
+      latitude: -34.9 + i / 1000,
+      longitude: 138.6,
+      excerpt: i === 0 ? 'Line one\nLine two' : undefined,
+      permalink: `https://streetlibrary.org.au/library/${i}/`,
+    }));
+    await upsertLibraries(DB, libs, 1000);
+    await markRemoved(DB, ['sl:3'], 2000);
+
+    const res = await request('/v1/snapshot', env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as SnapshotResponse;
+    expect(body.libraries).toHaveLength(20);
+    const byId = new Map(body.libraries.map((row) => [row[0], row]));
+    expect(byId.get('sl:0')).toEqual(['sl:0', 'Library "0"', -34.9, 138.6, 'Line one\nLine two', libs[0].permalink, 0]);
+    expect(byId.get('sl:3')?.[6]).toBe(1);
+    expect(byId.get('sl:5')?.[4]).toBeNull();
+
+    const etag = res.headers.get('ETag')!;
+    expect(etag).toBe(`W/"${body.version}"`);
+    expect((await request('/v1/snapshot', env, { 'If-None-Match': etag })).status).toBe(304);
+
+    // Any change gives a new version.
+    await upsertLibraries(DB, [{ ...libs[1], title: 'Renamed' }], 3000);
+    expect((await request('/v1/snapshot', env, { 'If-None-Match': etag })).status).toBe(200);
   });
 });
 

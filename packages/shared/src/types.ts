@@ -36,6 +36,21 @@ export type TileResponse = {
   libraries: ApiLibrary[];
 };
 
+/**
+ * One library in a snapshot, as a compact array:
+ * [id, title, latitude, longitude, excerpt, permalink, removed (1 when gone upstream)].
+ */
+export type SnapshotRow = [string, string, number, number, string | null, string | null, 0 | 1];
+
+/** GET /v1/snapshot: every library the server knows, so the app has the whole map from the start. */
+export type SnapshotResponse = {
+  /** Changes whenever any library does (also the response's ETag). */
+  version: string;
+  /** ISO 8601 time the snapshot was read from the database. */
+  generatedAt: string;
+  libraries: SnapshotRow[];
+};
+
 /** GET /v1/config */
 export type ConfigResponse = {
   mapStyleUrl: string | null;
