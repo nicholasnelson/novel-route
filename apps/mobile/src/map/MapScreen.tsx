@@ -25,7 +25,7 @@ import {
   isInServiceArea,
   MAX_TILES_PER_VIEW,
 } from '@novel-route/shared';
-import { tileFor, refreshTiles } from '../data/librarySync';
+import { hasSnapshot, refreshSnapshot, tileFor, refreshTiles } from '../data/librarySync';
 import { getAllLibraries, getLoadedTiles } from '../store/libraryStore';
 import {
   clearVisits,
@@ -115,6 +115,10 @@ export default function MapScreen() {
   const [failedTiles, setFailedTiles] = useState<string[] | null>(null);
   /** Tiles whose libraries are on the device (loaded at least once). */
   const [loadedTiles, setLoadedTiles] = useState<Set<string>>(new Set());
+  /** A server snapshot is on the device: every area has its libraries, loaded tiles or not. */
+  const [snapshotReady, setSnapshotReady] = useState(false);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const snapshotInFlightRef = useRef(false);
   const [dbFailed, setDbFailed] = useState(false);
   const userTileRef = useRef<string | null>(null);
   const regionTileRef = useRef<string | null>(null);
@@ -203,9 +207,10 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, visitSummaries, hints, perm] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
+          hasSnapshot(database),
           getVisitSummaries(database),
           getSeenHints(database),
           getLocationPermission(),
@@ -213,6 +218,7 @@ export default function MapScreen() {
         if (cancelled) return;
         setLibraries(libs);
         setLoadedTiles(loaded);
+        setSnapshotReady(snapshot);
         setSummaries(visitSummaries);
         setSeenHints(hints);
         setPermission(perm);
@@ -224,6 +230,27 @@ export default function MapScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // The whole map from the server, on first launch and then at most daily (no-op otherwise).
+  useEffect(() => {
+    if (!db || !appActive || snapshotInFlightRef.current) return;
+    snapshotInFlightRef.current = true;
+    setSnapshotLoading(true);
+    (async () => {
+      try {
+        if (await refreshSnapshot(db)) {
+          setLibraries(await getAllLibraries(db));
+          setSnapshotReady(true);
+        }
+      } catch (err: any) {
+        // Tiles still load as before; the next launch tries again.
+        console.warn('Snapshot download failed:', err?.message);
+      } finally {
+        snapshotInFlightRef.current = false;
+        setSnapshotLoading(false);
+      }
+    })();
+  }, [db, appActive]);
 
   // Keep relative times ("today", freshness colours) current while the app stays open.
   useEffect(() => {
@@ -408,30 +435,32 @@ export default function MapScreen() {
     });
   }, [region]);
   const unloadedTiles = useMemo(
-    () => (viewTiles ? viewTiles.filter((c) => !loadedTiles.has(c)) : []),
-    [viewTiles, loadedTiles]
+    () => (viewTiles && !snapshotReady ? viewTiles.filter((c) => !loadedTiles.has(c)) : []),
+    [viewTiles, loadedTiles, snapshotReady]
   );
 
   const inServiceArea = !!region && isInServiceArea(region.center.latitude, region.center.longitude);
   const centreLoaded = !!region && loadedTiles.has(tileFor(region.center.latitude, region.center.longitude));
   // Zoomed out too far to load, with unloaded areas in view (or too much in view to tell).
   const needsZoomIn =
-    !!region && region.zoom < MIN_SYNC_ZOOM && inServiceArea &&
+    !!region && region.zoom < MIN_SYNC_ZOOM && inServiceArea && !snapshotReady &&
     (viewTiles === null ? !centreLoaded : unloadedTiles.length > 0);
   // Close enough to load, and tiles panning should have loaded (the ones nearest the centre)
   // ran out of retries. Edges of a zoomed-out view load as you pan, so they only get the veil.
   const unloadedNearCentre = useMemo(() => {
-    if (!region || region.zoom < MIN_SYNC_ZOOM) return [];
+    if (!region || region.zoom < MIN_SYNC_ZOOM || snapshotReady) return [];
     return geohashesNearCenter(region.bounds, TILE_PRECISION, MAX_TILES_PER_VIEW).filter((c) => {
       const centre = geohashCenter(c);
       return isInServiceArea(centre.latitude, centre.longitude) && !loadedTiles.has(c);
     });
-  }, [region, loadedTiles]);
+  }, [region, loadedTiles, snapshotReady]);
   const partlyLoaded = !syncing && unloadedNearCentre.some((c) => gaveUpTiles.has(c));
 
+  // With a snapshot on the device, tile refreshes (and their failures, e.g. offline) happen
+  // quietly in the background: the map already has every library.
   let pill: StatusPillKind | null = null;
-  if (failedTiles || dbFailed) pill = 'error';
-  else if (syncing) pill = 'loading';
+  if (dbFailed || (failedTiles && !snapshotReady)) pill = 'error';
+  else if ((syncing || snapshotLoading) && !snapshotReady) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
@@ -565,6 +594,7 @@ export default function MapScreen() {
         now={Math.floor(now / HOUR_MS) * HOUR_MS}
         selectedId={selectedId}
         loadedTiles={loadedTiles}
+        allLoaded={snapshotReady}
         initialCenter={AUSTRALIA}
         initialZoom={AUSTRALIA_ZOOM}
         followUser={followUser}

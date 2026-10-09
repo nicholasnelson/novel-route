@@ -78,7 +78,7 @@ What this means:
 
 | Limit | Expected use |
 |---|---|
-| D1 reads, 5M/day | Only edge-cache misses reach D1. A fresh tile: 1 tile row + its libraries (up to a few hundred in a city). A non-fresh tile adds its area's recent circles (tens to ~100 rows). |
+| D1 reads, 5M/day | Only edge-cache misses reach D1. A fresh tile: 1 tile row + its libraries (up to a few hundred in a city). A non-fresh tile adds its area's recent circles (tens to ~100 rows). The snapshot reads every library (~6k rows) per miss, a few times a day per data centre. |
 | D1 writes, 100k/day | ~1–9 circle rows per call + changed libraries + a tile row, bounded by our own 1 call per 2 s. Seeds: ~100–150 calls, ~1.5k rows/day. |
 | Worker requests, 100k/day | Likely the first ceiling: every tile request runs the Worker, even on an edge-cache hit. |
 | Street Library | Seeds ~100–150 calls/day, plus on-view refreshes (at most once per area per 24 h, whatever the number of users). |
@@ -129,6 +129,23 @@ One precision-4 geohash tile (e.g. `r1f9`, central Adelaide).
 - The server normalises data: numeric lat/lng, HTML stripped and entities decoded in `excerpt`, whitespace trimmed in `title`.
 - `ETag` / `If-None-Match` supported so unchanged responses are a cheap `304`.
 
+### `GET /v1/snapshot`
+
+Every library the server knows, so the app has the whole map from its first launch (added 2026-10-09). Rows are compact arrays, `[id, title, latitude, longitude, excerpt, permalink, removed]` (`removed` is 1 for libraries gone upstream):
+
+```json
+{
+  "version": "5938-1791539070229-1791539031750",
+  "generatedAt": "2026-10-09T10:38:18Z",
+  "libraries": [["sl:45760", "Flinders St Baptist Courtyard Library", -34.9272319, 138.6031511, "Let's Get Reading!!…", "https://streetlibrary.org.au/library/…/", 0]]
+}
+```
+
+- About 1.6 MB of JSON for ~6k libraries; Cloudflare compresses it on the way out (~490 KB brotli).
+- `version` (row count, latest `last_seen`, latest `removed_at`) changes whenever any library does. It's the weak `ETag`, so an unchanged snapshot is a `304`.
+- SQLite builds the JSON (`json_group_array`, in 8 groups to stay under D1's 2 MB value limit) and the Worker only joins strings: the free plan allows ~10 ms CPU per request. Measured: 10–28 ms on a miss (no errors), ~1.5 ms on a hit. Responses are edge-cached for 6 h, so misses are rare. If misses ever start failing, write the snapshot to KV or R2 from the cron instead.
+- It only repackages the server's cache: no upstream calls.
+
 ### `GET /v1/libraries/:id`
 
 Single library (for deep links / detail refresh).
@@ -146,6 +163,8 @@ Errors (e.g. the database unavailable) are a JSON `503`.
 ## App-side caching rules
 
 - The app stores libraries and per-tile `fetchedAt` in SQLite.
+- **Snapshot:** on first launch, and then when its copy was last checked over **24 h** ago (on app start or resume), the app asks for `GET /v1/snapshot` with its version (`If-None-Match`). A new snapshot is stored in one statement; rows the phone has newer tile data for are kept. Once a snapshot is on the device every area counts as loaded: no grey veil, no "zoom in" pill, and tile refreshes (and their failures, e.g. offline) are quiet.
+- Tiles still refresh as they're viewed. That's what makes the server fetch from Street Library, so it keeps the snapshot current too.
 - On pan (from zoom 10) or a location change: the visible tiles, nearest the centre first, up to 12. Only tiles whose local copy is older than **24 h** (or missing) are requested, one request per tile, up to 6 in parallel.
 - Render from SQLite immediately; merge server results when they arrive. A pending tile's libraries are shown, but the tile stays unloaded (grey veil) and is re-requested.
 - On network failure: keep showing cached data, show the error pill, retry on tap.

@@ -1,3 +1,4 @@
+import { SnapshotRow } from '@novel-route/shared';
 import { Db } from '../db/db';
 import { Library } from '../types';
 
@@ -47,6 +48,31 @@ export async function upsertLibraries(
       [lib.id, lib.title, lib.excerpt ?? null, lib.latitude, lib.longitude, lib.permalink ?? null, updatedAt, removed ? 1 : 0]
     );
   }
+}
+
+/**
+ * Store a server snapshot (SnapshotRow arrays) in one statement: thousands of rows, so they go
+ * in as a single JSON parameter rather than a statement each. Like upsertLibraries, rows the
+ * device has newer data for (a tile loaded since the snapshot was made) are left alone.
+ */
+export async function importSnapshot(db: Db, rows: SnapshotRow[], updatedAt: number): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO libraries (id, title, excerpt, latitude, longitude, permalink, updated_at, removed)
+     SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[4]'),
+            json_extract(value, '$[2]'), json_extract(value, '$[3]'), json_extract(value, '$[5]'),
+            ?, json_extract(value, '$[6]')
+     FROM json_each(?) WHERE true
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       excerpt = excluded.excerpt,
+       latitude = excluded.latitude,
+       longitude = excluded.longitude,
+       permalink = excluded.permalink,
+       updated_at = excluded.updated_at,
+       removed = excluded.removed
+     WHERE excluded.updated_at >= libraries.updated_at`,
+    [updatedAt, JSON.stringify(rows)]
+  );
 }
 
 /** Libraries to show on the map (excludes ones removed upstream). */

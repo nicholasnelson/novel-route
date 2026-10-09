@@ -2,6 +2,10 @@ import { Db } from '../db/db';
 
 export const KV_KEYS = {
   nonce: 'street_library_nonce',
+  /** Version (ETag) of the last server snapshot stored; set once the whole map is on the device. */
+  snapshotVersion: 'snapshot_version',
+  /** When the server was last asked for a newer snapshot (epoch ms). */
+  snapshotCheckedAt: 'snapshot_checked_at',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {
