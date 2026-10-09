@@ -102,7 +102,7 @@ Plan:
 
 ### Testers and feedback (decided 2026-10-09)
 
-- **Opt-in: a Google Group**, `novel-route-testers@googlegroups.com`, added as the closed track's tester list. Testers join and leave themselves and we never hold a list of addresses. Settings: anyone can ask to join (requests approved by hand), members hidden from each other, only managers can post (so the group can carry the odd update and the survey, nothing else).
+- **Opt-in: a Google Group**, `novel-route-testers@googlegroups.com`, added as the closed track's tester list. Testers join and leave themselves and we never hold a list of addresses. Settings: anyone can join (no approval wait; the group can't be misused since only managers post and members are hidden), members hidden from each other, only managers can post (so the group can carry the odd update and the survey, nothing else).
 - **Joining:** https://novelroute.app/testing explains the three steps (join the group, opt in at `https://play.google.com/apps/testing/app.novelroute`, install), what to try, and how to leave. The site's "Help us test" button points there.
 - **Feedback channels:** Sentry for crashes (automatic); in-app *Send feedback* in the map key (email to hello@novelroute.app with app version, build and phone model, never location: `apps/mobile/src/feedback.ts`); the Play testing feedback channel, set to hello@novelroute.app; one five-question Google Form about a week in, sent through the group.
 - **Privacy:** tester reports can mention where people live, so they're triaged privately; GitHub issues are written up in our own words.
