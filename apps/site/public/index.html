@@ -122,8 +122,9 @@
     // wide as the longest word, so the fold never moves. Each turn lifts the right-hand page over the
     // spine: its front carries the right half of the old word, its back the left half of the new
     // one. The page is a chain of strips, each angled a little more than the last, so it curls as
-    // it turns. Pages are ink only (nothing around the word is ever covered): the new word's right
-    // half fades in as the page lifts, and the old word's left half fades out as it lands.
+    // it turns. Pages are ink only (nothing around the word is ever covered), so instead the new
+    // word's right half is revealed exactly where the page's edge has swept past it, and the old
+    // word's left half is hidden exactly where the landing page lies over it.
     // Runs once; skipped for reduced motion.
     (function () {
       var el = document.getElementById('spin');
@@ -200,11 +201,20 @@
         function render(t) {
           var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(2 - 2 * t, 2) / 2;
           var bend = -BEND * Math.sin(Math.PI * t); // the free edge leads, then the page flattens
+          var angle = 0;
+          var edge = spine; // where the page's free edge falls on the line (flat projection)
           for (var k = 0; k < STRIPS; k++) {
-            strips[k].style.transform = 'rotateY(' + (k === 0 ? -180 * eased : bend) + 'deg)';
+            var a = k === 0 ? -180 * eased : bend;
+            angle += a;
+            edge += stripWidth * Math.cos(angle * Math.PI / 180);
+            strips[k].style.transform = 'rotateY(' + a + 'deg)';
           }
-          rightPage.style.opacity = Math.min(1, eased * 2); // uncovered as the page lifts
-          leftPage.style.opacity = Math.min(1, 2 - eased * 2); // covered as the page lands
+          // Right page: hidden between the spine and the edge while the page lies over it.
+          var covered = Math.max(0, Math.min(spine, edge - spine));
+          rightPage.style.clipPath = 'inset(0 0 0 ' + covered + 'px)';
+          // Left page: hidden between the edge and the spine once the page comes down over it.
+          var landed = Math.max(0, Math.min(spine, spine - edge));
+          leftPage.style.clipPath = 'inset(0 ' + landed + 'px 0 0)';
         }
 
         // Set up the first frame before anything is on screen, so no paint ever shows the
