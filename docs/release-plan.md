@@ -117,7 +117,7 @@ Plan:
 - [x] `package.json` name and README renamed
 - [x] Old EAS project ID removed from `app.json`
 - [x] `eas init`: new `novel-route` EAS project (owner `ausshb`)
-- [ ] Rename the GitHub repo (optional)
+- [x] Rename the GitHub repo (`nicholasnelson/novel-route`)
 - [x] Upgrade to the current stable Expo SDK (57)
 - [x] Fix `start` script (`expo start`); add `typecheck`, lint (`eslint-config-expo`), tests (`jest-expo`)
 - [x] `expo-sqlite` storage layer (no import of pre-SQLite data: the app ID changed, so old installs are a separate app)
@@ -133,7 +133,7 @@ Plan:
 - [x] Error boundary
 - [x] Crash reporting: Sentry (EU region, errors only, no IPs/PII, location scrubbed on device, disabled in dev builds)
 - [x] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
-- [ ] "About" screen: privacy policy link, data source disclaimer (Mapbox attribution stays on the map itself)
+- [x] "About" screen: privacy policy link, data source disclaimer (in the map key; Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)
 - [ ] Play Console app created; Play App Signing with EAS-managed keystore
@@ -141,10 +141,11 @@ Plan:
 - [x] API at https://api.novelroute.app; EAS `EXPO_PUBLIC_API_URL` points there
 - [x] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
 - [ ] Privacy policy URL in Play Console (already linked from the app's map key)
-- [ ] Update the privacy policy when the server replaces the direct Street Library calls
+- [x] Update the privacy policy when the server replaces the direct Street Library calls
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
-- [ ] Google Group `novel-route-testers` created (settings above) and set as the closed track's testers
+- [x] Google Group `novel-route-testers` created (settings above)
+- [ ] Google Group set as the closed track's testers
 - [x] Testers page (https://novelroute.app/testing) and in-app *Send feedback*
 - [ ] Play testing feedback channel set to hello@novelroute.app
 - [ ] Week-one survey (Google Form, five questions)
