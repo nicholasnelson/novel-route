@@ -184,6 +184,7 @@
         book.appendChild(rightPage);
 
         var strips = [];
+        var faces = [];
         var parent = book;
         for (var k = 0; k < STRIPS; k++) {
           var strip = box('strip', k === 0 ? spine : stripWidth, stripWidth);
@@ -193,6 +194,7 @@
           back.appendChild(ink(to, -(spine - (k + 1) * stripWidth)));
           strip.appendChild(front);
           strip.appendChild(back);
+          faces.push([front, back]);
           parent.appendChild(strip);
           strips.push(strip);
           parent = strip;
@@ -206,8 +208,13 @@
           for (var k = 0; k < STRIPS; k++) {
             var a = k === 0 ? -180 * eased : bend;
             angle += a;
-            edge += stripWidth * Math.cos(angle * Math.PI / 180);
+            var facing = Math.cos(angle * Math.PI / 180);
+            edge += stripWidth * facing;
             strips[k].style.transform = 'rotateY(' + a + 'deg)';
+            // Show only the side facing the viewer (backface-visibility alone isn't reliable for
+            // nested 3D elements, and the front seen from behind is mirrored text).
+            faces[k][0].style.visibility = facing > 0 ? '' : 'hidden';
+            faces[k][1].style.visibility = facing > 0 ? 'hidden' : '';
           }
           // Right page: hidden between the spine and the edge while the page lies over it.
           var covered = Math.max(0, Math.min(spine, edge - spine));
