@@ -100,6 +100,13 @@ Plan:
 - Start the closed test as soon as Phase 1 is stable; build the server while the 14 days run.
 - Fallbacks: friends/family, local community groups; paid "tester" services are a last resort and risky given Google's engagement checks.
 
+### Testers and feedback (decided 2026-10-09)
+
+- **Opt-in: a Google Group**, `novel-route-testers@googlegroups.com`, added as the closed track's tester list. Testers join and leave themselves and we never hold a list of addresses. Settings: anyone can join, members hidden from each other, only managers can post (so the group can carry the odd update and the survey, nothing else).
+- **Joining:** https://novelroute.app/testing explains the three steps (join the group, opt in at `https://play.google.com/apps/testing/app.novelroute`, install), what to try, and how to leave. The site's "Help us test" button points there.
+- **Feedback channels:** Sentry for crashes (automatic); in-app *Send feedback* in the map key (email to hello@novelroute.app with app version, build and phone model, never location: `apps/mobile/src/feedback.ts`); the Play testing feedback channel, set to hello@novelroute.app; one five-question Google Form about a week in, sent through the group.
+- **Privacy:** tester reports can mention where people live, so they're triaged privately; GitHub issues are written up in our own words.
+
 ---
 
 ## Work phases
@@ -132,11 +139,15 @@ Plan:
 - [ ] Play Console app created; Play App Signing with EAS-managed keystore
 - [x] Landing page and privacy policy live at https://novelroute.app (`apps/site`, Cloudflare)
 - [x] API at https://api.novelroute.app; EAS `EXPO_PUBLIC_API_URL` points there
-- [ ] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
+- [x] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
 - [ ] Privacy policy URL in Play Console (already linked from the app's map key)
 - [ ] Update the privacy policy when the server replaces the direct Street Library calls
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
+- [ ] Google Group `novel-route-testers` created (settings above) and set as the closed track's testers
+- [x] Testers page (https://novelroute.app/testing) and in-app *Send feedback*
+- [ ] Play testing feedback channel set to hello@novelroute.app
+- [ ] Week-one survey (Google Form, five questions)
 - [ ] Closed test track live with ≥12 opted-in testers
 
 ### Phase 3 — Server (in parallel with Phase 2)

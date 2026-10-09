@@ -345,6 +345,14 @@ p {
   margin-top: 1.8em;
 }
 
+.doc li {
+  margin-bottom: 0.5em;
+}
+
+.join-steps li {
+  margin-bottom: 0.9em;
+}
+
 .doc .meta {
   color: var(--ink-soft);
   margin-top: 0;

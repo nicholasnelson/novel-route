@@ -3,6 +3,7 @@ import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Ionicons } from '@expo/vector-icons';
 import FloatingPanel from './FloatingPanel';
 import { MarkerIcon } from './cards';
+import { sendFeedback } from '../../feedback';
 import { FRESHNESS_LABELS } from '../../store/freshness';
 import { Freshness } from '../../types';
 import { colors } from '../../ui/theme';
@@ -48,6 +49,15 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         </Text>
         <Text style={styles.paragraph}>• When you&apos;re standing at one, log your visit in one tap.</Text>
         <Text style={styles.paragraph}>• Your visit history stays on this phone.</Text>
+
+        <Text style={styles.heading}>Tell us what you think</Text>
+        <Text style={styles.paragraph}>
+          Something not working, or an idea to make it better? We read every note.
+        </Text>
+        <Pressable style={styles.feedback} onPress={sendFeedback} accessibilityRole="button">
+          <Ionicons name="mail-outline" size={18} color={colors.green} />
+          <Text style={styles.feedbackText}>Send feedback</Text>
+        </Pressable>
 
         <Text style={styles.heading}>About</Text>
         <Text style={styles.paragraph}>
@@ -130,6 +140,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.ink,
+  },
+  feedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    marginTop: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colors.greenTint,
+  },
+  feedbackText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.green,
   },
   heading: {
     fontSize: 17,
