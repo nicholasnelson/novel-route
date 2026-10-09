@@ -197,13 +197,7 @@
           parent = strip;
         }
 
-        text.textContent = to; // underneath, for layout and the final frame
-        text.style.color = 'transparent';
-        el.appendChild(book);
-        var start = null;
-        requestAnimationFrame(function frame(now) {
-          if (start === null) start = now;
-          var t = Math.min(1, (now - start) / duration);
+        function render(t) {
           var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(2 - 2 * t, 2) / 2;
           var bend = -BEND * Math.sin(Math.PI * t); // the free edge leads, then the page flattens
           for (var k = 0; k < STRIPS; k++) {
@@ -211,6 +205,19 @@
           }
           rightPage.style.opacity = Math.min(1, eased * 2); // uncovered as the page lifts
           leftPage.style.opacity = Math.min(1, 2 - eased * 2); // covered as the page lands
+        }
+
+        // Set up the first frame before anything is on screen, so no paint ever shows the
+        // old and new words on top of each other.
+        render(0);
+        text.textContent = to; // underneath, for layout and the final frame
+        text.style.color = 'transparent';
+        el.appendChild(book);
+        var start = null;
+        requestAnimationFrame(function frame(now) {
+          if (start === null) start = now;
+          var t = Math.min(1, (now - start) / duration);
+          render(t);
           if (t < 1) requestAnimationFrame(frame);
           else { book.remove(); done(); }
         });
