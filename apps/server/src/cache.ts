@@ -10,11 +10,13 @@ import {
   TileResponse,
   TileStatus,
 } from '@novel-route/shared';
+import { reportError } from './monitoring';
 import { AREA_PRECISION, Circle, circleAreas, circleBounds, nextQueryPoint, tileGrid, uncoveredPoints } from './coverage';
 import {
   acquireTileLock,
   acquireUpstreamSlot,
   circlesInAreas,
+  deleteMeta,
   getMeta,
   getTile,
   insertCircle,
@@ -67,6 +69,24 @@ export const UPSTREAM_SEARCH_RADIUS_M = 99_000;
 
 const NONCE_KEY = 'street_library_nonce';
 const LAST_SUCCESS_KEY = 'last_upstream_success';
+/** Consecutive upstream failures, as { since, count }; cleared by a success. */
+const UPSTREAM_FAILURES_KEY = 'upstream_failures';
+
+/** Failed upstream calls in a row before /v1/health reports it (and it's sent to Sentry). */
+export const FAILURES_BEFORE_UNHEALTHY = 3;
+/**
+ * With no successful upstream call for this long, /v1/health reports it. Seeds make ~100 calls a
+ * day, spread out as their circles age, so a long gap means the cron or upstream has stopped.
+ */
+export const UPSTREAM_SUCCESS_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/** The Street Library call itself failed (as opposed to our database). */
+export class UpstreamError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = 'UpstreamError';
+  }
+}
 
 /** Clock and sleep, injectable so tests control time. */
 export type Timing = { now: () => number; sleep: (ms: number) => Promise<void> };
@@ -97,11 +117,19 @@ export async function fillAt(
   if (!(await acquireUpstreamSlot(db, now, UPSTREAM_MIN_INTERVAL_MS))) return null;
 
   const cachedNonce = await getMeta(db, NONCE_KEY);
-  const { libraries, nonce } = await fetchLibrariesWithAutoNonce({
-    lat: point.latitude,
-    lng: point.longitude,
-    cachedNonce: cachedNonce ?? undefined,
-  });
+  let result: Awaited<ReturnType<typeof fetchLibrariesWithAutoNonce>>;
+  try {
+    result = await fetchLibrariesWithAutoNonce({
+      lat: point.latitude,
+      lng: point.longitude,
+      cachedNonce: cachedNonce ?? undefined,
+    });
+  } catch (err) {
+    const error = new UpstreamError(err);
+    await recordUpstreamFailure(db, error, now);
+    throw error;
+  }
+  const { libraries, nonce } = result;
 
   const distance = (l: LatLngLike) => distanceMeters(point.latitude, point.longitude, l.latitude, l.longitude);
   const circle: Circle = {
@@ -125,7 +153,23 @@ export async function fillAt(
   if (stats) stats.writes += writes;
   await setMeta(db, NONCE_KEY, nonce);
   await setMeta(db, LAST_SUCCESS_KEY, String(now));
+  await deleteMeta(db, UPSTREAM_FAILURES_KEY);
   return circle;
+}
+
+type UpstreamFailures = { since: number; count: number };
+
+/**
+ * Count a failed call. The one that reaches FAILURES_BEFORE_UNHEALTHY is reported, so an outage
+ * is one Sentry event; later ones aren't even written (bounded writes while Street Library is down).
+ */
+async function recordUpstreamFailure(db: D1Database, error: UpstreamError, now: number): Promise<void> {
+  const raw = await getMeta(db, UPSTREAM_FAILURES_KEY);
+  const failures = raw ? (JSON.parse(raw) as UpstreamFailures) : null;
+  const count = (failures?.count ?? 0) + 1;
+  if (count > FAILURES_BEFORE_UNHEALTHY) return;
+  await setMeta(db, UPSTREAM_FAILURES_KEY, JSON.stringify({ since: failures?.since ?? now, count }));
+  if (count === FAILURES_BEFORE_UNHEALTHY) await reportError(error, { where: 'upstream' }, now);
 }
 
 /** The tile's sample grid, limited to where the Street Library endpoint answers. */
@@ -162,6 +206,8 @@ async function fillTileOnce(db: D1Database, tile: string, point: LatLngLike, now
   } catch (err) {
     await releaseTileLock(db, tile, err instanceof Error ? err.message : String(err));
     console.error('Upstream fill failed', tile, err);
+    // Upstream failures are reported by fillAt once they persist; anything else (D1) now.
+    if (!(err instanceof UpstreamError)) await reportError(err, { where: 'fill' });
     return false;
   }
 }
@@ -238,7 +284,19 @@ async function fillInBackground(db: D1Database, tile: string, timing: Timing): P
   if (state.complete) await setTileComplete(db, tile, state.completeAt);
 }
 
-export async function getHealth(db: D1Database) {
-  const last = await getMeta(db, LAST_SUCCESS_KEY);
-  return { ok: true, lastUpstreamSuccess: last ? new Date(Number(last)).toISOString() : null };
+/**
+ * For the uptime monitor (docs/monitoring.md): not ok when Street Library calls keep failing or
+ * none has succeeded for UPSTREAM_SUCCESS_MAX_AGE_MS. A database failure throws (a 503).
+ */
+export async function getHealth(db: D1Database, now = Date.now()) {
+  const [last, rawFailures] = await Promise.all([getMeta(db, LAST_SUCCESS_KEY), getMeta(db, UPSTREAM_FAILURES_KEY)]);
+  const failures = rawFailures ? (JSON.parse(rawFailures) as UpstreamFailures) : null;
+  const problems: string[] = [];
+  if (failures && failures.count >= FAILURES_BEFORE_UNHEALTHY) {
+    problems.push(`Street Library calls failing since ${new Date(failures.since).toISOString()}`);
+  }
+  if (!last || now - Number(last) > UPSTREAM_SUCCESS_MAX_AGE_MS) {
+    problems.push('No successful Street Library call in the last 12 hours');
+  }
+  return { ok: problems.length === 0, lastUpstreamSuccess: last ? new Date(Number(last)).toISOString() : null, problems };
 }

@@ -25,7 +25,8 @@ import {
   isInServiceArea,
   MAX_TILES_PER_VIEW,
 } from '@novel-route/shared';
-import { hasSnapshot, refreshSnapshot, tileFor, refreshTiles } from '../data/librarySync';
+import { hasSnapshot, isConnectionError, refreshSnapshot, tileFor, refreshTiles } from '../data/librarySync';
+import { reportOnce } from '../monitoring/sentry';
 import { getAllLibraries, getLoadedTiles } from '../store/libraryStore';
 import {
   clearVisits,
@@ -210,6 +211,7 @@ export default function MapScreen() {
       }
     } catch (err: any) {
       console.warn('Library sync failed:', err?.message);
+      reportOnce(err); // request failures are handled per tile; this is something else (e.g. SQLite)
       setFailedTiles(tiles);
       setPendingTiles((prev) => new Set([...prev].filter((c) => !tiles.includes(c))));
     } finally {
@@ -272,6 +274,7 @@ export default function MapScreen() {
       } catch (err: any) {
         // Tiles still load as before; the next launch tries again.
         console.warn('Snapshot download failed:', err?.message);
+        if (!isConnectionError(err)) reportOnce(err);
       } finally {
         snapshotInFlightRef.current = false;
         setSnapshotLoading(false);

@@ -118,6 +118,10 @@ export async function setMeta(db: D1Database, key: string, value: string): Promi
     .run();
 }
 
+export async function deleteMeta(db: D1Database, key: string): Promise<void> {
+  await db.prepare('DELETE FROM meta WHERE key = ?').bind(key).run();
+}
+
 /**
  * Insert new libraries and update ones that changed (or came back after being removed).
  * Unchanged libraries aren't written at all. Returns rows written.

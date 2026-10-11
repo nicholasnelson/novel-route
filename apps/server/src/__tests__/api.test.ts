@@ -94,7 +94,15 @@ describe('other endpoints', () => {
 
   it('reports health and 404s unknown routes and libraries', async () => {
     const env = { DB: createTestD1() };
-    expect(await (await request('/v1/health', env)).json()).toEqual({ ok: true, lastUpstreamSuccess: null });
+    // No Street Library call yet: unhealthy until the first one succeeds.
+    const before = await request('/v1/health', env);
+    expect(before.status).toBe(503);
+    expect(await before.json()).toMatchObject({ ok: false, lastUpstreamSuccess: null });
+    mockUpstream([]);
+    await request(`/v1/tiles/${HOME}`, env);
+    const after = await request('/v1/health', env);
+    expect(after.status).toBe(200);
+    expect(await after.json()).toMatchObject({ ok: true, problems: [] });
     expect((await request('/v1/libraries/sl:nope', env)).status).toBe(404);
     expect((await request('/nope', env)).status).toBe(404);
   });

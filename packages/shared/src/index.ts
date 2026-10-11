@@ -4,3 +4,4 @@ export * from './html';
 export * from './streetLibrary';
 export * from './serviceArea';
 export * from './distance';
+export * from './scrub';

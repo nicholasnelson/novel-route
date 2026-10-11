@@ -9,6 +9,7 @@ import {
   TileResponse,
 } from '@novel-route/shared';
 import { Db } from '../db/db';
+import { reportOnce } from '../monitoring/sentry';
 import { getTileFetchedAt, importSnapshot, setTileFetchedAt, upsertLibraries } from '../store/libraryStore';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
 
@@ -28,6 +29,23 @@ const REQUEST_TIMEOUT_MS = 15000;
 const MAX_PARALLEL_REQUESTS = 6;
 
 export const TILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** The Novel Route API answered with an error status (as opposed to not answering). */
+export class ApiError extends Error {
+  constructor(what: string, readonly status: number) {
+    super(`${what} failed: HTTP ${status}`);
+    this.name = 'ApiError';
+  }
+}
+
+/**
+ * No connection or no answer in time: normal on a phone, so not reported. Anything else (an
+ * error status, a malformed body, a database failure) goes to Sentry once per run (reportOnce).
+ */
+export function isConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'AbortError' || (err instanceof TypeError && /network request failed/i.test(err.message));
+}
 
 export function tileFor(latitude: number, longitude: number): string {
   return encodeGeohash(latitude, longitude, TILE_PRECISION);
@@ -74,7 +92,7 @@ async function fetchTile(tile: string): Promise<TileResponse> {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error(`Novel Route API failed: HTTP ${res.status}`);
+    if (!res.ok) throw new ApiError('Tile request', res.status);
     return (await res.json()) as TileResponse;
   } finally {
     clearTimeout(timeout);
@@ -102,6 +120,7 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
         body = await fetchTile(tile);
       } catch (err: any) {
         console.warn('Tile request failed:', err?.message); // no tile: it's a location
+        if (!isConnectionError(err)) reportOnce(err);
         failed.push(tile);
         continue;
       }
@@ -156,7 +175,7 @@ export async function refreshSnapshot(db: Db, now = Date.now()): Promise<boolean
       await setKv(db, KV_KEYS.snapshotCheckedAt, String(now));
       return false;
     }
-    if (!res.ok) throw new Error(`Novel Route API failed: HTTP ${res.status}`);
+    if (!res.ok) throw new ApiError('Snapshot request', res.status);
     const body = (await res.json()) as SnapshotResponse;
     await db.withTransactionAsync(async () => {
       await importSnapshot(db, body.libraries, Date.parse(body.generatedAt) || now);

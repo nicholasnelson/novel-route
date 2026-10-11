@@ -98,11 +98,15 @@ export async function nextSeedPoint(db: D1Database, seed: Seed, now: number): Pr
   return (await seedState(db, seed, now)).point;
 }
 
-/** One cron run: up to CALLS_PER_RUN calls for the first seeds with gaps, within today's caps. */
+/**
+ * One cron run: up to CALLS_PER_RUN calls for the first seeds with gaps, within today's caps.
+ * Throws if a call failed (after saving progress), so the run's Sentry check-in is an error.
+ */
 export async function runSeeds(db: D1Database, timing: Timing = realTiming): Promise<number> {
   const schedule = JSON.parse((await getMeta(db, SCHEDULE_KEY)) ?? '{}') as Record<string, number>;
   let scheduleChanged = false;
   let calls = 0;
+  let failure: unknown = null;
   seeds: for (const seed of SEEDS) {
     if ((schedule[seed.name] ?? 0) > timing.now()) continue;
     while (calls < CALLS_PER_RUN) {
@@ -126,6 +130,7 @@ export async function runSeeds(db: D1Database, timing: Timing = realTiming): Pro
         circle = await fillAt(db, point, timing.now(), written);
       } catch (err) {
         console.error('Seed fill failed', seed.name, err);
+        failure = err;
         break seeds;
       }
       if (!circle) break seeds; // politeness slot taken by a user request; try next run
@@ -142,5 +147,6 @@ export async function runSeeds(db: D1Database, timing: Timing = realTiming): Pro
     if (calls >= CALLS_PER_RUN) break;
   }
   if (scheduleChanged) await setMeta(db, SCHEDULE_KEY, JSON.stringify(schedule));
+  if (failure) throw failure;
   return calls;
 }

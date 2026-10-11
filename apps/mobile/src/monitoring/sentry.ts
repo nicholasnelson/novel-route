@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react-native';
-import { scrubDeep } from './scrub';
+import { scrubDeep } from '@novel-route/shared';
 
 /**
  * Crash reporting (errors only). Not secret: the DSN only allows sending events to this project.
@@ -25,6 +25,19 @@ export function initMonitoring() {
 
 export function reportError(error: unknown, componentStack?: string) {
   Sentry.captureException(error, componentStack ? { contexts: { react: { componentStack } } } : undefined);
+}
+
+const reported = new Set<string>();
+
+/**
+ * Report a handled problem the user only sees as a pill (e.g. the server answering a sync with an
+ * error), at most once per message per app run. Tagged area=sync for Sentry alert rules.
+ */
+export function reportOnce(error: unknown) {
+  const key = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  if (reported.has(key)) return;
+  reported.add(key);
+  Sentry.captureException(error, { tags: { area: 'sync' } });
 }
 
 export const wrapApp = Sentry.wrap;

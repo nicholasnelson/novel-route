@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { ConfigResponse, isValidTile } from '@novel-route/shared';
-import { getHealth, getTileData, toApiLibrary } from './cache';
+import { getHealth, getTileData, toApiLibrary, UpstreamError } from './cache';
+import { checkIn, initMonitoring, reportError } from './monitoring';
 import { runSeeds } from './seeds';
 import { getLibrary, snapshotParts } from './store';
 
@@ -11,9 +12,16 @@ export type Env = {
   MAP_STYLE_URL?: string;
   MIN_APP_VERSION?: string;
   MESSAGE?: string;
+  /** Sentry DSN for server errors and the seed cron monitor (a secret; docs/monitoring.md). Unset: off. */
+  SENTRY_DSN?: string;
 };
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.use('*', async (c, next) => {
+  initMonitoring(c.env.SENTRY_DSN);
+  await next();
+});
 
 /** Per-client limit. Upstream calls are only ever triggered by tile staleness, never by a client directly. */
 app.use('/v1/*', async (c, next) => {
@@ -118,13 +126,18 @@ app.get('/v1/config', (c) => {
   return c.json(config);
 });
 
-app.get('/v1/health', async (c) => c.json(await getHealth(c.env.DB)));
+/** For an uptime monitor: 503 when upstream calls keep failing or have stopped (cache.ts getHealth). */
+app.get('/v1/health', async (c) => {
+  const health = await getHealth(c.env.DB);
+  return c.json(health, health.ok ? 200 : 503, { 'Cache-Control': 'no-store' });
+});
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 
 // Database unavailable (e.g. D1 daily limits) or another failure: a JSON 503 the app can show.
-app.onError((err, c) => {
+app.onError(async (err, c) => {
   console.error('Request failed', err);
+  await reportError(err, { where: 'request', request: { method: c.req.method, path: c.req.path } });
   return c.json({ error: 'Service temporarily unavailable' }, 503);
 });
 
@@ -132,8 +145,23 @@ export default {
   fetch: app.fetch,
   /** Cron Trigger: keep the seed cities covered (see seeds.ts). */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSeeds(env.DB));
+    initMonitoring(env.SENTRY_DSN);
+    ctx.waitUntil(seedRun(env.DB));
   },
 } satisfies ExportedHandler<Env>;
+
+/** A seed run with a Sentry check-in, so a missed or failing cron alerts (docs/monitoring.md). */
+async function seedRun(db: D1Database) {
+  const start = Date.now();
+  let status: 'ok' | 'error' = 'ok';
+  try {
+    await runSeeds(db);
+  } catch (err) {
+    status = 'error';
+    // Upstream failures are reported by fillAt once they persist; anything else (D1) now.
+    if (!(err instanceof UpstreamError)) await reportError(err, { where: 'seeds' });
+  }
+  await checkIn(status, Date.now() - start);
+}
 
 export { app };

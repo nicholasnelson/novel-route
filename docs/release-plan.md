@@ -77,7 +77,7 @@ Content to cover (must match the Data safety form):
 - The app sends the visible map area (approximate location) to our server to load libraries. State what the server logs (IP, request) and for how long.
 - Visit history is stored only on the device.
 - Mapbox receives map tile requests (IP, approximate viewed area) and, unless telemetry is disabled in-app, SDK telemetry. Name Mapbox and link its privacy policy.
-- No accounts, no ads, no analytics. Crash reports go to Sentry (EU): error, stack trace, app version, device model, OS version; no IP (Sentry setting), location scrubbed on device (`apps/mobile/src/monitoring/scrub.ts`).
+- No accounts, no ads, no analytics. Crash reports go to Sentry (EU): error, stack trace, app version, device model, OS version; no IP (Sentry setting), location scrubbed on device (`packages/shared/src/scrub.ts`).
 
 Data safety form (Play Console) answers to give:
 - **Location — approximate**: collected, shared with service providers (library data service, Mapbox) for app functionality; not stored by us; not optional for the core feature.
@@ -133,6 +133,8 @@ Plan:
 - [x] Error boundary
 - [x] Crash reporting: Sentry (EU region, errors only, no IPs/PII, location scrubbed on device, disabled in dev builds)
 - [x] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
+- [x] Monitoring in code: `/v1/health` 503 on upstream failure, server errors and seed cron check-ins to Sentry, app sync failures (docs/monitoring.md)
+- [ ] Monitoring setup (docs/monitoring.md "One-off setup"): server Sentry project + `SENTRY_DSN` secret, uptime monitor, Sentry alert rules, Play vitals and Cloudflare notifications
 - [x] "About" screen: privacy policy link, data source disclaimer (in the map key; Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)

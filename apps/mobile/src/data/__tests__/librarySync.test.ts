@@ -1,6 +1,10 @@
 import { createTestDb } from '../../test/testDb';
 import { getAllLibraries, getTileFetchedAt } from '../../store/libraryStore';
 
+// Sentry is mocked; the wrapper keeps one mock across jest.isolateModules registries.
+const mockReportOnce = jest.fn();
+jest.mock('../../monitoring/sentry', () => ({ reportOnce: (err: unknown) => mockReportOnce(err) }));
+
 const NOW = Date.UTC(2026, 9, 8);
 const ADELAIDE = 'r1f9';
 const NORTH = 'r1fd';
@@ -36,7 +40,10 @@ function serve(tiles: Record<string, unknown>) {
 
 const tileBody = (tile: string, status: string, libraries: unknown[] = []) => ({ tile, status, fetchedAt: null, libraries });
 
-afterEach(() => { delete process.env.EXPO_PUBLIC_API_URL; });
+afterEach(() => {
+  delete process.env.EXPO_PUBLIC_API_URL;
+  mockReportOnce.mockClear();
+});
 
 describe('refreshTiles (server mode)', () => {
   it('requests each stale tile and stores the results', async () => {
@@ -85,6 +92,21 @@ describe('refreshTiles (server mode)', () => {
     expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: true, pending: [], failed: [NORTH] });
     expect(await getTileFetchedAt(db, ADELAIDE)).toBe(NOW);
     expect(await getTileFetchedAt(db, NORTH)).toBeNull();
+    // An error status is worth knowing about; the message has no tile (it's a location).
+    expect(mockReportOnce).toHaveBeenCalledTimes(1);
+    expect(mockReportOnce.mock.calls[0][0]).toMatchObject({ name: 'ApiError', status: 503, message: 'Tile request failed: HTTP 503' });
+  });
+
+  it('does not report being offline or timing out', async () => {
+    const { refreshTiles } = loadSync('https://api.example');
+    const db = await createTestDb();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    global.fetch = jest.fn()
+      .mockRejectedValueOnce(new TypeError('Network request failed'))
+      .mockRejectedValueOnce(abort) as unknown as typeof fetch;
+    expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: false, pending: [], failed: [ADELAIDE, NORTH] });
+    expect(mockReportOnce).not.toHaveBeenCalled();
   });
 });
 

@@ -156,7 +156,7 @@ Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported 
 
 ### `GET /v1/health`
 
-Liveness + last successful upstream call time.
+Last successful upstream call time, and `ok`. It's a **503** when the last 3 Street Library calls failed or none has succeeded for 12 h, so an uptime monitor catches upstream breakage, not just downtime (docs/monitoring.md).
 
 Errors (e.g. the database unavailable) are a JSON `503`.
 

@@ -1,5 +1,5 @@
 /**
- * Removes location data from crash reports before they leave the device (privacy policy:
+ * Removes location data from crash reports (app and server) before they're sent (privacy policy:
  * crash reports never include your location).
  */
 
