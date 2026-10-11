@@ -332,6 +332,7 @@ p {
 }
 
 .doors h2,
+.faq h2,
 .about h2 {
   font-size: clamp(1.8rem, 3.6vw, 2.4rem);
 }
@@ -362,6 +363,20 @@ p {
 .marker-key img {
   width: 60px;
   height: 80px;
+}
+
+/* Questions */
+.faq {
+  padding: 80px 0 0;
+}
+
+.faq h3 {
+  font-size: 1.3rem;
+  margin-top: 1.4em;
+}
+
+.faq p {
+  color: var(--ink-soft);
 }
 
 /* About */
@@ -407,6 +422,10 @@ p {
 
 .join-steps li {
   margin-bottom: 0.9em;
+}
+
+.join-steps .notice {
+  margin: 12px 0 0;
 }
 
 .doc .meta {
