@@ -168,6 +168,14 @@ Plan:
 
 ---
 
+## Local builds
+
+The EAS free plan includes 15 Android cloud builds a month (resetting on the 1st). Release builds can also be made locally in WSL (Ubuntu) with `eas build --local`, which uses the same signing key and remote build numbers as cloud builds but not the allowance:
+
+- One-off: `bash scripts/wsl-build-setup.sh` in WSL (Node 22, eas-cli, Java 17 and the Android SDK, all under `$HOME`), then `eas login` in WSL.
+- Each build: `bash scripts/wsl-build.sh` in WSL. It builds the latest commit on `main` of the Windows checkout (commit first) and copies the `.aab` to Windows Downloads.
+- EAS "secret" variables aren't available locally, so the Sentry auth token comes from `~/.config/novel-route/build.env` (`export SENTRY_AUTH_TOKEN=…`, `chmod 600`). Without it the build works, but its source maps aren't uploaded and Sentry stack traces from it stay minified.
+
 ## Reference: facts established so far
 
 From a live call to the Street Library endpoint (2026-10-07, Adelaide CBD):
