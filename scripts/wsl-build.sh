@@ -36,9 +36,12 @@ echo "Building $COMMIT ($(git log -1 --format=%s)) with profile '$PROFILE'"
 npm ci --no-audit --no-fund --loglevel=error
 
 if [ -f "$HOME/.config/novel-route/build.env" ]; then
+  # Accepts `SENTRY_AUTH_TOKEN=...` as Sentry's copy button gives it, with or without `export`.
   . "$HOME/.config/novel-route/build.env"
 fi
-if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+if [ -n "${SENTRY_AUTH_TOKEN:-}" ]; then
+  export SENTRY_AUTH_TOKEN
+else
   echo "Note: no SENTRY_AUTH_TOKEN, so source maps won't be uploaded for this build."
   export SENTRY_DISABLE_AUTO_UPLOAD=true
 fi
