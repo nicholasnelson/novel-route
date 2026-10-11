@@ -9,6 +9,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,9 @@ import { describeVisits, relativeDay } from '../../store/freshness';
 import { visitedToday } from '../../store/nearby';
 import { formatDistance } from '../../geo/bearing';
 import { colors, radius, TOUCH } from '../../ui/theme';
+
+/** Below this window height (a phone in landscape) the icon and title share the header row. */
+const COMPACT_HEIGHT = 500;
 
 type Props = {
   library: Library | null;
@@ -100,6 +104,10 @@ function DetailContent({
   }, [freshness, bounce]);
 
   const today = visitedToday(summary, now);
+  const compact = useWindowDimensions().height < COMPACT_HEIGHT;
+  const title = (
+    <Text style={[styles.title, compact && styles.titleCompact]} accessibilityRole="header">{library.title}</Text>
+  );
 
   const confirmClear = () => {
     setMenuOpen(false);
@@ -132,8 +140,9 @@ function DetailContent({
     <View style={styles.fill}>
       <View style={styles.header}>
         <Animated.View style={{ transform: [{ scale: bounce }] }}>
-          <MarkerIcon freshness={freshness} size={60} />
+          <MarkerIcon freshness={freshness} size={compact ? 30 : 60} />
         </Animated.View>
+        {compact && title}
         <View style={styles.tools}>
           {visits.length > 0 && (
             <Pressable
@@ -160,7 +169,7 @@ function DetailContent({
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} onScrollBeginDrag={() => setMenuOpen(false)}>
-        <Text style={styles.title} accessibilityRole="header">{library.title}</Text>
+        {!compact && title}
         {distance !== null && <Text style={styles.meta}>{formatDistance(distance)} away</Text>}
         <Text style={styles.status}>{describeVisits(summary, now)}</Text>
 
@@ -274,6 +283,7 @@ const styles = StyleSheet.create({
   },
   tools: {
     marginLeft: 'auto',
+    paddingLeft: 12,
     flexDirection: 'row',
     gap: 8,
   },
@@ -325,6 +335,13 @@ const styles = StyleSheet.create({
     fontFamily: serif,
     color: colors.ink,
     marginTop: 8,
+  },
+  titleCompact: {
+    flexShrink: 1,
+    fontSize: 20,
+    lineHeight: 25,
+    marginTop: 6,
+    marginLeft: 12,
   },
   meta: {
     fontSize: 14,
