@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library details mockup</title>
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+<style>
+  /* Colours from apps/mobile/src/ui/theme.ts */
+  :root {
+    --paper: #fbf8f1; --card: #fffdf8; --ink: #1d2721; --soft: #5b665f; --line: #e7e0d0;
+    --green: #1f8f3a; --tint: #eef3ee; --tile: #f1eee6; --scrim: rgba(20, 30, 25, 0.28);
+    --shadow: 0 8px 18px rgba(20, 32, 26, 0.18);
+    --serif: "Noto Serif", Georgia, serif;
+    --sans: Roboto, system-ui, "Segoe UI", sans-serif;
+  }
+  body { margin: 0; background: #e8e3d8; font-family: var(--sans); color: var(--ink); }
+  header { max-width: 1240px; margin: 0 auto; padding: 28px 16px 4px; }
+  h1 { font-family: var(--serif); margin: 0 0 6px; font-size: 26px; }
+  header p { margin: 0 0 6px; color: var(--soft); max-width: 62em; line-height: 1.5; }
+  .screens { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 28px; }
+  .screen { width: 300px; }
+  .screen h2 { font-size: 15px; margin: 0 0 4px; }
+  .screen .note { font-size: 13px; color: var(--soft); margin: 0 0 10px; min-height: 4.6em; line-height: 1.4; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-right: 4px; }
+  .tag.now { background: #ddd8cc; color: #4b4a44; }
+  .tag.new { background: #d6ecd9; color: #17652b; }
+
+  /* A 360 x 800 dp phone, drawn at 300 x 667. */
+  .phone { width: 300px; height: 667px; border-radius: 34px; background: #111; padding: 8px; box-shadow: 0 18px 44px rgba(0,0,0,.25); }
+  .vp { position: relative; width: 100%; height: 100%; border-radius: 27px; overflow: hidden; background: url(details-map.webp) center top / 100% auto; font-size: 13px; }
+  .vp.dim::after { content: ""; position: absolute; inset: 0; background: var(--scrim); }
+
+  /* Bottom card (cards.tsx) */
+  .card { position: absolute; left: 8px; right: 8px; bottom: 22px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 11px 12px 12px; }
+  .row { display: flex; gap: 9px; align-items: flex-start; }
+  .card img.icon { width: 26px; height: 35px; margin-top: 2px; flex: none; }
+  .grow { flex: 1; min-width: 0; }
+  .card .title { font-family: var(--serif); font-size: 15px; line-height: 1.22; }
+  .card .sub { color: var(--soft); font-size: 12px; margin-top: 3px; }
+  .x { width: 26px; height: 26px; display: grid; place-items: center; color: var(--ink); font-size: 18px; flex: none; }
+  .btns { display: flex; gap: 7px; margin-top: 11px; }
+  .btn { flex: 1; height: 38px; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 14px; }
+  .btn.primary { background: var(--green); color: #fff; }
+  .btn.ghost { background: var(--tint); color: var(--ink); }
+  .btn.icon-only { flex: 0 0 38px; padding: 0; }
+  .btn ion-icon { font-size: 17px; }
+  .details-link { color: var(--green); font-weight: 600; font-size: 12.5px; display: inline-flex; align-items: center; gap: 1px; white-space: nowrap; }
+  .details-link ion-icon { font-size: 13px; }
+  .hl { outline: 2px dashed #e0782f; outline-offset: 3px; border-radius: 8px; }
+
+  /* Detail panel (LibraryDetail.tsx) */
+  .panel { position: absolute; left: 12px; right: 12px; top: 36px; bottom: 36px; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px 16px; overflow: hidden; z-index: 2; }
+  .phead { display: flex; justify-content: space-between; align-items: flex-start; }
+  .phead img { width: 40px; height: 53px; }
+  .tools { display: flex; gap: 6px; }
+  .round { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; font-size: 16px; }
+  .panel h3 { font-family: var(--serif); font-size: 20px; line-height: 1.2; margin: 8px 0 3px; }
+  .meta { color: var(--soft); font-size: 12px; }
+  .status { font-weight: 600; font-size: 13.5px; margin: 10px 0 9px; }
+  .wide { height: 38px; border-radius: 999px; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 14px; }
+  .link { color: var(--green); font-weight: 600; font-size: 12.5px; text-align: center; margin: 9px 0 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .tile { background: var(--tile); border-radius: 13px; height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 11px; line-height: 1.2; gap: 4px; }
+  .tile ion-icon { font-size: 17px; color: var(--green); }
+  .desc { color: var(--soft); font-size: 12.5px; line-height: 1.5; margin: 12px 0 2px; }
+  .desc.gone { text-decoration: line-through; opacity: .5; }
+  .section { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--soft); margin: 14px 0 4px; }
+  .visit { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .visit b { font-weight: 500; font-size: 13px; display: block; }
+  .visit small { color: var(--soft); font-size: 11px; }
+  .visit ion-icon { color: var(--soft); font-size: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Library details: proposed change</h1>
+  <p>
+    Testers couldn't tell that tapping the card opens a library's full details. The proposal: a visible way in on the card, and no keeper
+    description in the app (it's mostly filler, and the Street Library page shows it in full). Pick <b>A</b> or <b>B</b> for the card.
+    Highlighted outlines mark what changes.
+  </p>
+</header>
+
+<div class="screens">
+
+  <div class="screen">
+    <h2><span class="tag now">Now</span> Summary card</h2>
+    <p class="note">Tapping the card body opens details, but nothing says so. A "Details" button only appears after you've logged a visit today.</p>
+    <div class="phone"><div class="vp">
+      <div class="card">
+        <div class="row">
+          <img class="icon" src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+          <div class="grow">
+            <div class="title">Flinders St Baptist Courtyard Library</div>
+            <div class="sub">Last visited 6 days ago · 10 m</div>
+          </div>
+          <div class="x"><ion-icon name="close"></ion-icon></div>
+        </div>
+        <div class="btns">
+          <div class="btn primary"><ion-icon name="checkmark"></ion-icon>Log visit</div>
+          <div class="btn ghost"><ion-icon name="walk"></ion-icon>Directions</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2><span class="tag new">A</span> "Details ›" link</h2>
+    <p class="note">A green link under the status, always shown. The whole card still opens details too. The card grows by one short line (statuses like "Last visited 3 months ago · 2.4 km" leave no room beside it).</p>
+    <div class="phone"><div class="vp">
+      <div class="card">
+        <div class="row">
+          <img class="icon" src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+          <div class="grow">
+            <div class="title">Flinders St Baptist Courtyard Library</div>
+            <div class="sub">Last visited 6 days ago · 10 m</div>
+            <div style="margin-top:4px"><span class="details-link hl">Details<ion-icon name="chevron-forward"></ion-icon></span></div>
+          </div>
+          <div class="x"><ion-icon name="close"></ion-icon></div>
+        </div>
+        <div class="btns">
+          <div class="btn primary"><ion-icon name="checkmark"></ion-icon>Log visit</div>
+          <div class="btn ghost"><ion-icon name="walk"></ion-icon>Directions</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2><span class="tag new">B</span> Details button</h2>
+    <p class="note">A third, round button next to the other two. Reads as an action like the others, but it's an icon, so it relies on the "i" being understood.</p>
+    <div class="phone"><div class="vp">
+      <div class="card">
+        <div class="row">
+          <img class="icon" src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+          <div class="grow">
+            <div class="title">Flinders St Baptist Courtyard Library</div>
+            <div class="sub">Last visited 6 days ago · 10 m</div>
+          </div>
+          <div class="x"><ion-icon name="close"></ion-icon></div>
+        </div>
+        <div class="btns">
+          <div class="btn primary"><ion-icon name="checkmark"></ion-icon>Log visit</div>
+          <div class="btn ghost"><ion-icon name="walk"></ion-icon>Directions</div>
+          <div class="btn ghost icon-only hl"><ion-icon name="information-circle-outline"></ion-icon></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h2><span class="tag new">Both</span> Details, no description</h2>
+    <p class="note">The keeper's description (which sat between the buttons and your visits) is gone, so your visits move up. "Street Library page" still has the description, plus the address.</p>
+    <div class="phone"><div class="vp dim">
+      <div class="panel">
+        <div class="phead">
+          <img src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+          <div class="tools"><div class="round"><ion-icon name="ellipsis-horizontal"></ion-icon></div><div class="round"><ion-icon name="close"></ion-icon></div></div>
+        </div>
+        <h3>Flinders St Baptist Courtyard Library</h3>
+        <div class="meta">10 m away</div>
+        <div class="status">Last visited 6 days ago · 4 visits</div>
+        <div class="wide"><ion-icon name="checkmark"></ion-icon>Log visit</div>
+        <div class="link">Log a past visit</div>
+        <div class="tiles">
+          <div class="tile"><ion-icon name="walk"></ion-icon>Directions</div>
+          <div class="tile"><ion-icon name="book-outline"></ion-icon>Street Library page</div>
+          <div class="tile"><ion-icon name="share-outline"></ion-icon>Share</div>
+        </div>
+        <div class="section">YOUR VISITS</div>
+        <div class="visit"><div><b>Oct 6, 2026</b><small>6 days ago</small></div><ion-icon name="trash-outline"></ion-icon></div>
+        <div class="visit"><div><b>Sep 5, 2026</b><small>36 days ago</small></div><ion-icon name="trash-outline"></ion-icon></div>
+        <div class="visit"><div><b>Jul 30, 2026</b><small>2 months ago</small></div><ion-icon name="trash-outline"></ion-icon></div>
+        <div class="visit"><div><b>Jun 3, 2026</b><small>4 months ago</small></div><ion-icon name="trash-outline"></ion-icon></div>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+</body>
+</html>

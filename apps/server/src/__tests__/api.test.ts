@@ -71,7 +71,8 @@ describe('GET /v1/snapshot', () => {
     const body = (await res.json()) as SnapshotResponse;
     expect(body.libraries).toHaveLength(20);
     const byId = new Map(body.libraries.map((row) => [row[0], row]));
-    expect(byId.get('sl:0')).toEqual(['sl:0', 'Library "0"', -34.9, 138.6, 'Line one\nLine two', libs[0].permalink, 0]);
+    // Descriptions are left out of snapshots.
+    expect(byId.get('sl:0')).toEqual(['sl:0', 'Library "0"', -34.9, 138.6, null, libs[0].permalink, 0]);
     expect(byId.get('sl:3')?.[6]).toBe(1);
     expect(byId.get('sl:5')?.[4]).toBeNull();
 

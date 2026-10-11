@@ -39,6 +39,8 @@ export type TileResponse = {
 /**
  * One library in a snapshot, as a compact array:
  * [id, title, latitude, longitude, excerpt, permalink, removed (1 when gone upstream)].
+ * `excerpt` is always null since 2026-10-12 (the app no longer shows descriptions); the slot
+ * stays so older app builds keep reading the rows correctly.
  */
 export type SnapshotRow = [string, string, number, number, string | null, string | null, 0 | 1];
 

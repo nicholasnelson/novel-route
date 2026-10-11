@@ -84,8 +84,6 @@ function DetailContent({
   onClose,
 }: Props & { library: Library }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [canExpand, setCanExpand] = useState(false);
   const [lastDeleted, setLastDeleted] = useState<Visit | null>(null);
   const [pickingDate, setPickingDate] = useState(false);
   const [bounce] = useState(() => new Animated.Value(1));
@@ -207,27 +205,6 @@ function DetailContent({
           <Action icon="share-outline" label="Share" onPress={share} />
         </View>
 
-        {library.excerpt ? (
-          <View style={styles.section}>
-            <Text style={styles.description} numberOfLines={expanded ? undefined : DESCRIPTION_LINES}>
-              {library.excerpt}
-            </Text>
-            {/* Measures the full text: a clamped Text only reports its visible lines on Android. */}
-            <Text
-              style={[styles.description, styles.measure]}
-              onTextLayout={(e) => setCanExpand(e.nativeEvent.lines.length > DESCRIPTION_LINES)}
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            >
-              {library.excerpt}
-            </Text>
-            {canExpand && (
-              <Pressable onPress={() => setExpanded((v) => !v)} accessibilityRole="button" hitSlop={8}>
-                <Text style={styles.link}>{expanded ? 'Less' : 'More'}</Text>
-              </Pressable>
-            )}
-          </View>
-        ) : null}
 
         {lastDeleted && (
           <View style={styles.undoBar}>
@@ -278,16 +255,9 @@ function Action({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap
   );
 }
 
-const DESCRIPTION_LINES = 4;
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
 const styles = StyleSheet.create({
-  measure: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    opacity: 0,
-  },
   fill: {
     flexShrink: 1,
   },
@@ -419,16 +389,6 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 20,
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.inkSoft,
-  },
-  link: {
-    color: colors.green,
-    fontWeight: '600',
-    marginTop: 4,
   },
   sectionHeading: {
     fontSize: 12,

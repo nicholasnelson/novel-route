@@ -187,13 +187,21 @@ export function LibraryPreviewCard({ library, freshness, summary, now, distance,
           <Text style={styles.sub} numberOfLines={1}>
             {status}{distance !== null ? ` · ${formatDistance(distance)}` : ''}
           </Text>
+          {/* The whole card opens details too, but this says so. */}
+          <Pressable onPress={onOpen} accessibilityRole="button" hitSlop={12} style={styles.detailsLink}>
+            <Text style={styles.detailsLinkText}>Details</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.green} />
+          </Pressable>
         </View>
         <CloseButton onPress={onClose} label="Close preview" />
       </View>
       <View style={styles.buttons}>
         {visitedToday(summary, now) ? (
-          // Already logged today: a second visit is rare, so it lives in the detail panel.
-          <SecondaryButton label="Details" icon="information-circle-outline" onPress={onOpen} style={styles.flex} />
+          // Already logged today: a second visit is rare, so "Log another visit" lives in details.
+          <View style={[styles.doneButton, styles.flex]}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.green} />
+            <Text style={styles.doneText}>Visited today</Text>
+          </View>
         ) : (
           <PrimaryButton label="Log visit" icon="checkmark" onPress={onLogVisit} style={styles.flex} />
         )}
@@ -298,6 +306,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
     marginTop: 1,
+  },
+  detailsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 1,
+    marginTop: 4,
+  },
+  detailsLinkText: {
+    color: colors.green,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  doneButton: {
+    minHeight: TOUCH - 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.greenTint,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  doneText: {
+    color: colors.green,
+    fontSize: 15,
+    fontWeight: '700',
   },
   body: {
     fontSize: 14,

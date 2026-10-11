@@ -190,12 +190,13 @@ const SNAPSHOT_GROUPS = 8;
 /**
  * Every library as SnapshotRow JSON arrays, plus a version that changes whenever any library
  * does. SQLite builds the JSON so the Worker only joins strings (its CPU time is limited).
+ * Descriptions are left out (null): the app doesn't show them, and they were half the size.
  */
 export async function snapshotParts(db: D1Database): Promise<{ parts: string[]; version: string }> {
   const { results } = await db
     .prepare(
       `SELECT json_group_array(json_array(
-                id, title, latitude, longitude, excerpt, permalink,
+                id, title, latitude, longitude, NULL, permalink,
                 CASE WHEN removed_at IS NULL THEN 0 ELSE 1 END)) AS part,
               count(*) AS n, max(last_seen) AS seen, max(coalesce(removed_at, 0)) AS removed
        FROM libraries GROUP BY rowid % ${SNAPSHOT_GROUPS} ORDER BY rowid % ${SNAPSHOT_GROUPS}`

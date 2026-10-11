@@ -71,16 +71,17 @@ Why not exactly the "direction bubble + I found it" idea: the direction bubble i
 
 Two levels, so quick decisions stay on the map and details get a proper page:
 
-- **Preview card** (tap a marker): sits in the bottom card slot, about 140 pt tall. Marker icon, title, distance, status ("Last visited 3 months ago"), and two buttons: **Log visit**, **Directions**. Tap anywhere else on the card → detail. Tapping another marker swaps the card, so you can compare libraries on your round without opening and closing anything.
+- **Preview card** (tap a marker): sits in the bottom card slot, about 140 pt tall. Marker icon, title, distance, status ("Last visited 3 months ago"), a green **Details ›** link, and two buttons: **Log visit** (or a "Visited today ✓" pill once logged today), **Directions**. Tapping the link or anywhere else on the card → detail. (The link was added on 2026-10-12: testers didn't realise the card opened anything. Mockup: [`ux/details-mockup.html`](ux/details-mockup.html).) Tapping another marker swaps the card, so you can compare libraries on your round without opening and closing anything.
 - **Detail panel**: opens as a floating card covering the screen with a **16 pt margin** showing the map around it (max width 560 pt, so tablets get a centred panel). Rounded corners and a shadow make it clearly "on top of" the map. Close with ✕, back gesture, swipe down, or tapping the map margin.
 
 Detail panel content, top to bottom:
 1. **Header**: large marker illustration in its current state, title, "260 m away".
 2. **Status line**: "Last visited 3 days ago · 5 visits" / "Not visited yet".
 3. **Primary action**: **Log visit** (full width). After logging today it becomes "Visited today ✓" with a small "Log another" link.
-4. **Secondary actions** in a row: **Directions**, **Street Library page** (the listing's permalink — currently unused), **Share**.
-5. **Description**, clamped to 4 lines with "More".
-6. **Your visits**: a simple timeline (relative dates, "logged when nearby" tag). Each row has a ⋯ menu → Delete. **Clear history** moves into the header's ⋯ menu instead of being red text in the body.
+4. **Secondary actions** in a row: **Directions**, **Street Library page** (the listing on streetlibrary.org.au, which has the keeper's description and the address), **Share**.
+5. **Your visits**: a simple timeline (relative dates, "logged when nearby" tag). Each row has a ⋯ menu → Delete. **Clear history** moves into the header's ⋯ menu instead of being red text in the body.
+
+The keeper's description was dropped on 2026-10-12. In a random sample of 60, about a third were filler (344 libraries share the stock "Take a book. Give a book. Share a book.") and another fifth said nothing specific; the useful ones are on the Street Library page anyway. Snapshots no longer carry descriptions, which halves their size.
 
 ### 3. Map and markers
 
