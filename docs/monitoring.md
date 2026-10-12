@@ -64,19 +64,19 @@ Sentry's free plan includes one uptime monitor, checked from outside Cloudflare.
 
 Optional, for the site: a free UptimeRobot monitor on `https://novelroute.app/` (HTTP every 5 min, keyword `Novel Route`), with its SSL certificate and domain expiry reminders turned on. The site is static files on Cloudflare and rarely breaks, so this matters less than the API check. Make sure the domain is set to auto-renew either way.
 
-### 3. Sentry alert rules (both projects)
-- **New issue**: Alerts → Create Alert → Issues → "A new issue is created" → email. New projects often come with a "high priority issues" rule; make sure one rule covers *every* new issue.
-- **Spike** (app): "Number of events in an issue is more than 20 in 1 hour" → email. Catches a crash that's affecting everyone after a release.
-- **Regression**: "The issue changes state from resolved to unresolved" → email, so a fix that didn't hold resurfaces.
-- **Cron**: Crons → `seed-cron` → notify yourself on failure (the 3-run threshold is already in its config).
-- **Uptime**: check the uptime monitor from step 2 notifies you (its issues follow the "new issue" rule above).
-- Optional: issues tagged `area:sync` can use a separate, quieter rule (a weekly digest) if they turn out to be noisy.
-- Check **Spike Protection** is on (Settings → Subscription/Usage), and turn on the **weekly report** email in your notification settings.
+### 3. Sentry alert rules
+As set up on 2026-10-12 (Alerts in the `nelson-9e` org):
+- **"Notify on new or regressed issues (app)"** and **"(server)"**: email on *every* new issue and on regressions (a resolved issue coming back). New projects come with a rule for high-priority issues only. Sentry decides priority itself, and handled errors (the server's reports, the app's `area:sync` problems) are often medium, so that default rule would stay silent.
+- **"Notify Nicholas"**: attached to the uptime monitor and to `seed-cron`. It emails when either opens an issue (3 failed or missed checks in a row), when the issue is resolved (recovered), and on regressions.
+- **Spike Protection**: on.
+- **Still to add near public release**: a spike rule for the app ("Number of events in an issue is more than 20 in 1 hour" → email), to catch a crash that's affecting everyone after a release. With only a few testers it isn't worth having yet.
+- **Optional**: if issues tagged `area:sync` turn out to be noisy, give them a separate, quieter rule.
+- Sentry no longer seems to offer the weekly report email, so there's nothing to set up for it.
 
 ### 4. Other services
 - **Mapbox usage alerts** (also in `maps.md`): Account → Statistics or Billing → usage notifications for mobile Maps SDK MAUs at about 50 % and 80 % of the 25,000 free tier. Record there whether a hard cap is possible.
 - **Play Console → Android vitals**: watch crash rate and ANR rate (Google's bad-behaviour thresholds are 1.09 % and 0.47 %). Turn on vitals emails under Play Console → Settings → Notifications. Vitals catch native crashes that happen before the JS (and Sentry) loads.
-- **Cloudflare**: Notifications → Add, and turn on whatever the free plan offers for Workers and D1 (e.g. Workers error spikes, D1 usage). The Sentry uptime monitor and `request` errors already cover D1 hitting its limit, so this is a second opinion. If `novelroute.app` is on Cloudflare Registrar, make sure auto-renew is on.
+- **Cloudflare**: no notifications needed. The free plan offers little here, and Sentry already covers D1 hitting its limits (uptime monitor and `request` errors), Worker errors and the cron. Do make sure `novelroute.app` is set to **auto-renew** (Domain Registration in the dashboard, if it's on Cloudflare Registrar): a lapsed domain takes down the API, the site and the privacy policy link at once.
 
 ## When an alert fires
 
