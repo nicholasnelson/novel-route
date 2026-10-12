@@ -5,8 +5,8 @@ production-access questionnaire (after the 14-day closed test) is easy to answer
 were recruited, how they engaged, what feedback came in and what was changed. See
 `docs/release-plan.md` (D10) for the closed-test plan.
 
-This repo is public: **no names, emails or other personal details here.** Describe sources by
-role ("internal tester", "closed tester", "survey", "Street Library staff").
+This repo is public: **no names, emails or other personal details here.** The source is just
+the track the feedback came through: Internal Test, Closed Test, Open Test or Production.
 
 ## Timeline
 
@@ -25,13 +25,13 @@ Newest last. "Build" is the first build with the change.
 
 | Date | Source | Feedback | Change | Build |
 |---|---|---|---|---|
-| 2026-10-09 | Internal tester | The start-up screen showed a placeholder ("a Metro/Expo loading screen"), and the home-screen icon was the template grid. | Real launcher icon and start-up screen from the app icon. | 3 |
-| 2026-10-09 | Internal tester | The map is empty on first launch until nearby areas load; could the app have every library from the start? | The app downloads the whole map (~6,000 libraries) on first launch and checks for updates daily; areas still refresh as they're viewed. | 4 |
-| 2026-10-09 | Internal tester | With the whole map loaded, there was no sign the app was checking a new area. | "Updating libraries…" shows again while an area is checked for the first time. | 5 |
-| 2026-10-12 | Tester | Google Play said "Item not found" right after joining the group. | Testers page explains the delay and to try again in an hour. | (site) |
-| 2026-10-12 | Tester | Not obvious how to open a library's full details. | A visible "Details ›" link on the library card; a "Visited today" pill replaces the old Details button. | 8 |
-| 2026-10-12 | Internal testers (review of 60 random listings) | Keeper descriptions were mostly stock filler and never needed. | Descriptions removed from the app (still on the linked Street Library page); the whole-map download halves to ~210 KB. | 8 |
-| 2026-10-12 | Street Library staff | Tried it on a family member's Android phone: "looks awesome"; asked about iPhone. | None yet: iPhone noted for after the Android release. | – |
+| 2026-10-09 | Internal Test | The start-up screen showed a placeholder ("a Metro/Expo loading screen"), and the home-screen icon was the template grid. | Real launcher icon and start-up screen from the app icon. | 3 |
+| 2026-10-09 | Internal Test | The map is empty on first launch until nearby areas load; could the app have every library from the start? | The app downloads the whole map (~6,000 libraries) on first launch and checks for updates daily; areas still refresh as they're viewed. | 4 |
+| 2026-10-09 | Internal Test | With the whole map loaded, there was no sign the app was checking a new area. | "Updating libraries…" shows again while an area is checked for the first time. | 5 |
+| 2026-10-12 | Closed Test | Google Play said "Item not found" right after joining the group. | Testers page explains the delay and to try again in an hour. | (site) |
+| 2026-10-12 | Closed Test | Not obvious how to open a library's full details. | A visible "Details ›" link on the library card; a "Visited today" pill replaces the old Details button. | 8 |
+| 2026-10-12 | Internal Test | Keeper descriptions were mostly stock filler and never needed (confirmed by a review of 60 random listings). | Descriptions removed from the app (still on the linked Street Library page); the whole-map download halves to ~210 KB. | 8 |
+| 2026-10-12 | Closed Test | "Looks awesome"; asked about iPhone. | None yet: iPhone noted for after the Android release. | – |
 
 ## Other changes during testing
 
