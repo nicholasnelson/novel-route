@@ -1,6 +1,6 @@
 # Monitoring
 
-Goal: hear about a problem with the app, the API or the site from an alert, not from a tester. Everything here is on free tiers, and alerts go to one place (email, plus the phone app of whichever uptime service is used).
+Goal: hear about a problem with the app, the API or the site from an alert, not from a tester. Everything here is on free tiers, and nearly every alert comes from Sentry (email, or the Sentry phone app).
 
 The most likely failure is a quiet one. If Street Library changes its site or nonce, nothing crashes: the app keeps showing cached libraries and they slowly go stale. The health check is built to catch that.
 
@@ -8,15 +8,15 @@ The most likely failure is a quiet one. If Street Library changes its site or no
 
 | Problem | Caught by | Within |
 | --- | --- | --- |
-| API down (Worker, DNS, certificate) | Uptime monitor on `/v1/health` | ~5 min |
-| D1 failing or over its free-tier daily limits | Uptime monitor (`/v1/health` reads D1, so a failure is a 503) and a Sentry `request` error | ~5 min |
+| API down (Worker, DNS, certificate) | Sentry uptime monitor on `/v1/health` | a few min |
+| D1 failing or over its free-tier daily limits | Sentry uptime monitor (`/v1/health` reads D1, so a failure is a 503) and a Sentry `request` error | a few min |
 | Street Library calls failing (site changed, nonce, blocking Cloudflare) | `/v1/health` 503 after 3 failures in a row, one Sentry `upstream` event, and the `seed-cron` monitor | ~15 min |
 | Seed cron stopped running | Sentry `seed-cron` monitor (missed check-ins); `/v1/health` after 12 h without a successful call | ~10 min |
-| Site down | Uptime monitor on `https://novelroute.app/` | ~5 min |
+| Site down | Optional UptimeRobot monitor on `https://novelroute.app/` (static files on Cloudflare, rarely down) | ~5 min |
 | App crashes | Sentry app project, Play Console Android vitals | minutes / a day |
 | App can't sync (API error status, bad response, SQLite failure) | Sentry app project, tag `area:sync` | minutes |
 | Mapbox usage running away (e.g. a leaked token) | Mapbox usage alerts | a day |
-| Domain or certificate about to expire | Uptime monitor's expiry warnings | weeks ahead |
+| Domain or certificate about to expire | Registrar auto-renew; optional UptimeRobot expiry reminders | weeks ahead |
 
 ## In the code
 
@@ -55,25 +55,28 @@ Each cron run sends one check-in to the Sentry Cron Monitor `seed-cron`: `ok`, o
 4. **Client Keys (DSN) → Configure → Rate limit**: about 50 events per hour. Do the same on the app project, with a limit to suit the number of testers. This protects the monthly quota if something errors on every request.
 5. Check it works: within 5 minutes, **Crons** should list `seed-cron` with `ok` check-ins.
 
-### 2. Uptime monitor
-Use UptimeRobot or Better Stack (free plans; both have a phone app):
-- `https://api.novelroute.app/v1/health`: HTTP check every 5 min, alert on any status other than 200.
-- `https://novelroute.app/`: HTTP check every 5 min, keyword `Novel Route`.
-- Turn on SSL certificate and domain expiry reminders for `novelroute.app`.
-- Alert after 2 failed checks in a row (avoids one-off blips).
+### 2. Uptime monitor (Sentry)
+Sentry's free plan includes one uptime monitor, checked from outside Cloudflare. Use it for the API, since `/v1/health` covers the Worker, D1, Street Library and the cron.
+1. In the `novel-route-server` project: Alerts → Create Alert → **Uptime Monitor** (or Insights → Uptime, depending on Sentry's current menus).
+2. URL `https://api.novelroute.app/v1/health`, method GET, interval 1 minute. Any status other than 2xx counts as down, which includes the 503 the health check returns for a problem.
+3. Assign it to yourself so failures email you. Sentry opens an issue after a few failed checks in a row and resolves it when checks pass again.
+4. Cost: 1,440 requests a day (1.4 % of the Workers free plan's 100,000) and about 2,900 D1 rows read (of 5M), with no writes. Uptime checks don't use the Sentry error quota. A 5-minute interval cuts that to 288 requests, if you'd rather.
+
+Optional, for the site: a free UptimeRobot monitor on `https://novelroute.app/` (HTTP every 5 min, keyword `Novel Route`), with its SSL certificate and domain expiry reminders turned on. The site is static files on Cloudflare and rarely breaks, so this matters less than the API check. Make sure the domain is set to auto-renew either way.
 
 ### 3. Sentry alert rules (both projects)
 - **New issue**: Alerts → Create Alert → Issues → "A new issue is created" → email. New projects often come with a "high priority issues" rule; make sure one rule covers *every* new issue.
 - **Spike** (app): "Number of events in an issue is more than 20 in 1 hour" → email. Catches a crash that's affecting everyone after a release.
 - **Regression**: "The issue changes state from resolved to unresolved" → email, so a fix that didn't hold resurfaces.
 - **Cron**: Crons → `seed-cron` → notify yourself on failure (the 3-run threshold is already in its config).
+- **Uptime**: check the uptime monitor from step 2 notifies you (its issues follow the "new issue" rule above).
 - Optional: issues tagged `area:sync` can use a separate, quieter rule (a weekly digest) if they turn out to be noisy.
 - Check **Spike Protection** is on (Settings → Subscription/Usage), and turn on the **weekly report** email in your notification settings.
 
 ### 4. Other services
 - **Mapbox usage alerts** (also in `maps.md`): Account → Statistics or Billing → usage notifications for mobile Maps SDK MAUs at about 50 % and 80 % of the 25,000 free tier. Record there whether a hard cap is possible.
 - **Play Console → Android vitals**: watch crash rate and ANR rate (Google's bad-behaviour thresholds are 1.09 % and 0.47 %). Turn on vitals emails under Play Console → Settings → Notifications. Vitals catch native crashes that happen before the JS (and Sentry) loads.
-- **Cloudflare**: Notifications → Add, and turn on whatever the free plan offers for Workers and D1 (e.g. Workers error spikes, D1 usage). Uptime and Sentry already cover D1 hitting its limit, so this is a second opinion. If `novelroute.app` is on Cloudflare Registrar, make sure auto-renew is on.
+- **Cloudflare**: Notifications → Add, and turn on whatever the free plan offers for Workers and D1 (e.g. Workers error spikes, D1 usage). The Sentry uptime monitor and `request` errors already cover D1 hitting its limit, so this is a second opinion. If `novelroute.app` is on Cloudflare Registrar, make sure auto-renew is on.
 
 ## When an alert fires
 

@@ -134,7 +134,7 @@ Plan:
 - [x] Crash reporting: Sentry (EU region, errors only, no IPs/PII, location scrubbed on device, disabled in dev builds)
 - [x] `SENTRY_AUTH_TOKEN` in EAS (preview + production) so builds upload source maps
 - [x] Monitoring in code: `/v1/health` 503 on upstream failure, server errors and seed cron check-ins to Sentry, app sync failures (docs/monitoring.md)
-- [ ] Monitoring setup (docs/monitoring.md "One-off setup"): server Sentry project + `SENTRY_DSN` secret, uptime monitor, Sentry alert rules, Play vitals and Cloudflare notifications
+- [ ] Monitoring setup (docs/monitoring.md "One-off setup"): server Sentry project + `SENTRY_DSN` secret, Sentry uptime monitor on `/v1/health`, Sentry alert rules, Play vitals and Cloudflare notifications
 - [x] "About" screen: privacy policy link, data source disclaimer (in the map key; Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)
