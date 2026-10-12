@@ -32,6 +32,9 @@ const lastSent = new Map<string, number>();
 
 const eventId = () => crypto.randomUUID().replace(/-/g, '');
 
+/** Sentry environment for every report; the uptime monitor uses the same one (docs/monitoring.md). */
+export const SENTRY_ENVIRONMENT = 'production';
+
 async function send(itemType: string, payload: Record<string, unknown>): Promise<void> {
   if (!target) return;
   const header = { event_id: payload.event_id, sent_at: new Date().toISOString(), dsn: target.dsn };
@@ -73,6 +76,7 @@ export async function reportError(err: unknown, context: ErrorContext, now = Dat
     timestamp: now / 1000,
     platform: 'javascript',
     level: 'error',
+    environment: SENTRY_ENVIRONMENT,
     logger: 'novel-route-server',
     tags: { where: context.where },
     exception: {
@@ -104,6 +108,7 @@ export async function checkIn(status: 'ok' | 'error', durationMs: number): Promi
     check_in_id: eventId(),
     monitor_slug: SEED_MONITOR.slug,
     status,
+    environment: SENTRY_ENVIRONMENT,
     duration: durationMs / 1000,
     monitor_config: SEED_MONITOR.config,
   });

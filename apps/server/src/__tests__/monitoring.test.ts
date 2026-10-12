@@ -59,6 +59,7 @@ describe('reportError', () => {
     expect(item).toEqual({ type: 'event' });
     expect(event).toMatchObject({
       level: 'error',
+      environment: 'production',
       tags: { where: 'request' },
       request: { method: 'GET', url: '/v1/tiles/[removed]' },
     });
@@ -87,6 +88,7 @@ describe('checkIn', () => {
     expect(payload).toMatchObject({
       monitor_slug: 'seed-cron',
       status: 'ok',
+      environment: 'production',
       duration: 1.5,
       monitor_config: { schedule: { type: 'crontab', value: '*/5 * * * *' } },
     });

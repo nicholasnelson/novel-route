@@ -58,7 +58,7 @@ Each cron run sends one check-in to the Sentry Cron Monitor `seed-cron`: `ok`, o
 ### 2. Uptime monitor (Sentry)
 Sentry's free plan includes one uptime monitor, checked from outside Cloudflare. Use it for the API, since `/v1/health` covers the Worker, D1, Street Library and the cron.
 1. In the `novel-route-server` project: Alerts → Create Alert → **Uptime Monitor** (or Insights → Uptime, depending on Sentry's current menus).
-2. URL `https://api.novelroute.app/v1/health`, method GET, interval 1 minute. Any status other than 2xx counts as down, which includes the 503 the health check returns for a problem.
+2. URL `https://api.novelroute.app/v1/health`, method GET, interval 1 minute, environment `production` (type it in if the list is empty: Sentry only lists environments it has seen, and the server tags its reports `production`). Any status other than 2xx counts as down, which includes the 503 the health check returns for a problem.
 3. Assign it to yourself so failures email you. Sentry opens an issue after a few failed checks in a row and resolves it when checks pass again.
 4. Cost: 1,440 requests a day (1.4 % of the Workers free plan's 100,000) and about 2,900 D1 rows read (of 5M), with no writes. Uptime checks don't use the Sentry error quota. A 5-minute interval cuts that to 288 requests, if you'd rather.
 
