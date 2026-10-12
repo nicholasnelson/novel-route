@@ -14,7 +14,7 @@ the track the feedback came through: Internal Test, Closed Test, Open Test or Pr
 |---|---|
 | 2026-10-09 | Internal testing starts (build 2) with a small email list of testers. |
 | 2026-10-09 | Closed test (Alpha) submitted with build 5; approved and published the same day. Testers join through the Google Group; Australia only. |
-| 2026-10-12 | Street Library agrees to share the test with its members (newsletter and socials). |
+| 2026-10-12 | Discussed with Street Library sharing the test with its members (newsletter and socials). |
 |  | 12th tester opted in (14-day clock starts): _to fill in_ |
 |  | Day-7 survey sent: _to fill in_ |
 |  | Production access applied for: _to fill in_ |
