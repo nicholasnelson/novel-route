@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testers page mockup</title>
+<style>
+  body { margin: 0; background: #e8e3d8; font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: #1d2721; }
+  header { max-width: 1600px; margin: 0 auto; padding: 24px 16px 4px; }
+  h1 { font-family: Georgia, serif; margin: 0 0 6px; font-size: 26px; }
+  header p { margin: 0; color: #5b665f; max-width: 64em; line-height: 1.5; }
+  .screens { max-width: 1600px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 26px; }
+  .screen { width: 330px; }
+  .screen h2 { font-size: 15px; margin: 0 0 4px; }
+  .screen p { font-size: 13px; color: #5b665f; margin: 0 0 10px; min-height: 4.4em; line-height: 1.4; }
+  .phone { width: 330px; height: 700px; border-radius: 34px; background: #111; padding: 8px; box-shadow: 0 18px 44px rgba(0,0,0,.25); box-sizing: border-box; }
+  .phone .top { height: 26px; background: #f7f3ea; border-radius: 26px 26px 0 0; font-size: 11px; padding: 6px 18px; box-sizing: border-box; color: #333; }
+  .phone .fb { height: 40px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 12px; color: #444; }
+  .phone .fb b { color: #1877f2; }
+  iframe { display: block; width: 100%; border: 0; background: #f7f3ea; border-radius: 0 0 26px 26px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Testers page: proposed join checklist</h1>
+  <p>
+    novelroute.app/testing, as it would look on a phone. Each step is a button in order, with why it matters and
+    what to expect. The page remembers progress on that phone, so coming back after Google Play's delay picks up at
+    step 2. In Facebook, Instagram or Messenger's built-in browser, a banner offers to reopen the page in Chrome.
+    These frames are the real page (with the site's stylesheet); scroll inside them.
+  </p>
+</header>
+<div class="screens">
+  <div class="screen">
+    <h2>1 · Opened from Facebook</h2>
+    <p>Only shown in Facebook, Instagram or Messenger's built-in browser. "Open in Chrome" hands the page to Chrome on Android.</p>
+    <div class="phone"><div class="fb">✕ <b>facebook</b> novelroute.app</div><iframe src="testing-mock-page.html?state=fb&theme=light" style="height:626px"></iframe></div>
+  </div>
+  <div class="screen">
+    <h2>2 · First visit</h2>
+    <p>Step 1 is highlighted. Every button works at any time, for people who've done a step already.</p>
+    <div class="phone"><div class="top">9:41</div><iframe src="testing-mock-page.html?state=start&theme=light" style="height:658px"></iframe></div>
+  </div>
+  <div class="screen">
+    <h2>3 · Back from the group page</h2>
+    <p>Tapping "Join the group" only opens the group. Back on this page, step 1 asks whether it worked and how to tell. Nothing is ticked yet.</p>
+    <div class="phone"><div class="top">9:41</div><iframe src="testing-mock-page.html?state=tapped&theme=light" style="height:658px"></iframe></div>
+  </div>
+  <div class="screen">
+    <h2>4 · After "Yes, I've joined"</h2>
+    <p>Only now is step 1 ticked, with the wait explained. Coming back later, the page opens scrolled to step 2, highlighted.</p>
+    <div class="phone"><div class="top">9:41</div><iframe src="testing-mock-page.html?state=joined&theme=light" style="height:658px"></iframe></div>
+  </div>
+  <div class="screen">
+    <h2>5 · After step 2</h2>
+    <p>Step 3 opens Novel Route in the Play Store. "Start again" clears the remembered progress.</p>
+    <div class="phone"><div class="top">9:41</div><iframe src="testing-mock-page.html?state=done&theme=light" style="height:658px"></iframe></div>
+  </div>
+  <div class="screen">
+    <h2>6 · Dark mode (step 2)</h2>
+    <p>The site follows the phone's dark mode; the new parts do too.</p>
+    <div class="phone"><div class="top" style="background:#171a17;color:#ccc">9:41</div><iframe src="testing-mock-page.html?state=joined&theme=dark" style="height:658px;background:#171a17"></iframe></div>
+  </div>
+</div>
+</body>
+</html>

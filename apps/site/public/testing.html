@@ -23,42 +23,61 @@
 
   <main class="wrap">
    <div class="doc">
+    <div class="inapp" id="inapp" hidden>
+      <strong>Open this page in your browser</strong>
+      <span id="inapp-text">You're in an app's built-in browser, which isn't signed in to your Google account, so joining won't work here.</span>
+      <a class="button" id="inapp-open" href="intent://novelroute.app/testing#Intent;scheme=https;package=com.android.chrome;end" hidden>Open in Chrome</a>
+      <span class="alt" id="inapp-alt">Tap the ⋮ or ⋯ menu at the top, then <em>Open in browser</em>.</span>
+    </div>
+
     <h1>Help test Novel Route</h1>
     <p>
-      Novel Route is being tested on Google Play. Before it goes out to everyone, it needs a few
-      street library regulars to use it for a couple of weeks and say what works and what doesn't.
+      Novel Route is being tested on Google Play before it goes out to everyone. You'll need an
+      Android phone and the Google account you use for the Play Store. Two steps, about two minutes:
     </p>
+
+    <ol class="checklist" id="checklist">
+      <li id="step-1">
+        <h3>Join the testers group</h3>
+        <p>This is what gives your Google account access to the test. Without it, step 2 won't work.</p>
+        <a class="button" id="join" href="https://groups.google.com/g/novel-route-testers" target="_blank" rel="noopener">Join the group</a>
+        <div class="step-note" id="confirm" hidden>
+          <p>
+            <strong>Did it work?</strong> Once you've joined, the group page no longer shows a
+            <em>Join group</em> button. If it asked you to sign in, use the Google account your Play Store uses.
+          </p>
+          <div class="step-buttons">
+            <button type="button" class="button" id="joined">Yes, I've joined</button>
+            <button type="button" class="button secondary" id="not-yet">Not yet</button>
+          </div>
+        </div>
+        <p class="step-note" id="joined-note" hidden>
+          <strong>You're in.</strong> Google Play can take up to an hour to catch up. You can close this
+          page: when you come back, carry on from step 2.
+        </p>
+      </li>
+      <li id="step-2">
+        <h3>Get Novel Route on Google Play</h3>
+        <p>
+          Open the testing page, press <em>Become a tester</em>, then tap the link on that page to
+          download Novel Route. Every street library in Australia is already on the map.
+        </p>
+        <div class="step-buttons">
+          <a class="button" href="https://play.google.com/apps/testing/app.novelroute" target="_blank" rel="noopener">Open the testing page</a>
+          <a class="button secondary" href="https://play.google.com/store/apps/details?id=app.novelroute" target="_blank" rel="noopener">Get it on Google Play</a>
+        </div>
+        <p class="step-help">
+          <strong>Seeing &ldquo;Item not found&rdquo;?</strong> Check you joined the group with the same
+          Google account as your Play Store. If you did, Google Play hasn't caught up yet: try again a bit later.
+        </p>
+      </li>
+    </ol>
+    <p class="restart" id="restart" hidden>Want to go through the steps again? <button type="button" class="link-button" id="start-again">Start again</button></p>
+
     <p>
       Google asks new apps to be tested by a small group for at least 14 days, so sticking with it
       for a fortnight really helps.
     </p>
-
-    <p class="cta">
-      <a class="button" href="https://groups.google.com/g/novel-route-testers">Become a tester</a>
-    </p>
-
-    <h2>Join in</h2>
-    <p>You'll need an Android phone and the Google account you use for the Play Store.</p>
-    <ol class="join-steps">
-      <li>
-        <strong>Join the testers group.</strong>
-        Use the <em>Become a tester</em> button above (or <a href="https://groups.google.com/g/novel-route-testers">open the group</a>)
-        and choose <em>Join group</em>.
-      </li>
-      <li>
-        <strong>Opt in on Google Play.</strong>
-        <a href="https://play.google.com/apps/testing/app.novelroute">Open the Google Play testing page</a> and press
-        its <em>Become a tester</em> button.
-        <p class="notice">
-          <strong>Seeing &ldquo;Item not found&rdquo;?</strong>
-          Google Play can take a while to notice you've joined the group. Nothing's wrong:
-          give it an hour or so, then open the testing page again.
-        </p>
-      </li>
-      <li>
-        <strong>Install Novel Route</strong> from the link on that page, then open it wherever you are.
-      </li>
-    </ol>
 
     <h2>What to try</h2>
     <ul>
@@ -109,5 +128,6 @@
       </nav>
     </div>
   </footer>
+  <script src="testing.js"></script>
 </body>
 </html>

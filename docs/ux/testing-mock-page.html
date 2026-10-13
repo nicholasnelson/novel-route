@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help test Novel Route (mockup)</title>
+  <link rel="stylesheet" href="../../apps/site/public/styles.css">
+  <style>
+    /* Proposed additions to styles.css */
+    :root { --notice: #fff4dc; --notice-line: #ecd29b; --step: #fffdf8; --wait: #eef3ee; --done: #d6ecd9; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --notice: #3a3020; --notice-line: #6b5a32; --step: #1c201c; --wait: #23302a; --done: #1f3b27; }
+    }
+    :root[data-theme="dark"] { --notice: #3a3020; --notice-line: #6b5a32; --step: #1c201c; --wait: #23302a; --done: #1f3b27; }
+    .inapp {
+      background: var(--notice); border: 1px solid var(--notice-line); border-radius: 14px;
+      padding: 14px 16px; margin: 0 0 22px; font-size: 0.95rem; line-height: 1.45;
+    }
+    .inapp strong { display: block; font-size: 1.05rem; margin-bottom: 2px; }
+    .inapp .button { margin-top: 10px; }
+    .inapp .alt { display: block; margin-top: 8px; font-size: 0.85rem; color: var(--ink-soft); }
+
+    .checklist { list-style: none; margin: 18px 0 8px; padding: 0; counter-reset: step; }
+    .checklist > li {
+      counter-increment: step; position: relative; border: 1px solid var(--line); border-radius: 16px;
+      padding: 16px 16px 16px 58px; margin-bottom: 12px; background: var(--step);
+    }
+    .checklist > li::before {
+      content: counter(step); position: absolute; left: 16px; top: 15px; width: 30px; height: 30px;
+      border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.95rem;
+      background: var(--paper-deep); color: var(--ink-soft);
+    }
+    .checklist > li.current { border-color: var(--green); box-shadow: 0 0 0 2px rgba(31,143,58,.15); }
+    .checklist > li.current::before { background: var(--green); color: #fff; }
+    .checklist > li.done::before { content: "✓"; background: var(--done); color: var(--green); }
+    .checklist h3 { font-family: var(--sans); font-size: 1.05rem; margin: 3px 0 4px; }
+    .checklist p { margin: 0 0 10px; font-size: 0.95rem; color: var(--ink-soft); }
+    .checklist .button { padding: 10px 18px; }
+    .checklist li:not(.current) .button { background: var(--paper-deep); color: var(--ink); }
+    .checklist .wait {
+      margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--wait); color: var(--ink);
+      font-size: 0.9rem;
+    }
+    .confirm-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .confirm-buttons .button { padding: 8px 14px; }
+    .checklist li.current .confirm-buttons .button.secondary,
+    .confirm-buttons .button.secondary { background: var(--paper-deep); color: var(--ink); }
+    .restart { font-size: 0.85rem; color: var(--ink-soft); }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="#"><img src="../../apps/site/public/images/icon-180.png" alt="" width="32" height="32">Novel Route</a>
+      <a class="header-link" href="#">Privacy</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+   <div class="doc">
+    <div class="inapp" id="inapp" hidden>
+      <strong>Open this page in Chrome</strong>
+      You're in Facebook's own browser, which isn't signed in to your Google account, so joining won't work here.
+      <br><a class="button" href="#">Open in Chrome</a>
+      <span class="alt">Or tap ⋮ at the top right, then <em>Open in browser</em>.</span>
+    </div>
+
+    <h1>Help test Novel Route</h1>
+    <p>
+      Novel Route is being tested on Google Play before it goes out to everyone. You'll need an
+      Android phone and the Google account you use for the Play Store. Three steps, about two minutes:
+    </p>
+
+    <ol class="checklist">
+      <li id="s1">
+        <h3>Join the testers group</h3>
+        <p>This is what gives your Google account access. Without it, step 2 won't work.</p>
+        <a class="button" href="#">Join the group</a>
+        <div class="wait" id="confirm" hidden>
+          <strong>Did it work?</strong> Once you've joined, the group page no longer shows a <em>Join group</em>
+          button. If it asked you to sign in, use the Google account your Play Store uses.
+          <div class="confirm-buttons">
+            <a class="button" href="#">Yes, I've joined</a>
+            <a class="button secondary" href="#">Not yet</a>
+          </div>
+        </div>
+        <div class="wait" id="wait" hidden>
+          <strong>You're in.</strong> Google Play can take up to an hour to catch up. You can close this
+          page: when you come back, carry on from step 2.
+        </div>
+      </li>
+      <li id="s2">
+        <h3>Become a tester on Google Play</h3>
+        <p>Press <em>Become a tester</em> on the page that opens. If it says "Item not found", check you joined the group with the same Google account as your Play Store; if you did, Google Play hasn't caught up yet: try again a bit later.</p>
+        <a class="button" href="#">Open the testing page</a>
+      </li>
+      <li id="s3">
+        <h3>Install Novel Route</h3>
+        <p>Then open it wherever you are. Every street library in Australia is already on the map.</p>
+        <a class="button" href="#">Get it on Google Play</a>
+      </li>
+    </ol>
+    <p class="restart" id="restart" hidden>Done these already? <a href="#">Start again</a></p>
+
+    <p>
+      Google asks new apps to be tested by a small group for at least 14 days, so sticking with it
+      for a fortnight really helps.
+    </p>
+
+    <h2>What to try</h2>
+    <ul>
+      <li>Do the street libraries you know show up where you'd expect?</li>
+      <li>Drop in on a few and record your visits.</li>
+    </ul>
+   </div>
+  </main>
+
+<script>
+  // Mockup only: ?state=fb | start | tapped | joined | done, &theme=light | dark
+  const theme = new URLSearchParams(location.search).get('theme');
+  if (theme) document.documentElement.dataset.theme = theme;
+  const state = new URLSearchParams(location.search).get('state') || 'start';
+  const $ = (id) => document.getElementById(id);
+  if (state === 'fb') $('inapp').hidden = false;
+  const current = { fb: 1, start: 1, tapped: 1, joined: 2, done: 3 }[state];
+  [1, 2, 3].forEach((n) => {
+    const li = $('s' + n);
+    if (n < current) li.classList.add('done');
+    if (n === current) li.classList.add('current');
+  });
+  if (state === 'tapped') $('confirm').hidden = false;
+  if (state === 'joined') $('wait').hidden = false;
+  if (state === 'joined' || state === 'done') $('restart').hidden = false;
+  // Coming back part-way: scroll straight to the current step.
+  if (state === 'tapped') window.scrollTo(0, $('confirm').getBoundingClientRect().top + window.scrollY - 260);
+  if (state === 'joined' || state === 'done') window.scrollTo(0, $('s' + current).offsetTop - 160);
+</script>
+</body>
+</html>
