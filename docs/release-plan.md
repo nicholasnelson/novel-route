@@ -172,6 +172,11 @@ Plan:
 
 ---
 
+## Versions
+
+- **Version name** (`version` in `apps/mobile/app.json`, shown in the Play Store and in the feedback email): bumped by hand for every build that goes to testers or users, from 1.0.1 onwards (2026-10-14). Bug fixes bump the last number (1.0.2), bigger changes the middle one (1.1.0).
+- **Build number** (Android version code, the number in brackets in "1.0.1 (9)"): raised automatically by EAS for every build, including local and failed ones, so it can skip numbers. Play only needs it to go up.
+
 ## Local builds
 
 The EAS free plan includes 15 Android cloud builds a month (resetting on the 1st). Release builds can also be made locally in WSL (Ubuntu) with `eas build --local`, which uses the same signing key and remote build numbers as cloud builds but not the allowance:
