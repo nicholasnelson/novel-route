@@ -32,6 +32,7 @@ Newest last. "Build" is the first build with the change.
 | 2026-10-12 | Closed Test | Not obvious how to open a library's full details. | A visible "Details ›" link on the library card; a "Visited today" pill replaces the old Details button. | 8 |
 | 2026-10-12 | Internal Test | Keeper descriptions were mostly stock filler and never needed (confirmed by a review of 60 random listings). | Descriptions removed from the app (still on the linked Street Library page); the whole-map download halves to ~210 KB. | 8 |
 | 2026-10-12 | Closed Test | "Looks awesome"; asked about iPhone. | None yet: iPhone noted for after the Android release. | – |
+| 2026-10-14 | Closed Test | Joining was hard: links opened in Facebook's built-in browser (not signed in to Google), people didn't realise joining the group was essential, and Play's delay before install was confusing. | Testers page rebuilt as a two-step checklist that explains why each step matters, asks people to confirm they joined, remembers progress, and in Facebook/Instagram/Messenger offers to reopen in Chrome. | (site) |
 
 ## Other changes during testing
 
