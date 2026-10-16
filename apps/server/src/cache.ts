@@ -80,12 +80,36 @@ export const FAILURES_BEFORE_UNHEALTHY = 3;
  */
 export const UPSTREAM_SUCCESS_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
+/**
+ * Removal circuit breaker: a refresh that would mark more than this many libraries removed, or
+ * more than REMOVAL_MAX_FRACTION of those known inside its circle, is treated as a bad page.
+ * Real removals trickle in a few at a time; a mass disappearance means upstream misbehaved.
+ */
+export const REMOVAL_MAX_COUNT = 20;
+export const REMOVAL_MAX_FRACTION = 0.1;
+/** Removals always allowed regardless of fraction, so sparse areas can lose a library or two. */
+export const REMOVAL_MIN_ALLOWED = 2;
+
 /** The Street Library call itself failed (as opposed to our database). */
 export class UpstreamError extends Error {
   constructor(cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
     this.name = 'UpstreamError';
   }
+}
+
+/** Upstream answered, but with a page that would mark too many libraries removed. */
+export class SuspiciousPageError extends UpstreamError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SuspiciousPageError';
+  }
+}
+
+/** Whether removing `removed` of `known` active libraries inside a circle looks like a bad page. */
+export function tooManyRemovals(removed: number, known: number): boolean {
+  if (removed <= REMOVAL_MIN_ALLOWED) return false;
+  return removed > REMOVAL_MAX_COUNT || removed > known * REMOVAL_MAX_FRACTION;
 }
 
 /** Clock and sleep, injectable so tests control time. */
@@ -96,17 +120,23 @@ export const realTiming: Timing = {
 };
 
 /**
- * How far from the query point the results are complete: up to the 200th (farthest) result
- * with a full page, otherwise the endpoint's whole search radius.
+ * How far from the query point the results are complete: up to the farthest result with a full
+ * page, otherwise the endpoint's whole search radius. Whether the page was full is judged by
+ * `rawCount`, the items upstream returned before malformed ones were dropped, so one bad item
+ * doesn't turn a ~5 km circle into a 100 km one.
  */
-export function coverageRadius(distances: number[]): number {
-  if (distances.length >= UPSTREAM_RESULT_CAP) return Math.min(Math.max(...distances), UPSTREAM_SEARCH_RADIUS_M);
+export function coverageRadius(distances: number[], rawCount = distances.length): number {
+  if (rawCount >= UPSTREAM_RESULT_CAP) {
+    return distances.length === 0 ? 0 : Math.min(Math.max(...distances), UPSTREAM_SEARCH_RADIUS_M);
+  }
   return UPSTREAM_SEARCH_RADIUS_M;
 }
 
 /**
  * Query upstream at `point` and store the results and their coverage circle. Returns the circle,
- * or null if the politeness slot was taken. Throws if the upstream call fails.
+ * or null if the politeness slot was taken. Throws if the upstream call fails, or (a
+ * SuspiciousPageError, already reported) if the page would remove too many libraries: then
+ * nothing is marked removed and no circle is stored.
  */
 export async function fillAt(
   db: D1Database,
@@ -129,22 +159,29 @@ export async function fillAt(
     await recordUpstreamFailure(db, error, now);
     throw error;
   }
-  const { libraries, nonce } = result;
+  const { libraries, rawCount, nonce } = result;
 
   const distance = (l: LatLngLike) => distanceMeters(point.latitude, point.longitude, l.latitude, l.longitude);
   const circle: Circle = {
     latitude: point.latitude,
     longitude: point.longitude,
-    radius: coverageRadius(libraries.map(distance)),
+    radius: coverageRadius(libraries.map(distance), rawCount),
     fetchedAt: now,
   };
 
   // Anything we knew about inside the circle that upstream no longer returns is gone.
   const returned = new Set(libraries.map((l) => l.id));
   const known = await librariesInCells(db, geohashesForBounds(circleBounds(circle), LIBRARY_CELL_PRECISION, 20_000));
-  const disappeared = known
-    .filter((l) => l.removed_at === null && !returned.has(l.id) && distance(l) <= circle.radius)
-    .map((l) => l.id);
+  const knownInside = known.filter((l) => l.removed_at === null && distance(l) <= circle.radius);
+  const disappeared = knownInside.filter((l) => !returned.has(l.id)).map((l) => l.id);
+
+  if (tooManyRemovals(disappeared.length, knownInside.length)) {
+    const error = new SuspiciousPageError(
+      `Upstream page would remove ${disappeared.length} of ${knownInside.length} libraries; ignored`
+    );
+    await reportError(error, { where: 'removal-breaker' }, now);
+    throw error;
+  }
 
   const writes =
     (await upsertLibraries(db, libraries, now)) +

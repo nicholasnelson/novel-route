@@ -74,7 +74,7 @@ export async function fetchLibrariesForPoint({
   lat: number;
   lng: number;
   nonce: string;
-}): Promise<{ libraries: Library[]; nonceExpired: boolean }> {
+}): Promise<{ libraries: Library[]; rawCount: number; nonceExpired: boolean }> {
   const form = new FormData();
   form.append('action', 'library_locator_fetch_libraries');
   form.append('lat', String(lat));
@@ -84,20 +84,30 @@ export async function fetchLibrariesForPoint({
   const json = await postForm(form);
 
   if (json.success) {
-    const raw: any[] = Array.isArray(json.data)
-      ? json.data
-      : json.data?.libraries ?? [];
+    const raw: unknown = Array.isArray(json.data) ? json.data : json.data?.libraries;
+    // A success without a list is a broken response, not "no libraries here".
+    if (!Array.isArray(raw)) {
+      throw new Error(`API response has no libraries list: ${JSON.stringify(json).slice(0, 160)}`);
+    }
 
+    // One malformed item is dropped, not the whole page.
     const libraries = raw
-      .map(normalizeLibrary)
+      .map((item) => {
+        try {
+          return normalizeLibrary(item);
+        } catch {
+          return null;
+        }
+      })
       .filter((lib): lib is Library => lib !== null);
 
-    return { libraries, nonceExpired: false };
+    // rawCount: items upstream returned, before normalising (whether the page was full).
+    return { libraries, rawCount: raw.length, nonceExpired: false };
   }
 
   // The endpoint only serves Australia and New Zealand; elsewhere there are simply no libraries.
   if (typeof json.data === 'string' && json.data.includes('within Australia')) {
-    return { libraries: [], nonceExpired: false };
+    return { libraries: [], rawCount: 0, nonceExpired: false };
   }
 
   // Check for nonce expiry
@@ -107,7 +117,7 @@ export async function fetchLibrariesForPoint({
     (typeof json.data?.message === 'string' &&
       json.data.message.toLowerCase().includes('nonce'))
   ) {
-    return { libraries: [], nonceExpired: true };
+    return { libraries: [], rawCount: 0, nonceExpired: true };
   }
 
   const message = typeof json?.data === 'string' ? json.data : json?.data?.message;
@@ -122,7 +132,7 @@ export async function fetchLibrariesWithAutoNonce({
   lat: number;
   lng: number;
   cachedNonce?: string;
-}): Promise<{ libraries: Library[]; nonce: string }> {
+}): Promise<{ libraries: Library[]; rawCount: number; nonce: string }> {
   let nonce = cachedNonce ?? (await getNonce());
 
   const result = await fetchLibrariesForPoint({ lat, lng, nonce });
@@ -134,8 +144,8 @@ export async function fetchLibrariesWithAutoNonce({
     if (retry.nonceExpired) {
       throw new Error('Nonce expired after refresh');
     }
-    return { libraries: retry.libraries, nonce };
+    return { libraries: retry.libraries, rawCount: retry.rawCount, nonce };
   }
 
-  return { libraries: result.libraries, nonce };
+  return { libraries: result.libraries, rawCount: result.rawCount, nonce };
 }

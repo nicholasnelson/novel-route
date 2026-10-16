@@ -1,7 +1,22 @@
 import { encodeGeohash, geohashBounds, geohashCenter, TILE_PRECISION } from '@novel-route/shared';
-import { coverageRadius, getTileData, TILE_MAX_AGE_MS, UPSTREAM_SEARCH_RADIUS_M, UPSTREAM_MIN_INTERVAL_MS } from '../cache';
+import {
+  coverageRadius,
+  fillAt,
+  getTileData,
+  SuspiciousPageError,
+  TILE_MAX_AGE_MS,
+  tooManyRemovals,
+  UPSTREAM_SEARCH_RADIUS_M,
+  UPSTREAM_MIN_INTERVAL_MS,
+} from '../cache';
+import { reportError } from '../monitoring';
 import { acquireUpstreamSlot, getTile } from '../store';
 import { createTestD1, deferred, fakeTiming, libraryQueries, mockUpstream, UpstreamLibrary } from './helpers';
+
+vi.mock('../monitoring', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../monitoring')>()),
+  reportError: vi.fn(async () => {}),
+}));
 
 const NOW = Date.UTC(2026, 9, 8, 2);
 const tileAt = (lat: number, lng: number) => encodeGeohash(lat, lng, TILE_PRECISION);
@@ -35,6 +50,68 @@ describe('coverageRadius', () => {
     expect(coverageRadius(Array.from({ length: 200 }, (_, i) => i * 10))).toBe(1990);
     expect(coverageRadius([100, 200])).toBe(UPSTREAM_SEARCH_RADIUS_M);
     expect(coverageRadius([])).toBe(UPSTREAM_SEARCH_RADIUS_M);
+  });
+
+  it('judges a full page by the raw item count, so a dropped item keeps the circle small', () => {
+    const distances = Array.from({ length: 199 }, (_, i) => i * 10);
+    expect(coverageRadius(distances, 200)).toBe(1980);
+    expect(coverageRadius([], 200)).toBe(0);
+  });
+});
+
+describe('tooManyRemovals', () => {
+  it('allows a couple of removals anywhere, then trips above 20 or 10% of those known', () => {
+    expect(tooManyRemovals(2, 3)).toBe(false);
+    expect(tooManyRemovals(3, 30)).toBe(false);
+    expect(tooManyRemovals(4, 30)).toBe(true);
+    expect(tooManyRemovals(20, 1000)).toBe(false);
+    expect(tooManyRemovals(21, 1000)).toBe(true);
+  });
+});
+
+describe('fillAt', () => {
+  /** Upstream returning these items as-is for every library query. */
+  function respondWith(items: unknown[]) {
+    globalThis.fetch = vi.fn(async (_url: string, init: { body: FormData }) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        init.body.get('action') === 'library_locator_get_nonce'
+          ? { success: true, data: { nonce: 'n1' } }
+          : { success: true, data: { libraries: items } },
+    })) as unknown as typeof fetch;
+  }
+
+  it('a full page with one malformed item is complete only to its farthest result', async () => {
+    const db = createTestD1();
+    const world = denseCity()
+      .map((l) => ({ ...l, d: Math.hypot(l.latitude - centre.latitude, l.longitude - centre.longitude) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 200);
+    const items: unknown[] = world.map((l) => ({ id: l.id, title: 'x', latitude: String(l.latitude), longitude: String(l.longitude) }));
+    items[100] = { id: 'bad', title: 'x', latitude: 'nope', longitude: '0' };
+    respondWith(items);
+
+    const circle = await fillAt(db, centre, NOW);
+    expect(circle!.radius).toBeGreaterThan(1000);
+    expect(circle!.radius).toBeLessThan(10_000);
+  });
+
+  it('an empty page where many libraries are known trips the breaker: nothing removed, no circle', async () => {
+    const db = createTestD1();
+    const timing = fakeTiming(NOW);
+    mockUpstream(denseCity());
+    await fillAt(db, centre, NOW); // ~200 libraries known
+
+    respondWith([]);
+    timing.advance(TILE_MAX_AGE_MS + 1000);
+    vi.mocked(reportError).mockClear();
+    await expect(fillAt(db, centre, timing.now())).rejects.toBeInstanceOf(SuspiciousPageError);
+    expect(reportError).toHaveBeenCalledWith(expect.any(SuspiciousPageError), { where: 'removal-breaker' }, timing.now());
+
+    const count = (sql: string) => (db as unknown as { prepare(s: string): { first<T>(): Promise<T> } }).prepare(sql).first<{ n: number }>();
+    expect((await count('SELECT COUNT(*) AS n FROM libraries WHERE removed_at IS NOT NULL'))!.n).toBe(0);
+    expect((await count(`SELECT COUNT(*) AS n FROM coverage WHERE fetched_at = ${timing.now()}`))!.n).toBe(0);
   });
 });
 

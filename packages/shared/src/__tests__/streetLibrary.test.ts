@@ -19,6 +19,12 @@ describe('htmlToText', () => {
   it('leaves unknown entities alone', () => {
     expect(htmlToText('a &bogus; b')).toBe('a &bogus; b');
   });
+
+  it('leaves numeric entities that are not valid code points alone', () => {
+    expect(htmlToText('a &#99999999; b')).toBe('a &#99999999; b');
+    expect(htmlToText('&#xD800;&#0;&#x110000;')).toBe('&#xD800;&#0;&#x110000;');
+    expect(htmlToText('&#x1F4DA;')).toBe('📚');
+  });
 });
 
 describe('normalizeLibrary', () => {
@@ -58,6 +64,7 @@ describe('fetchLibrariesForPoint', () => {
     respond({ success: false, data: 'Search location must be within Australia or New Zealand.' });
     await expect(fetchLibrariesForPoint({ lat: 0, lng: 0, nonce: 'n' })).resolves.toEqual({
       libraries: [],
+      rawCount: 0,
       nonceExpired: false,
     });
   });
@@ -67,10 +74,41 @@ describe('fetchLibrariesForPoint', () => {
     await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).rejects.toThrow('Something broke');
   });
 
+  const item = (id: number) => ({ id, title: `Library ${id}`, latitude: '-34.9', longitude: '138.6' });
+
+  it('counts raw items, so a full page with a malformed item still reads as full', async () => {
+    const items: unknown[] = Array.from({ length: 200 }, (_, i) => item(i));
+    items[5] = { id: 5, title: 'bad', latitude: 'nope', longitude: '138.6' };
+    items[6] = null; // normalizeLibrary throws on this; only this item is dropped
+    items[7] = { ...item(7), title: 'Broken &#99999999; entity' };
+    respond({ success: true, data: { libraries: items } });
+    const result = await fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' });
+    expect(result.rawCount).toBe(200);
+    expect(result.libraries).toHaveLength(198);
+    expect(result.libraries.find((l) => l.id === 'sl:7')?.title).toBe('Broken &#99999999; entity');
+  });
+
+  it('accepts an empty libraries array', async () => {
+    respond({ success: true, data: { libraries: [] } });
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).resolves.toEqual({
+      libraries: [],
+      rawCount: 0,
+      nonceExpired: false,
+    });
+  });
+
+  it('treats a success without a libraries list as an error', async () => {
+    respond({ success: true, data: {} });
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).rejects.toThrow('no libraries list');
+    respond({ success: true });
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).rejects.toThrow('no libraries list');
+  });
+
   it('detects an expired nonce', async () => {
     respond({ success: false, data: { nonce_expired: true } });
     await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).resolves.toEqual({
       libraries: [],
+      rawCount: 0,
       nonceExpired: true,
     });
   });

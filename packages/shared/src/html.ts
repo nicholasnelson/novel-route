@@ -20,7 +20,9 @@ function decodeEntities(text: string): string {
       const code = entity[1].toLowerCase() === 'x'
         ? parseInt(entity.slice(2), 16)
         : parseInt(entity.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      // String.fromCodePoint throws outside 0..0x10FFFF; NUL and lone surrogates aren't text.
+      const valid = code >= 1 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+      return valid ? String.fromCodePoint(code) : match;
     }
     return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
   });
