@@ -88,6 +88,13 @@ a {
   text-decoration-thickness: 1px;
 }
 
+/* Keyboard focus only (never on a click or tap): the browser default is faint on the paper. */
+:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 h1,
 h2,
 h3 {
@@ -496,7 +503,7 @@ button.button {
   color: var(--green);
 }
 
-.checklist h3 {
+.checklist h2 {
   font-family: var(--sans);
   font-size: 1.1rem;
   margin: 3px 0 4px;
