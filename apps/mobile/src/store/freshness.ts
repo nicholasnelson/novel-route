@@ -32,9 +32,18 @@ export function freshnessFor(summary: VisitSummary | undefined, now: number): Fr
   return 'old';
 }
 
-/** "today", "yesterday", "12 days ago", "3 months ago", "2 years ago". */
+/** Midnight UTC on the local calendar date of `timestamp`, so day counts ignore DST shifts. */
+function localDayNumber(timestamp: number): number {
+  const d = new Date(timestamp);
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
+}
+
+/**
+ * "today", "yesterday", "12 days ago", "3 months ago", "2 years ago". Counts local calendar days
+ * (like visitedToday), so a visit at 23:00 is "yesterday" by 08:00 the next morning.
+ */
 export function relativeDay(timestamp: number, now: number): string {
-  const days = Math.floor((now - timestamp) / DAY_MS);
+  const days = localDayNumber(now) - localDayNumber(timestamp);
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 60) return `${days} days ago`;

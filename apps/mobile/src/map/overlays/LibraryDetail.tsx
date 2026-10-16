@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import FloatingPanel from './FloatingPanel';
 import { MarkerIcon, PrimaryButton } from './cards';
 import { Freshness, Library, Visit, VisitSummary } from '../../types';
@@ -89,7 +89,9 @@ function DetailContent({
 }: Props & { library: Library }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [lastDeleted, setLastDeleted] = useState<Visit | null>(null);
-  const [pickingDate, setPickingDate] = useState(false);
+  // The date the past-visit picker opened on (iOS). Fixed while it's open: a new value re-renders
+  // the picker and would undo the date being chosen.
+  const [pickingDate, setPickingDate] = useState<Date | null>(null);
   const [bounce] = useState(() => new Animated.Value(1));
   const previousFreshness = useRef(freshness);
 
@@ -122,13 +124,25 @@ function DetailContent({
   };
 
   const handlePastDate = (event: DateTimePickerEvent, date?: Date) => {
-    setPickingDate(false);
+    setPickingDate(null);
     if (event.type !== 'set' || !date) return;
     // A past day is logged at midday; today keeps the current time.
+    const current = Date.now();
     const picked = new Date(date);
-    const isToday = picked.toDateString() === new Date(now).toDateString();
+    const isToday = picked.toDateString() === new Date(current).toDateString();
     if (!isToday) picked.setHours(12, 0, 0, 0);
-    onLogPastVisit(isToday ? now : picked.getTime());
+    onLogPastVisit(isToday ? current : picked.getTime());
+  };
+
+  const pickPastDate = () => {
+    const initial = new Date();
+    // On Android the picker component re-opens its dialog whenever its props change (GPS fixes,
+    // the clock tick), resetting the chosen date, so the dialog is opened once from here instead.
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({ value: initial, mode: 'date', maximumDate: initial, onChange: handlePastDate });
+    } else {
+      setPickingDate(initial);
+    }
   };
 
   const share = () => {
@@ -190,11 +204,11 @@ function DetailContent({
         ) : (
           <PrimaryButton label="Log visit" icon="checkmark" onPress={onLogVisit} />
         )}
-        <Pressable onPress={() => setPickingDate(true)} accessibilityRole="button" hitSlop={8}>
+        <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
           <Text style={styles.linkCentered}>Log a past visit</Text>
         </Pressable>
         {pickingDate && (
-          <DateTimePicker value={new Date(now)} mode="date" maximumDate={new Date(now)} onChange={handlePastDate} />
+          <DateTimePicker value={pickingDate} mode="date" maximumDate={pickingDate} onChange={handlePastDate} />
         )}
 
         {justLogged && (

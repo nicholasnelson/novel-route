@@ -365,13 +365,20 @@ export default function MapScreen() {
 
   useEffect(() => { syncTilesRef.current = syncTiles; }, [syncTiles]);
 
+  // Ignores a second tap while a visit is still being logged.
+  const recordingVisitRef = useRef(false);
   const recordVisit = async (libraryId: string, source: VisitSource, visitedAt?: number) => {
-    if (!db) return;
-    const visit = await logVisit(db, libraryId, source, visitedAt);
-    if (!visit) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    setToast(visit);
-    await reloadVisitState(db, selectedId);
+    if (!db || recordingVisitRef.current) return;
+    recordingVisitRef.current = true;
+    try {
+      const visit = await logVisit(db, libraryId, source, visitedAt);
+      if (!visit) return;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setToast(visit);
+      await reloadVisitState(db, selectedId);
+    } finally {
+      recordingVisitRef.current = false;
+    }
   };
 
   const undoLastVisit = async () => {

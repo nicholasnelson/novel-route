@@ -31,6 +31,16 @@ describe('visitLog', () => {
     expect(await getVisits(db, 'sl:1')).toHaveLength(1);
   });
 
+  it('logs only one visit when two arrive at once (a double tap)', async () => {
+    const db = await createTestDb();
+    const results = await Promise.all([
+      logVisit(db, 'sl:1', 'manual', T0),
+      logVisit(db, 'sl:1', 'manual', T0 + 1000),
+    ]);
+    expect(results.filter((v) => v !== null)).toHaveLength(1);
+    expect(await getVisits(db, 'sl:1')).toHaveLength(1);
+  });
+
   it('logs past visits, keeping the most recent as the last visit', async () => {
     const db = await createTestDb();
     await logVisit(db, 'sl:1', 'manual', T0);

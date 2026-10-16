@@ -33,18 +33,24 @@ export async function logVisit(
   source: VisitSource,
   visitedAt = Date.now()
 ): Promise<Visit | null> {
-  const duplicate = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM visits WHERE library_id = ? AND ABS(visited_at - ?) < ? LIMIT 1',
-    [libraryId, visitedAt, DUPLICATE_VISIT_WINDOW_MS]
-  );
-  if (duplicate) return null;
+  // Check and insert in one transaction: transactions take turns, so a double tap can't slip a
+  // second visit in between the check and the insert.
+  let logged: Visit | null = null;
+  await db.withTransactionAsync(async (tx) => {
+    const duplicate = await tx.getFirstAsync<{ id: string }>(
+      'SELECT id FROM visits WHERE library_id = ? AND ABS(visited_at - ?) < ? LIMIT 1',
+      [libraryId, visitedAt, DUPLICATE_VISIT_WINDOW_MS]
+    );
+    if (duplicate) return;
 
-  const visit: Visit = { id: randomUUID(), libraryId, visitedAt, source };
-  await db.runAsync(
-    'INSERT INTO visits (id, library_id, visited_at, source) VALUES (?, ?, ?, ?)',
-    [visit.id, visit.libraryId, visit.visitedAt, visit.source]
-  );
-  return visit;
+    const visit: Visit = { id: randomUUID(), libraryId, visitedAt, source };
+    await tx.runAsync(
+      'INSERT INTO visits (id, library_id, visited_at, source) VALUES (?, ?, ?, ?)',
+      [visit.id, visit.libraryId, visit.visitedAt, visit.source]
+    );
+    logged = visit;
+  });
+  return logged;
 }
 
 /** Re-insert a previously deleted visit (for undo). */
