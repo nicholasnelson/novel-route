@@ -64,9 +64,9 @@ export async function migrateSchema(db: Db): Promise<void> {
   while (version < MIGRATIONS.length) {
     const sql = MIGRATIONS[version];
     const next = version + 1;
-    await db.withTransactionAsync(async () => {
-      await db.execAsync(sql);
-      await db.execAsync(`PRAGMA user_version = ${next}`);
+    await db.withTransactionAsync(async (tx) => {
+      await tx.execAsync(sql);
+      await tx.execAsync(`PRAGMA user_version = ${next}`);
     });
     version = next;
   }

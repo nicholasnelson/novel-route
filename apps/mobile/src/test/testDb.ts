@@ -1,9 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
-import { Db } from '../db/db';
+import { Connection, Db, serializeWrites } from '../db/db';
 import { migrateSchema } from '../db/schema';
 
-/** An in-memory Db backed by Node's built-in SQLite, matching the expo-sqlite subset the app uses. */
-export function createRawTestDb(): Db {
+/**
+ * An in-memory connection backed by Node's built-in SQLite, matching the expo-sqlite subset the
+ * app uses (including withTransactionAsync not waiting for other work).
+ */
+export function createTestConnection(): Connection {
   const sqlite = new DatabaseSync(':memory:');
   return {
     async execAsync(sql) {
@@ -19,8 +22,9 @@ export function createRawTestDb(): Db {
       return (sqlite.prepare(sql).get(...params) ?? null) as T | null;
     },
     async withTransactionAsync(task) {
-      sqlite.exec('BEGIN');
+      // Same shape as expo-sqlite's, so a failed BEGIN also rolls back.
       try {
+        sqlite.exec('BEGIN');
         await task();
         sqlite.exec('COMMIT');
       } catch (err) {
@@ -29,6 +33,11 @@ export function createRawTestDb(): Db {
       }
     },
   };
+}
+
+/** An in-memory Db as the app sees it, before migrations. */
+export function createRawTestDb(): Db {
+  return serializeWrites(createTestConnection());
 }
 
 export async function createTestDb(): Promise<Db> {

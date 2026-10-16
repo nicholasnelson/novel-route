@@ -104,14 +104,6 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
   const pending: string[] = [];
   const failed: string[] = [];
 
-  // Requests run in parallel, but writes take turns: one connection can't nest transactions.
-  let writes: Promise<void> = Promise.resolve();
-  const store = (task: () => Promise<void>) => {
-    const run = writes.then(() => db.withTransactionAsync(task));
-    writes = run.catch(() => {}); // one failed write doesn't block the rest
-    return run;
-  };
-
   const queue = [...tiles];
   const worker = async () => {
     for (let tile = queue.shift(); tile; tile = queue.shift()) {
@@ -124,11 +116,12 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
         failed.push(tile);
         continue;
       }
-      await store(async () => {
-        await upsertLibraries(db, body.libraries.filter((l) => !l.removed), now);
-        await upsertLibraries(db, body.libraries.filter((l) => l.removed), now, { removed: true });
+      // Requests run in parallel; the Db makes the writes take turns.
+      await db.withTransactionAsync(async (tx) => {
+        await upsertLibraries(tx, body.libraries.filter((l) => !l.removed), now);
+        await upsertLibraries(tx, body.libraries.filter((l) => l.removed), now, { removed: true });
         // A pending tile's libraries so far are shown, but it stays stale so it's re-requested.
-        if (body.status !== 'pending') await setTileFetchedAt(db, tile, now);
+        if (body.status !== 'pending') await setTileFetchedAt(tx, tile, now);
       });
       if (body.libraries.length > 0) updated = true;
       if (body.status === 'pending') pending.push(tile);
@@ -177,10 +170,10 @@ export async function refreshSnapshot(db: Db, now = Date.now()): Promise<boolean
     }
     if (!res.ok) throw new ApiError('Snapshot request', res.status);
     const body = (await res.json()) as SnapshotResponse;
-    await db.withTransactionAsync(async () => {
-      await importSnapshot(db, body.libraries, Date.parse(body.generatedAt) || now);
-      await setKv(db, KV_KEYS.snapshotVersion, res.headers.get('ETag') ?? `W/"${body.version}"`);
-      await setKv(db, KV_KEYS.snapshotCheckedAt, String(now));
+    await db.withTransactionAsync(async (tx) => {
+      await importSnapshot(tx, body.libraries, Date.parse(body.generatedAt) || now);
+      await setKv(tx, KV_KEYS.snapshotVersion, res.headers.get('ETag') ?? `W/"${body.version}"`);
+      await setKv(tx, KV_KEYS.snapshotCheckedAt, String(now));
     });
     return true;
   } finally {
@@ -197,10 +190,10 @@ async function refreshFromStreetLibrary(db: Db, tile: string, now: number): Prom
     cachedNonce: cachedNonce ?? undefined,
   });
 
-  await db.withTransactionAsync(async () => {
-    await upsertLibraries(db, result.libraries, now);
-    await setTileFetchedAt(db, tile, now);
-    await setKv(db, KV_KEYS.nonce, result.nonce);
+  await db.withTransactionAsync(async (tx) => {
+    await upsertLibraries(tx, result.libraries, now);
+    await setTileFetchedAt(tx, tile, now);
+    await setKv(tx, KV_KEYS.nonce, result.nonce);
   });
   return { updated: true, pending: [], failed: [] };
 }
