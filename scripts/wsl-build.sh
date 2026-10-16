@@ -1,7 +1,7 @@
 #!/bin/bash
 # Local Android release build in WSL (Ubuntu): builds the latest commit on `main` of the Windows
 # checkout with `eas build --local`, which uses the same signing key and remote build numbers as
-# EAS cloud builds but not the cloud build allowance. The .aab lands in Windows Downloads.
+# EAS cloud builds but not the cloud build allowance. The .aab (or .apk) lands in Windows Downloads.
 #
 #   bash scripts/wsl-build.sh [profile]      (default: production)
 #
@@ -46,7 +46,10 @@ else
   export SENTRY_DISABLE_AUTO_UPLOAD=true
 fi
 
-OUT="$HOME/builds/novel-route-$PROFILE-$COMMIT.aab"
+# Profiles with "buildType": "apk" in eas.json (preview, productionApk) build an installable APK.
+EXT=aab
+case "$PROFILE" in preview|productionApk) EXT=apk ;; esac
+OUT="$HOME/builds/novel-route-$PROFILE-$COMMIT.$EXT"
 mkdir -p "$HOME/builds"
 cd apps/mobile
 eas build --platform android --profile "$PROFILE" --local --non-interactive --output "$OUT"
