@@ -87,6 +87,9 @@ docs/                  # Release plan and design docs
 - [Server](docs/server.md)
 - [Visit log](docs/visit-log.md)
 - [UX design](docs/ux.md) (with [mockups](docs/ux/mockup.html))
+- [Monitoring](docs/monitoring.md)
+- [Testing log](docs/testing-log.md)
+- [Open questions](docs/internal-questions.md)
 
 The website ([novelroute.app](https://novelroute.app): landing page and privacy policy) is in [`apps/site/`](apps/site/), served by a Cloudflare Worker with static assets. Edit files in `apps/site/public/`, preview with `npm run dev` in `apps/site`, and publish with `npm run deploy`.
 
@@ -101,7 +104,7 @@ Contributions are welcome! Here's how to get involved:
 
 ### Ideas for Contributions
 
-- UI/UX improvements (better modals, animations, dark mode)
+- UI/UX improvements (animations, dark mode; the app deliberately avoids modal prompts)
 - Search / filter functionality
 - Stats screen (total visited, progress by area, etc.)
 - iOS testing and polish

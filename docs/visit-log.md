@@ -1,6 +1,6 @@
 # Visit log
 
-Status: **planned**. Written 2026-10-07.
+Status: **implemented** (October 2026). Written 2026-10-07 as the plan; the nearby prompt below was replaced by the nearby card in [ux.md](./ux.md) (no modal prompts).
 
 Replaces the boolean "visited" set (`src/store/visitedStore.ts`) with a log of individual visits, so the app can show both **whether** a library has been visited and **how recently** (freshness).
 
@@ -60,16 +60,13 @@ Rendering: each library feature carries a `freshness` property, and the Mapbox `
 - **Clear history** (destructive, confirm dialog) — replaces the old "Mark as not visited".
 - Navigate button unchanged.
 
-## Nearby prompt
+## Nearby card (replaced the nearby prompt)
 
-Prompt when the user is within 100 m of a library **and** either:
-- it has never been visited, or
-- the last visit was more than **30 days** ago ("You were last here 2 months ago — log a visit?").
-
-Additional rules:
-- At most one prompt per library per calendar day (persist the last-prompted date, not just in memory).
-- At most one prompt on screen at a time; if several libraries qualify, prompt for the nearest.
-- Accepting logs a visit with `source: 'nearby_prompt'`.
+The original plan was a modal prompt within 100 m. What shipped is a bottom card with no modals (details in [ux.md](./ux.md) "Nearby", constants in `apps/mobile/src/store/nearby.ts`):
+- **Approaching:** the nearest *due* library (never visited, or last visited more than **30 days** ago) within **2 km**, with distance and a direction arrow.
+- **Arrived:** within **30 m** plus up to 20 m for reported GPS accuracy, for any library you haven't logged today (due or not), the card becomes "You're here · Log visit". Logging from it records `source: 'nearby_prompt'`.
+- A light haptic tick on arrival, at most once per library per calendar day (persisted in `nearby_prompts`).
+- One card at a time; if several libraries qualify, the nearest.
 
 ## No migration from pre-SQLite builds
 

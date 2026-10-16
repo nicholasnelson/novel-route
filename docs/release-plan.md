@@ -1,6 +1,6 @@
 # Release plan (Android v1)
 
-Status: **planning** — written 2026-10-07, before build work starts.
+Status: **closed testing** — the closed (Alpha) track has been live since 2026-10-09 (see [testing-log.md](./testing-log.md)). Written 2026-10-07, before build work started; the checklist below is kept up to date.
 Target: Google Play (Android). iOS is not in scope for v1, but no decision here should rule it out.
 
 Related docs:
@@ -149,7 +149,7 @@ Plan:
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
 - [x] Google Group `novel-route-testers` created (settings above)
-- [ ] Google Group set as the closed track's testers
+- [x] Google Group set as the closed track's testers (2026-10-09)
 - [x] Testers page (https://novelroute.app/testing) and in-app *Send feedback*
 - [ ] Play testing feedback channel set to hello@novelroute.app
 - [ ] Week-one survey (Google Form, five questions)
@@ -163,7 +163,7 @@ Plan:
 - [x] Deployed to `https://novel-route-api.novel-route-server.workers.dev`; Street Library accepts requests from Cloudflare
 - [x] Privacy policy updated for the server as data source
 - [x] `EXPO_PUBLIC_API_URL` set in EAS preview/production
-- [ ] Ship server-backed build to the closed test track
+- [x] Ship server-backed build to the closed test track (build 5, 2026-10-09)
 
 ### Phase 4 — Production
 - [ ] Check Mapbox usage against the free tier before launch

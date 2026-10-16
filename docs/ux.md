@@ -58,7 +58,7 @@ The modal alert goes. Instead, a small card at the bottom of the map does two jo
     - Within the last ~30 m the arrow is least reliable, which is where the card switches to the arrival state anyway.
   - Tap the card → camera frames you and the library together; tap again → detail.
   - If nothing is due nearby, show the nearest library instead, with its status ("Visited 3 days ago").
-- **Arrived** — within **30 m**, plus up to 20 m allowance for reported GPS accuracy (`ARRIVAL_RADIUS_M`, `MAX_ACCURACY_ALLOWANCE_M` in `src/store/nearby.ts`), the card changes to:
+- **Arrived** — within **30 m**, plus up to 20 m allowance for reported GPS accuracy (`ARRIVAL_RADIUS_M`, `MAX_ACCURACY_ALLOWANCE_M` in `src/store/nearby.ts`), for any library not logged today (due or not), the card changes to:
   `You're at Flinders St Library   [Log visit]`
   with a light haptic tick. Tapping **Log visit** logs it, plays the doors-opening animation on the marker, and shows *"Visit logged · Undo"* for a few seconds.
   - Ignoring it costs nothing; walk away and the card goes back to "approaching".
