@@ -4,8 +4,9 @@ import { feedbackUrl, FEEDBACK_EMAIL } from '../feedback';
 // Hoisted above the imports by Jest.
 jest.mock('expo-constants', () => ({
   __esModule: true,
-  default: { expoConfig: { version: '1.2.0', android: { versionCode: 7 } } },
+  default: { expoConfig: { version: '1.2.0' } },
 }));
+jest.mock('expo-application', () => ({ nativeBuildVersion: '7' }));
 
 describe('feedbackUrl', () => {
   it('addresses us, with the version in the subject and the build and device in the body', () => {

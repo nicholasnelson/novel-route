@@ -51,6 +51,33 @@ export async function upsertLibraries(
 }
 
 /**
+ * How many of `libraries` are new or differ from the stored rows in anything the map shows
+ * (position, title, link, removed). Refreshes that change nothing then don't redraw the map.
+ */
+export async function countChangedLibraries(
+  db: Db,
+  libraries: (Library & { removed?: boolean })[]
+): Promise<number> {
+  if (libraries.length === 0) return 0;
+  const rows = await db.getAllAsync<LibraryRow & { removed: number }>(
+    'SELECT * FROM libraries WHERE id IN (SELECT value FROM json_each(?))',
+    [JSON.stringify(libraries.map((l) => l.id))]
+  );
+  const stored = new Map(rows.map((r) => [r.id, r]));
+  return libraries.filter((lib) => {
+    const row = stored.get(lib.id);
+    return (
+      !row ||
+      row.title !== lib.title ||
+      row.latitude !== lib.latitude ||
+      row.longitude !== lib.longitude ||
+      (row.permalink ?? undefined) !== (lib.permalink ?? undefined) ||
+      !!row.removed !== !!lib.removed
+    );
+  }).length;
+}
+
+/**
  * Store a server snapshot (SnapshotRow arrays) in one statement: thousands of rows, so they go
  * in as a single JSON parameter rather than a statement each. Like upsertLibraries, rows the
  * device has newer data for (a tile loaded since the snapshot was made) are left alone.

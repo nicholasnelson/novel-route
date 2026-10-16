@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { smoothAngle } from '../geo/bearing';
+import { normalizeDegrees, smoothAngle } from '../geo/bearing';
 
 export type PositionFix = {
   latitude: number;
@@ -74,15 +74,30 @@ export type Heading = {
   reliable: boolean;
 };
 
+/** Compass updates are passed on at most this often, and only when the heading moved this much. */
+const HEADING_MIN_INTERVAL_MS = 200;
+const HEADING_MIN_CHANGE_DEG = 3;
+
 /**
  * Smoothed compass heading. expo-location reports calibration 0–3 on both platforms;
  * below 2 (more than ~35° uncertainty on iOS) the heading is treated as unreliable.
+ * Throttled: each update re-renders the map screen, and the sensor reports many times a second.
  */
 export async function watchHeading(callback: (heading: Heading) => void): Promise<Location.LocationSubscription> {
   let smoothed: number | null = null;
+  let last: Heading | null = null;
+  let lastAt = 0;
   return Location.watchHeadingAsync((reading) => {
     const raw = reading.trueHeading >= 0 ? reading.trueHeading : reading.magHeading;
     smoothed = smoothAngle(smoothed, raw);
-    callback({ degrees: smoothed, reliable: reading.accuracy >= 2 });
+    const heading = { degrees: smoothed, reliable: reading.accuracy >= 2 };
+    const at = Date.now();
+    if (last && heading.reliable === last.reliable) {
+      const change = Math.abs(normalizeDegrees(heading.degrees - last.degrees + 180) - 180);
+      if (at - lastAt < HEADING_MIN_INTERVAL_MS || change < HEADING_MIN_CHANGE_DEG) return;
+    }
+    last = heading;
+    lastAt = at;
+    callback(heading);
   });
 }

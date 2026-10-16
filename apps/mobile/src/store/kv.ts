@@ -6,6 +6,8 @@ export const KV_KEYS = {
   snapshotVersion: 'snapshot_version',
   /** When the server was last asked for a newer snapshot (epoch ms). */
   snapshotCheckedAt: 'snapshot_checked_at',
+  /** After a server error, don't ask for the snapshot again before this time (epoch ms). */
+  snapshotRetryAt: 'snapshot_retry_at',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {

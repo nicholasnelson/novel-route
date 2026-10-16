@@ -63,9 +63,9 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         <Text style={styles.paragraph}>
           Library locations come from Street Library Australia. Novel Route is an independent project and isn&apos;t
           affiliated with Street Library Australia. Look after a library that isn&apos;t on the map?{' '}
-          <Text style={styles.link} onPress={() => Linking.openURL(REGISTER_LIBRARY_URL)}>Register it with them</Text>.
+          <Text style={styles.link} onPress={() => Linking.openURL(REGISTER_LIBRARY_URL).catch(() => {})}>Register it with them</Text>.
         </Text>
-        <Text style={[styles.paragraph, styles.link]} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+        <Text style={[styles.paragraph, styles.link]} onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>
           Privacy policy
         </Text>
       </ScrollView>

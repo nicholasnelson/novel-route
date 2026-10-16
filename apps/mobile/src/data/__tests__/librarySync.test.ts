@@ -97,6 +97,19 @@ describe('refreshTiles (server mode)', () => {
     expect(mockReportOnce.mock.calls[0][0]).toMatchObject({ name: 'ApiError', status: 503, message: 'Tile request failed: HTTP 503' });
   });
 
+  it('only reports an update when library data changed (pending tiles are re-requested often)', async () => {
+    const { refreshTiles } = loadSync('https://api.example');
+    const db = await createTestDb();
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'pending', [lib('sl:1')]) });
+    expect((await refreshTiles(db, [ADELAIDE], NOW)).updated).toBe(true);
+    expect((await refreshTiles(db, [ADELAIDE], NOW + 3000)).updated).toBe(false);
+
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'pending', [lib('sl:1'), lib('sl:2')]) });
+    expect((await refreshTiles(db, [ADELAIDE], NOW + 6000)).updated).toBe(true);
+    serve({ [ADELAIDE]: tileBody(ADELAIDE, 'fresh', [lib('sl:1'), lib('sl:2', true)]) });
+    expect((await refreshTiles(db, [ADELAIDE], NOW + 9000)).updated).toBe(true);
+  });
+
   it('does not report being offline or timing out', async () => {
     const { refreshTiles } = loadSync('https://api.example');
     const db = await createTestDb();
@@ -169,6 +182,26 @@ describe('refreshSnapshot', () => {
     serveSnapshot(snapshot('1-1-0', [['sl:1', 'Older', -34.92, 138.6, null, null, 0]]));
     await refreshSnapshot(db, NOW);
     expect((await getAllLibraries(db)).map((l) => l.title)).toEqual(['Newer']);
+  });
+
+  it('after a server error, waits an hour before asking again; offline, asks next time', async () => {
+    const { refreshSnapshot, SNAPSHOT_RETRY_MS } = loadSync('https://api.example');
+    const db = await createTestDb();
+    const fetchMock = jest.fn(async () => ({ ok: false, status: 503, headers: { get: () => null } }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(refreshSnapshot(db, NOW)).rejects.toThrow('HTTP 503');
+    expect(await refreshSnapshot(db, NOW + SNAPSHOT_RETRY_MS - 1)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(refreshSnapshot(db, NOW + SNAPSHOT_RETRY_MS)).rejects.toThrow('HTTP 503');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const offline = jest.fn(async () => { throw new TypeError('Network request failed'); });
+    global.fetch = offline as unknown as typeof fetch;
+    const later = NOW + 3 * SNAPSHOT_RETRY_MS;
+    await expect(refreshSnapshot(db, later)).rejects.toThrow('Network request failed');
+    await expect(refreshSnapshot(db, later + 1000)).rejects.toThrow('Network request failed');
+    expect(offline).toHaveBeenCalledTimes(2);
   });
 
   it('does nothing without a server (development mode)', async () => {

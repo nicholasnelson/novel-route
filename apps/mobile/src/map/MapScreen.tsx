@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -88,11 +88,23 @@ function directionsUrl(library: Library) {
   return `https://www.google.com/maps/dir/?api=1&destination=${library.latitude},${library.longitude}&travelmode=walking`;
 }
 
+/**
+ * A function that keeps its identity across renders but always calls the latest `fn`, so the
+ * (memoised) map isn't re-rendered by every GPS fix or compass reading. Only for event handlers.
+ */
+function useStableCallback<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  const ref = useRef(fn);
+  useLayoutEffect(() => { ref.current = fn; });
+  return useCallback((...args: A) => ref.current(...args), []);
+}
+
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<LibraryMapHandle>(null);
 
   const [db, setDb] = useState<Db | null>(null);
+  /** Bumped to open the database again after a failure (the error pill's Retry). */
+  const [dbAttempt, setDbAttempt] = useState(0);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [summaries, setSummaries] = useState<Map<string, VisitSummary>>(new Map());
   const [now, setNow] = useState(() => Date.now());
@@ -127,6 +139,8 @@ export default function MapScreen() {
   const regionTileRef = useRef<string | null>(null);
   const inFlightTilesRef = useRef(new Set<string>());
   const retryAttemptsRef = useRef(new Map<string, number>());
+  /** Tiles with a retry already scheduled: that retry requests them, so panning doesn't start another. */
+  const scheduledRetriesRef = useRef(new Set<string>());
   /** Retries scheduled but not yet sent; counts as "updating" for the status pill. */
   const [retriesScheduled, setRetriesScheduled] = useState(0);
   /**
@@ -162,14 +176,18 @@ export default function MapScreen() {
 
   // --- Data ---
 
+  // Only the latest reload's visits are shown (an earlier one may be for another library).
+  const visitsRequestRef = useRef(0);
   const reloadVisitState = useCallback(async (database: Db, libraryId: string | null) => {
+    const request = ++visitsRequestRef.current;
     setNow(Date.now());
     setSummaries(await getVisitSummaries(database));
-    setSelectedVisits(libraryId ? await getVisits(database, libraryId) : []);
+    const visits = libraryId ? await getVisits(database, libraryId) : [];
+    if (request === visitsRequestRef.current) setSelectedVisits(visits);
   }, []);
 
   const syncTiles = useCallback(async (database: Db, requested: string[]) => {
-    const tiles = requested.filter((c) => !inFlightTilesRef.current.has(c));
+    const tiles = requested.filter((c) => !inFlightTilesRef.current.has(c) && !scheduledRetriesRef.current.has(c));
     if (tiles.length === 0) return;
     tiles.forEach((c) => inFlightTilesRef.current.add(c));
     setInFlightCount((n) => n + 1);
@@ -203,8 +221,10 @@ export default function MapScreen() {
       if (retry.length > 0) {
         const delay = PENDING_RETRY_DELAYS_MS[Math.max(...retry.map((c) => attempts.get(c) ?? 0))];
         retry.forEach((c) => attempts.set(c, (attempts.get(c) ?? 0) + 1));
+        retry.forEach((c) => scheduledRetriesRef.current.add(c));
         setRetriesScheduled((n) => n + 1);
         setTimeout(() => {
+          retry.forEach((c) => scheduledRetriesRef.current.delete(c));
           setRetriesScheduled((n) => n - 1);
           syncTilesRef.current?.(database, retry);
         }, delay);
@@ -258,7 +278,7 @@ export default function MapScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [dbAttempt]);
 
   // The whole map from the server, on first launch and then at most daily (no-op otherwise).
   useEffect(() => {
@@ -291,17 +311,32 @@ export default function MapScreen() {
 
   // --- Location ---
 
+  // Permission can change in Settings while the app is in the background (e.g. after "Turn on").
+  useEffect(() => {
+    if (!appActive) return;
+    let cancelled = false;
+    getLocationPermission()
+      .then((perm) => { if (!cancelled) setPermission(perm); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [appActive]);
+
   useEffect(() => {
     if (!locationGranted || !appActive) return;
     let subscription: { remove(): void } | null = null;
     let cancelled = false;
     (async () => {
-      const first = await getCurrentPosition();
-      if (cancelled) return;
-      if (first) setPosition(first);
-      const sub = await watchPosition(setPosition);
-      if (cancelled) sub.remove();
-      else subscription = sub;
+      try {
+        const first = await getCurrentPosition();
+        if (cancelled) return;
+        if (first) setPosition(first);
+        const sub = await watchPosition(setPosition);
+        if (cancelled) sub.remove();
+        else subscription = sub;
+      } catch (err: any) {
+        // E.g. location services switched off: the map works without a position.
+        console.warn('Location unavailable:', err?.message);
+      }
     })();
     return () => { cancelled = true; subscription?.remove(); };
   }, [locationGranted, appActive]);
@@ -407,22 +442,24 @@ export default function MapScreen() {
 
   const toastLibraryTitle = toast ? libraries.find((l) => l.id === toast.libraryId)?.title : undefined;
 
-  const selectLibrary = (id: string) => {
+  const selectLibrary = useStableCallback((id: string) => {
     setSelectedId(id);
     if (seenHints && !seenHints.has('tap_library')) seeHint('tap_library');
-  };
+  });
 
   const openDetail = async (id: string) => {
+    // Don't show the previous library's visits while this one's load.
+    if (id !== selectedId) setSelectedVisits([]);
     setSelectedId(id);
     setDetailOpen(true);
     if (db) await reloadVisitState(db, id);
   };
 
   const openDirections = (library: Library) => {
-    Linking.openURL(directionsUrl(library));
+    Linking.openURL(directionsUrl(library)).catch((err) => console.warn('Could not open directions:', err?.message));
   };
 
-  const handleRegionChange = (next: MapRegion) => {
+  const handleRegionChange = useStableCallback((next: MapRegion) => {
     setRegion(next);
     if (!db || next.zoom < MIN_SYNC_ZOOM) return;
     // Nearest the centre first: in direct (development) mode only the first stale tile is fetched.
@@ -430,11 +467,13 @@ export default function MapScreen() {
     const key = [...tiles].sort().join(',');
     if (key === regionTileRef.current) return;
     regionTileRef.current = key;
-    // A new pan gives these tiles a fresh set of retries.
-    tiles.forEach((c) => retryAttemptsRef.current.delete(c));
+    // A new pan gives these tiles a fresh set of retries (unless one is already on its way).
+    tiles.forEach((c) => { if (!scheduledRetriesRef.current.has(c)) retryAttemptsRef.current.delete(c); });
     setGaveUpTiles((prev) => (tiles.some((c) => prev.has(c)) ? new Set([...prev].filter((c) => !tiles.includes(c))) : prev));
     syncTiles(db, tiles);
-  };
+  });
+
+  const deselectLibrary = useCallback(() => setSelectedId(null), []);
 
   const focusLibrary = (library: Library) => {
     selectLibrary(library.id);
@@ -446,6 +485,11 @@ export default function MapScreen() {
     region ? geohashesNearCenter(region.bounds, TILE_PRECISION, MAX_TILES_PER_VIEW) : [];
 
   const retrySync = () => {
+    if (dbFailed) {
+      setDbFailed(false);
+      setDbAttempt((n) => n + 1);
+      return;
+    }
     if (!db) return;
     // Clear the error now so the tap visibly does something ("Updating libraries…"); it comes
     // back if this attempt fails too.
@@ -620,6 +664,14 @@ export default function MapScreen() {
   }, [tapHintVisible, seeHint]);
 
   const topOffset = insets.top + 8;
+  const mapPadding = useMemo(
+    () => ({ top: topOffset + 44, bottom: bottomHeight + insets.bottom + 16 }),
+    [topOffset, bottomHeight, insets.bottom]
+  );
+  const followPadding = useMemo(
+    () => ({ top: topOffset + 44, bottom: FOLLOW_BOTTOM_PADDING + insets.bottom }),
+    [topOffset, insets.bottom]
+  );
   const detailLibrary = detailOpen ? selectedLibrary : null;
   const selectedSummary = selectedId ? summaries.get(selectedId) : undefined;
 
@@ -638,11 +690,11 @@ export default function MapScreen() {
         followUser={followUser}
         showUserLocation={locationGranted}
         showHeading={!!heading?.reliable}
-        padding={{ top: topOffset + 44, bottom: bottomHeight + insets.bottom + 16 }}
-        followPadding={{ top: topOffset + 44, bottom: FOLLOW_BOTTOM_PADDING + insets.bottom }}
+        padding={mapPadding}
+        followPadding={followPadding}
         ornamentTop={topOffset}
         onLibraryPress={selectLibrary}
-        onMapPress={() => setSelectedId(null)}
+        onMapPress={deselectLibrary}
         onRegionChange={handleRegionChange}
         onFollowUserChange={setFollowUser}
       />

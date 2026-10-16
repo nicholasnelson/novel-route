@@ -1,3 +1,4 @@
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { Alert, Linking, Platform } from 'react-native';
 
@@ -6,7 +7,8 @@ export const FEEDBACK_EMAIL = 'hello@novelroute.app';
 /** App version and device, so a report can be matched to a build. Never anything about location. */
 export function deviceSummary(): string {
   const version = Constants.expoConfig?.version ?? 'unknown';
-  const build = Constants.expoConfig?.android?.versionCode;
+  // The build number lives in the installed app, not app.json (EAS sets it: appVersionSource remote).
+  const build = Application.nativeBuildVersion;
   const app = `Novel Route ${version}${build ? ` (${build})` : ''}`;
   if (Platform.OS === 'android') {
     const { Release, Brand, Model } = Platform.constants;

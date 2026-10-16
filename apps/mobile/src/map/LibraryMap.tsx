@@ -215,7 +215,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     if (!feature) return;
 
     if (feature.properties?.cluster) {
-      const zoom = await sourceRef.current?.getClusterExpansionZoom(feature);
+      const zoom = await sourceRef.current?.getClusterExpansionZoom(feature).catch(() => undefined);
+      if (zoom === undefined) return;
       const coordinates = (feature.geometry as GeoJSON.Point).coordinates;
       onFollowUserChange(false);
       cameraRef.current?.setCamera({ centerCoordinate: coordinates, zoomLevel: zoom, animationDuration: 500 });
@@ -363,7 +364,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
   );
 });
 
-export default LibraryMap;
+// Memoised: the map screen re-renders on every GPS fix and compass reading, the map rarely needs to.
+export default React.memo(LibraryMap);
 
 const styles = StyleSheet.create({
   map: {

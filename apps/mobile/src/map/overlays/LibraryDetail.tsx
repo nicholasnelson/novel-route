@@ -223,7 +223,7 @@ function DetailContent({
         <View style={styles.actions}>
           <Action icon="walk" label="Directions" onPress={onDirections} />
           {library.permalink && (
-            <Action icon="book-outline" label="Street Library page" onPress={() => Linking.openURL(library.permalink!)} />
+            <Action icon="book-outline" label="Street Library page" onPress={() => Linking.openURL(library.permalink!).catch(() => {})} />
           )}
           <Action icon="share-outline" label="Share" onPress={share} />
         </View>

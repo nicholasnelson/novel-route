@@ -10,7 +10,7 @@ import {
 } from '@novel-route/shared';
 import { Db } from '../db/db';
 import { reportOnce } from '../monitoring/sentry';
-import { getTileFetchedAt, importSnapshot, setTileFetchedAt, upsertLibraries } from '../store/libraryStore';
+import { countChangedLibraries, getTileFetchedAt, importSnapshot, setTileFetchedAt, upsertLibraries } from '../store/libraryStore';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
 
 /**
@@ -78,6 +78,8 @@ export async function refreshTiles(db: Db, tiles: string[], now = Date.now()): P
     if (await isTileStale(db, tile, now)) stale.push(tile);
   }
   if (stale.length === 0) return { updated: false, pending: [], failed: [] };
+  // Calling Street Library from every phone is only acceptable in development (CLAUDE.md).
+  if (!API_URL && !__DEV__) throw new Error('EXPO_PUBLIC_API_URL is missing from this release build');
 
   return API_URL
     ? refreshFromServer(db, stale.slice(0, MAX_TILES_PER_VIEW), now)
@@ -116,6 +118,8 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
         failed.push(tile);
         continue;
       }
+      // Only redraw the map for real changes (a pending tile is re-requested every few seconds).
+      if (!updated && (await countChangedLibraries(db, body.libraries)) > 0) updated = true;
       // Requests run in parallel; the Db makes the writes take turns.
       await db.withTransactionAsync(async (tx) => {
         await upsertLibraries(tx, body.libraries.filter((l) => !l.removed), now);
@@ -123,7 +127,6 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
         // A pending tile's libraries so far are shown, but it stays stale so it's re-requested.
         if (body.status !== 'pending') await setTileFetchedAt(tx, tile, now);
       });
-      if (body.libraries.length > 0) updated = true;
       if (body.status === 'pending') pending.push(tile);
     }
   };
@@ -134,6 +137,8 @@ async function refreshFromServer(db: Db, tiles: string[], now: number): Promise<
 
 /** The server is asked for a newer snapshot at most this often. */
 export const SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** After a server error (not a connection problem), wait this long before asking again. */
+export const SNAPSHOT_RETRY_MS = 60 * 60 * 1000;
 /** A few hundred KB compressed, so allow for a slow connection. */
 const SNAPSHOT_TIMEOUT_MS = 60000;
 
@@ -150,11 +155,13 @@ export async function hasSnapshot(db: Db): Promise<boolean> {
  */
 export async function refreshSnapshot(db: Db, now = Date.now()): Promise<boolean> {
   if (!API_URL) return false;
-  const [version, checkedAt] = await Promise.all([
+  const [version, checkedAt, retryAt] = await Promise.all([
     getKv(db, KV_KEYS.snapshotVersion),
     getKv(db, KV_KEYS.snapshotCheckedAt),
+    getKv(db, KV_KEYS.snapshotRetryAt),
   ]);
   if (version !== null && checkedAt !== null && now - Number(checkedAt) < SNAPSHOT_MAX_AGE_MS) return false;
+  if (retryAt !== null && now < Number(retryAt)) return false;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
@@ -176,6 +183,10 @@ export async function refreshSnapshot(db: Db, now = Date.now()): Promise<boolean
       await setKv(tx, KV_KEYS.snapshotCheckedAt, String(now));
     });
     return true;
+  } catch (err) {
+    // Offline: try again next time. A server error: not on every resume.
+    if (!isConnectionError(err)) await setKv(db, KV_KEYS.snapshotRetryAt, String(now + SNAPSHOT_RETRY_MS));
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
