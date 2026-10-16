@@ -1,10 +1,13 @@
-# Type-check, lint and test every workspace (app, server, shared) on each push and PR.
+# Type-check, lint and test every workspace (app, server, shared, site) on each push and PR.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -15,15 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The migration check compares with the base commit.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          # Tests use node:sqlite (Node 22.5+).
-          node-version: 22
+          # Tests use node:sqlite (Node 22.5+); the version is pinned in .nvmrc.
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - name: Shipped migrations unchanged
+        run: node scripts/check-migrations.mjs "${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}"
+      - name: Expo SDK package versions match
+        run: npx expo install --check
+        working-directory: apps/mobile
       - name: Server bundles for Workers
         run: npx wrangler deploy --dry-run --outdir dist
         working-directory: apps/server

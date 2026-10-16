@@ -9,7 +9,8 @@
     "db:migrate:local": "wrangler d1 migrations apply novel-route --local",
     "db:migrate:remote": "wrangler d1 migrations apply novel-route --remote",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@novel-route/shared": "*",
