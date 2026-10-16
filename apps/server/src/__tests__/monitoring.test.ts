@@ -1,4 +1,4 @@
-import { fillAt, FAILURES_BEFORE_UNHEALTHY, UPSTREAM_MIN_INTERVAL_MS } from '../cache';
+import { fillAt, FAILURES_BEFORE_UNHEALTHY, UPSTREAM_BACKOFF_MS, UPSTREAM_MIN_INTERVAL_MS } from '../cache';
 import { app, default as worker } from '../index';
 import { checkIn, initMonitoring, parseDsn, reportError, resetMonitoring } from '../monitoring';
 import { createTestD1, mockUpstream } from './helpers';
@@ -12,7 +12,7 @@ type Call = [string, { body: string | FormData }];
 /** Fetch mock: Sentry envelopes are recorded; everything else (Street Library) fails with a 503. */
 function mockFetch() {
   const fetchMock = vi.fn(async (url: string, _init: unknown) =>
-    url.includes('sentry.io') ? { ok: true, status: 200 } : { ok: false, status: 503 }
+    url.includes('sentry.io') ? { ok: true, status: 200 } : { ok: false, status: 503, text: async () => 'Service Unavailable' }
   );
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
@@ -100,13 +100,20 @@ describe('upstream outage', () => {
     const fetchMock = mockFetch();
     initMonitoring(DSN);
     const db = createTestD1();
-    const start = Date.now();
-    // Calls spaced past the politeness interval, so each one reaches upstream.
+    let now = Date.now();
+    // Calls spaced past the politeness interval (the backoff, once failing), so each reaches upstream.
     for (let i = 0; i < FAILURES_BEFORE_UNHEALTHY + 2; i++) {
-      await expect(fillAt(db, ADELAIDE, start + i * UPSTREAM_MIN_INTERVAL_MS)).rejects.toThrow('HTTP 503');
+      now += i >= FAILURES_BEFORE_UNHEALTHY ? UPSTREAM_BACKOFF_MS : UPSTREAM_MIN_INTERVAL_MS;
+      await expect(fillAt(db, ADELAIDE, now)).rejects.toThrow('HTTP 503');
       const reports = envelopes(fetchMock).filter(([, item]) => item.type === 'event');
       expect(reports).toHaveLength(i + 1 >= FAILURES_BEFORE_UNHEALTHY ? 1 : 0);
     }
+    // While failing, calls back off: nothing reaches upstream until the backoff has passed.
+    const upstreamCalls = () => fetchMock.mock.calls.filter(([url]) => !url.includes('sentry.io')).length;
+    const before = upstreamCalls();
+    expect(await fillAt(db, ADELAIDE, now + UPSTREAM_MIN_INTERVAL_MS)).toBeNull();
+    expect(await fillAt(db, ADELAIDE, now + UPSTREAM_BACKOFF_MS - 1)).toBeNull();
+    expect(upstreamCalls()).toBe(before);
     expect(envelopes(fetchMock)[0][2].tags).toEqual({ where: 'upstream' });
 
     const health = await app.request('/v1/health', {}, { DB: db }, ctx);
@@ -115,7 +122,7 @@ describe('upstream outage', () => {
 
     // One success clears it.
     mockUpstream([{ id: '1', ...ADELAIDE }]);
-    await fillAt(db, ADELAIDE, start + 10 * UPSTREAM_MIN_INTERVAL_MS);
+    expect(await fillAt(db, ADELAIDE, now + UPSTREAM_BACKOFF_MS)).not.toBeNull();
     const recovered = await app.request('/v1/health', {}, { DB: db }, ctx);
     expect(recovered.status).toBe(200);
     expect(await recovered.json()).toMatchObject({ ok: true, problems: [] });

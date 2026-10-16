@@ -66,7 +66,7 @@ export function mockUpstream(libraries: UpstreamLibrary[], cap = 200) {
 
   const fetchMock = vi.fn(async (_url: string, init: { body: FormData }) => {
     const form = init.body;
-    const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+    const json = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
     if (form.get('action') === 'library_locator_get_nonce') return json({ success: true, data: { nonce: 'n1' } });
 
     const lat = Number(form.get('lat'));

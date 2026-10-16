@@ -104,6 +104,7 @@ describe('other endpoints', () => {
     expect(after.status).toBe(200);
     expect(await after.json()).toMatchObject({ ok: true, problems: [] });
     expect((await request('/v1/libraries/sl:nope', env)).status).toBe(404);
+    expect((await request('/v1/libraries/sl:999', env)).status).toBe(404);
     expect((await request('/nope', env)).status).toBe(404);
   });
 });

@@ -16,7 +16,13 @@ const REQUEST_HEADERS = {
 
 export const STREET_LIBRARY_ID_PREFIX = 'sl:';
 
-async function postForm(form: FormData): Promise<any> {
+/**
+ * WordPress's check_ajax_referer answers a bad or expired nonce with a bare `-1` (HTTP 403 on
+ * current versions, 200 on older ones) instead of the endpoint's JSON.
+ */
+const NONCE_REJECTED = Symbol('nonce rejected');
+
+async function postForm(form: FormData, { nonceCheck = false } = {}): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -26,10 +32,12 @@ async function postForm(form: FormData): Promise<any> {
       headers: REQUEST_HEADERS,
       signal: controller.signal,
     });
+    const text = await res.text();
+    if (nonceCheck && (res.ok || res.status === 403) && text.trim() === '-1') return NONCE_REJECTED;
     if (!res.ok) {
       throw new Error(`Street Library request failed: HTTP ${res.status}`);
     }
-    return await res.json();
+    return JSON.parse(text);
   } finally {
     clearTimeout(timeout);
   }
@@ -47,6 +55,11 @@ export async function getNonce(): Promise<string> {
   throw new Error('Failed to get nonce');
 }
 
+/** The app opens permalinks, so only accept pages on the Street Library site. */
+function isStreetLibraryUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https:\/\/(www\.)?streetlibrary\.org\.au\//i.test(value);
+}
+
 export function normalizeLibrary(item: any): Library | null {
   const latitude = parseFloat(item.latitude);
   const longitude = parseFloat(item.longitude);
@@ -62,7 +75,7 @@ export function normalizeLibrary(item: any): Library | null {
     latitude,
     longitude,
     excerpt: excerpt || undefined,
-    permalink: item.permalink || undefined,
+    permalink: isStreetLibraryUrl(item.permalink) ? item.permalink : undefined,
   };
 }
 
@@ -81,7 +94,8 @@ export async function fetchLibrariesForPoint({
   form.append('lng', String(lng));
   form.append('nonce', nonce);
 
-  const json = await postForm(form);
+  const json = await postForm(form, { nonceCheck: true });
+  if (json === NONCE_REJECTED) return { libraries: [], rawCount: 0, nonceExpired: true };
 
   if (json.success) {
     const raw: unknown = Array.isArray(json.data) ? json.data : json.data?.libraries;

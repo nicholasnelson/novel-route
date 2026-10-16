@@ -16,6 +16,7 @@ import {
   acquireTileLock,
   acquireUpstreamSlot,
   circlesInAreas,
+  claimTileBackground,
   deleteMeta,
   getMeta,
   getTile,
@@ -45,8 +46,21 @@ export const TILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const CIRCLE_RETENTION_MS = 48 * 60 * 60 * 1000;
 /** Global politeness limit on calls to the Street Library site. */
 export const UPSTREAM_MIN_INTERVAL_MS = 2000;
-/** How long a tile refresh may hold its single-flight lock. */
-export const FILL_LOCK_MS = 30 * 1000;
+/**
+ * How long a tile refresh may hold its single-flight lock: one upstream call can be up to four
+ * requests (nonce, fetch, nonce refresh, retry) of up to 15 s each.
+ */
+export const FILL_LOCK_MS = 70 * 1000;
+/** A tile's background fill claim (one loop per tile at a time); about waitUntil's 30 s limit. */
+export const BACKGROUND_CLAIM_MS = 30 * 1000;
+/** While upstream keeps failing, call it at most this often (instead of every 2 s). */
+export const UPSTREAM_BACKOFF_MS = 5 * 60 * 1000;
+/**
+ * Daily cap on upstream calls triggered by app requests (seeds have their own caps). Normal use
+ * is far below it; it stops anyone requesting random tiles from making us call Street Library
+ * every 2 s all day, and the D1 writes that go with each call.
+ */
+export const REQUEST_DAILY_CALL_CAP = 2000;
 /**
  * A request waits for at most one upstream call (never-complete tiles only). Further fills for
  * the tile continue in the background, paced by the politeness interval; the app re-requests
@@ -71,14 +85,17 @@ const NONCE_KEY = 'street_library_nonce';
 const LAST_SUCCESS_KEY = 'last_upstream_success';
 /** Consecutive upstream failures, as { since, count }; cleared by a success. */
 const UPSTREAM_FAILURES_KEY = 'upstream_failures';
+/** Upstream calls made for app requests today, as { day, count }. */
+const REQUEST_CALLS_KEY = 'request_calls';
 
 /** Failed upstream calls in a row before /v1/health reports it (and it's sent to Sentry). */
 export const FAILURES_BEFORE_UNHEALTHY = 3;
 /**
- * With no successful upstream call for this long, /v1/health reports it. Seeds make ~100 calls a
- * day, spread out as their circles age, so a long gap means the cron or upstream has stopped.
+ * With no successful upstream call for this long, /v1/health reports it. Seeds re-query their
+ * circles at 20 h (seeds.ts), and after a refill burst they can all be due at once, so a quiet
+ * day can go ~20 h without a call. A stopped cron also alerts through its Sentry check-in.
  */
-export const UPSTREAM_SUCCESS_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+export const UPSTREAM_SUCCESS_MAX_AGE_MS = 26 * 60 * 60 * 1000;
 
 /**
  * Removal circuit breaker: a refresh that would mark more than this many libraries removed, or
@@ -144,7 +161,10 @@ export async function fillAt(
   now: number,
   stats?: { writes: number }
 ): Promise<Circle | null> {
-  if (!(await acquireUpstreamSlot(db, now, UPSTREAM_MIN_INTERVAL_MS))) return null;
+  // Back off while upstream keeps failing: the slot then opens every few minutes, not every 2 s.
+  const failures = await getMeta(db, UPSTREAM_FAILURES_KEY);
+  const failing = failures !== null && (JSON.parse(failures) as UpstreamFailures).count >= FAILURES_BEFORE_UNHEALTHY;
+  if (!(await acquireUpstreamSlot(db, now, failing ? UPSTREAM_BACKOFF_MS : UPSTREAM_MIN_INTERVAL_MS))) return null;
 
   const cachedNonce = await getMeta(db, NONCE_KEY);
   let result: Awaited<ReturnType<typeof fetchLibrariesWithAutoNonce>>;
@@ -188,9 +208,9 @@ export async function fillAt(
     (await markRemoved(db, disappeared, now)) +
     (await insertCircle(db, circle, circleAreas(circle), now - CIRCLE_RETENTION_MS));
   if (stats) stats.writes += writes;
-  await setMeta(db, NONCE_KEY, nonce);
+  if (nonce !== cachedNonce) await setMeta(db, NONCE_KEY, nonce);
   await setMeta(db, LAST_SUCCESS_KEY, String(now));
-  await deleteMeta(db, UPSTREAM_FAILURES_KEY);
+  if (failures !== null) await deleteMeta(db, UPSTREAM_FAILURES_KEY);
   return circle;
 }
 
@@ -233,15 +253,40 @@ export async function tileState(db: D1Database, tile: string, now: number): Prom
   return { complete: true, completeAt: Math.min(...touching.map((c) => c.fetchedAt), now) };
 }
 
-/** One upstream call for the tile, under its single-flight lock. Returns whether it ran. */
+type RequestCalls = { day: string; count: number };
+const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
+
+/** Today's upstream calls for app requests (0 on a new UTC day). */
+async function requestCallsToday(db: D1Database, now: number): Promise<RequestCalls> {
+  const raw = await getMeta(db, REQUEST_CALLS_KEY);
+  const calls = raw ? (JSON.parse(raw) as RequestCalls) : null;
+  return calls?.day === utcDay(now) ? calls : { day: utcDay(now), count: 0 };
+}
+
+/**
+ * One upstream call for the tile, under its single-flight lock and within the daily cap for
+ * request-triggered calls. Returns whether it ran.
+ */
 async function fillTileOnce(db: D1Database, tile: string, point: LatLngLike, now: number): Promise<boolean> {
+  const calls = await requestCallsToday(db, now);
+  if (calls.count >= REQUEST_DAILY_CALL_CAP) return false;
+  const lockedUntil = now + FILL_LOCK_MS;
   if (!(await acquireTileLock(db, tile, now, FILL_LOCK_MS))) return false;
   try {
     const circle = await fillAt(db, point, now);
-    await releaseTileLock(db, tile);
-    return circle !== null;
+    await releaseTileLock(db, tile, lockedUntil, circle ? null : undefined);
+    if (!circle) return false;
+    // Read-modify-write, so concurrent requests can overshoot the cap slightly; it's a backstop.
+    calls.count++;
+    await setMeta(db, REQUEST_CALLS_KEY, JSON.stringify(calls));
+    if (calls.count === REQUEST_DAILY_CALL_CAP) {
+      await reportError(new Error(`Daily cap of ${REQUEST_DAILY_CALL_CAP} request-triggered upstream calls reached`), {
+        where: 'request-cap',
+      });
+    }
+    return true;
   } catch (err) {
-    await releaseTileLock(db, tile, err instanceof Error ? err.message : String(err));
+    await releaseTileLock(db, tile, lockedUntil, err instanceof Error ? err.message : String(err));
     console.error('Upstream fill failed', tile, err);
     // Upstream failures are reported by fillAt once they persist; anything else (D1) now.
     if (!(err instanceof UpstreamError)) await reportError(err, { where: 'fill' });
@@ -296,7 +341,8 @@ export async function getTileData(
       status = 'fresh';
     } else {
       status = completeAt === null ? 'pending' : 'stale';
-      defer(fillInBackground(db, tile, timing));
+      // One background loop per tile: other requests meanwhile just serve what's there.
+      if (await claimTileBackground(db, tile, now, BACKGROUND_CLAIM_MS)) defer(fillInBackground(db, tile, timing));
     }
   }
 
@@ -333,7 +379,7 @@ export async function getHealth(db: D1Database, now = Date.now()) {
     problems.push(`Street Library calls failing since ${new Date(failures.since).toISOString()}`);
   }
   if (!last || now - Number(last) > UPSTREAM_SUCCESS_MAX_AGE_MS) {
-    problems.push('No successful Street Library call in the last 12 hours');
+    problems.push(`No successful Street Library call in the last ${UPSTREAM_SUCCESS_MAX_AGE_MS / 3_600_000} hours`);
   }
   return { ok: problems.length === 0, lastUpstreamSuccess: last ? new Date(Number(last)).toISOString() : null, problems };
 }

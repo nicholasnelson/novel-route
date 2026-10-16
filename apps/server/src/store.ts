@@ -11,6 +11,7 @@ export type TileRow = {
   complete_at: number | null;
   refreshing_until: number | null;
   last_error: string | null;
+  background_until: number | null;
 };
 
 export type LibraryRow = {
@@ -56,11 +57,37 @@ export async function acquireTileLock(db: D1Database, tile: string, now: number,
   return meta.changes === 1;
 }
 
-export async function releaseTileLock(db: D1Database, tile: string, error: string | null = null): Promise<void> {
+/**
+ * Release the lock taken until `until`, unless it expired and someone else has taken it since.
+ * `error`: the call's error, null after a successful call, undefined when no call was made (the
+ * previous error stays).
+ */
+export async function releaseTileLock(
+  db: D1Database,
+  tile: string,
+  until: number,
+  error?: string | null
+): Promise<void> {
   await db
-    .prepare('UPDATE tiles SET refreshing_until = NULL, last_error = ? WHERE geohash = ?')
-    .bind(error, tile)
+    .prepare(
+      `UPDATE tiles SET refreshing_until = NULL, last_error = CASE WHEN ?1 THEN ?2 ELSE last_error END
+       WHERE geohash = ?3 AND refreshing_until = ?4`
+    )
+    .bind(error === undefined ? 0 : 1, error ?? null, tile, until)
     .run();
+}
+
+/** Claim the tile's background fill unless one is already running (it expires after `claimMs`). */
+export async function claimTileBackground(db: D1Database, tile: string, now: number, claimMs: number): Promise<boolean> {
+  const { meta } = await db
+    .prepare(
+      `INSERT INTO tiles (geohash, background_until) VALUES (?, ?)
+       ON CONFLICT(geohash) DO UPDATE SET background_until = excluded.background_until
+       WHERE tiles.background_until IS NULL OR tiles.background_until < ?`
+    )
+    .bind(tile, now + claimMs, now)
+    .run();
+  return meta.changes === 1;
 }
 
 /** Store a call's coverage circle under each area it overlaps, pruning those areas' old circles. */
@@ -146,7 +173,7 @@ export async function upsertLibraries(db: D1Database, libraries: Library[], now:
         .bind(
           lib.id,
           lib.title,
-          lib.excerpt ?? null,
+          null, // excerpt: the app doesn't show descriptions, so don't store (or rewrite) them
           lib.latitude,
           lib.longitude,
           encodeGeohash(lib.latitude, lib.longitude, LIBRARY_CELL_PRECISION),

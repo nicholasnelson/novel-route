@@ -111,8 +111,13 @@ app.get('/v1/snapshot', async (c) => {
   return c.body(body, 200, { 'Content-Type': 'application/json', ETag: etag!, 'Cache-Control': 'no-cache' });
 });
 
+/** Library IDs the server stores (Street Library posts); anything else can't exist. */
+const LIBRARY_ID = /^sl:\d{1,12}$/;
+
 app.get('/v1/libraries/:id', async (c) => {
-  const row = await getLibrary(c.env.DB, c.req.param('id'));
+  const id = c.req.param('id');
+  if (!LIBRARY_ID.test(id)) return c.json({ error: 'Not found' }, 404);
+  const row = await getLibrary(c.env.DB, id);
   if (!row) return c.json({ error: 'Not found' }, 404);
   return c.json(toApiLibrary(row));
 });

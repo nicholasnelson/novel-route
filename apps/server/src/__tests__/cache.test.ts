@@ -3,6 +3,7 @@ import {
   coverageRadius,
   fillAt,
   getTileData,
+  REQUEST_DAILY_CALL_CAP,
   SuspiciousPageError,
   TILE_MAX_AGE_MS,
   tooManyRemovals,
@@ -10,7 +11,7 @@ import {
   UPSTREAM_MIN_INTERVAL_MS,
 } from '../cache';
 import { reportError } from '../monitoring';
-import { acquireUpstreamSlot, getTile } from '../store';
+import { acquireUpstreamSlot, getTile, setMeta } from '../store';
 import { createTestD1, deferred, fakeTiming, libraryQueries, mockUpstream, UpstreamLibrary } from './helpers';
 
 vi.mock('../monitoring', async (importOriginal) => ({
@@ -75,10 +76,12 @@ describe('fillAt', () => {
     globalThis.fetch = vi.fn(async (_url: string, init: { body: FormData }) => ({
       ok: true,
       status: 200,
-      json: async () =>
-        init.body.get('action') === 'library_locator_get_nonce'
-          ? { success: true, data: { nonce: 'n1' } }
-          : { success: true, data: { libraries: items } },
+      text: async () =>
+        JSON.stringify(
+          init.body.get('action') === 'library_locator_get_nonce'
+            ? { success: true, data: { nonce: 'n1' } }
+            : { success: true, data: { libraries: items } }
+        ),
     })) as unknown as typeof fetch;
   }
 
@@ -210,6 +213,39 @@ describe('getTileData', () => {
     const refreshed = await getTileData(db, HOME, () => {}, timing);
     expect(refreshed.status).toBe('fresh');
     expect(refreshed.libraries.find((l) => l.id === 'sl:2')?.removed).toBe(true);
+  });
+
+  it('runs one background fill per tile at a time', async () => {
+    const db = createTestD1();
+    mockUpstream(denseCity());
+    const timing = fakeTiming(NOW);
+    const defer = vi.fn();
+
+    expect((await getTileData(db, HOME, defer, timing)).status).toBe('pending');
+    timing.advance(3000);
+    expect((await getTileData(db, HOME, defer, timing)).status).toBe('pending');
+    expect(defer).toHaveBeenCalledTimes(1);
+
+    timing.advance(30_000); // the first claim has expired
+    await getTileData(db, HOME, defer, timing);
+    expect(defer).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops request-triggered upstream calls at the daily cap, until the next UTC day', async () => {
+    const db = createTestD1();
+    const upstream = mockUpstream(sparse);
+    const today = new Date(NOW).toISOString().slice(0, 10);
+    await setMeta(db, 'request_calls', JSON.stringify({ day: today, count: REQUEST_DAILY_CALL_CAP }));
+    const timing = fakeTiming(NOW);
+    const background = deferred();
+
+    expect((await getTileData(db, HOME, background.defer, timing)).status).toBe('pending');
+    await background.settle();
+    expect(libraryQueries(upstream)).toBe(0);
+
+    timing.advance(24 * 60 * 60 * 1000);
+    expect((await getTileData(db, HOME, () => {}, timing)).status).toBe('fresh');
+    expect(libraryQueries(upstream)).toBe(1);
   });
 
   it('records upstream failures and leaves the tile pending', async () => {

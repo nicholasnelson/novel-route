@@ -49,6 +49,16 @@ describe('normalizeLibrary', () => {
     });
   });
 
+  it('drops permalinks that are not on the Street Library site', () => {
+    const item = { id: 1, title: 'x', latitude: '1', longitude: '2' };
+    expect(normalizeLibrary({ ...item, permalink: 'https://example.com/phish' })?.permalink).toBeUndefined();
+    expect(normalizeLibrary({ ...item, permalink: 'javascript:alert(1)' })?.permalink).toBeUndefined();
+    expect(normalizeLibrary({ ...item, permalink: 'https://streetlibrary.org.au.evil.com/' })?.permalink).toBeUndefined();
+    expect(normalizeLibrary({ ...item, permalink: 'https://www.streetlibrary.org.au/one/' })?.permalink).toBe(
+      'https://www.streetlibrary.org.au/one/'
+    );
+  });
+
   it('rejects items without an ID or valid coordinates', () => {
     expect(normalizeLibrary({ title: 'x', latitude: '1', longitude: '2' })).toBeNull();
     expect(normalizeLibrary({ id: 1, title: 'x', latitude: 'nope', longitude: '2' })).toBeNull();
@@ -56,9 +66,12 @@ describe('normalizeLibrary', () => {
 });
 
 describe('fetchLibrariesForPoint', () => {
-  const respond = (body: unknown) => {
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => body }) as unknown as typeof fetch;
+  const respondText = (text: string, status = 200) => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: status >= 200 && status < 300, status, text: async () => text }) as unknown as typeof fetch;
   };
+  const respond = (body: unknown) => respondText(JSON.stringify(body));
 
   it('treats locations outside Australia and New Zealand as having no libraries', async () => {
     respond({ success: false, data: 'Search location must be within Australia or New Zealand.' });
@@ -111,5 +124,22 @@ describe('fetchLibrariesForPoint', () => {
       rawCount: 0,
       nonceExpired: true,
     });
+  });
+
+  it.each([
+    ['HTTP 403', 403],
+    ['HTTP 200', 200],
+  ])("treats WordPress's bare -1 (%s) as an expired nonce", async (_label, status) => {
+    respondText('-1', status);
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).resolves.toEqual({
+      libraries: [],
+      rawCount: 0,
+      nonceExpired: true,
+    });
+  });
+
+  it('still fails on other HTTP errors', async () => {
+    respondText('Forbidden', 403);
+    await expect(fetchLibrariesForPoint({ lat: -34.9, lng: 138.6, nonce: 'n' })).rejects.toThrow('HTTP 403');
   });
 });

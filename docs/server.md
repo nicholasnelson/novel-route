@@ -35,14 +35,16 @@ The upstream returns the **200 nearest libraries** to a point, searching up to *
 
 **Filling a tile.** If it isn't complete, the next query point is chosen from the uncovered sample points: estimate the next circle's reach from the nearest existing circle, then pick the point that covers the most uncovered ground while still reaching the gap nearest the tile's centre (`nextQueryPoint`). Querying the gap itself wastes half of every circle; this placement cut a simulated dense tile from 53 calls to 33. When a tile becomes complete, `tiles.complete_at` is set to its oldest covering circle's time, so for the next 24 h it's served without reading circles.
 
-**Libraries** are stored by location with their precision-5 geohash (`libraries.cell`); a tile's libraries are an index range scan on that prefix. Rows are **only written when something changed**. If a library previously seen inside a new circle is missing from that call's results, `removed_at` is set instead of deleting it (it stays in users' visit history); the API returns it with `removed: true` and the app hides it. A removal circuit breaker guards against bad upstream pages: if one call would remove more than 20 libraries, or more than 10% of those known inside its circle (beyond a 2-library allowance), nothing is marked removed, no circle is stored and the call is reported to Sentry (`where: removal-breaker`). Whether a page was full (200 results) is judged by the raw item count before malformed items are dropped, and a `success` response without a libraries list is an upstream error.
+**Libraries** are stored by location with their precision-5 geohash (`libraries.cell`); a tile's libraries are an index range scan on that prefix. Rows are **only written when something changed**. Descriptions (`excerpt`) aren't stored (null since 2026-10-16): the app doesn't show them, and keeper edits cost writes. If a library previously seen inside a new circle is missing from that call's results, `removed_at` is set instead of deleting it (it stays in users' visit history); the API returns it with `removed: true` and the app hides it. A removal circuit breaker guards against bad upstream pages: if one call would remove more than 20 libraries, or more than 10% of those known inside its circle (beyond a 2-library allowance), nothing is marked removed, no circle is stored and the call is reported to Sentry (`where: removal-breaker`). Whether a page was full (200 results) is judged by the raw item count before malformed items are dropped, and a `success` response without a libraries list is an upstream error.
 
 Freshness and politeness:
 - A tile is `fresh` for **24 hours** from its oldest covering call.
-- **Single-flight per tile:** a lock (`tiles.refreshing_until`, 30 s) taken with an atomic conditional upsert.
+- **Single-flight per tile:** a lock (`tiles.refreshing_until`, 70 s: one call can be four 15 s requests) taken with an atomic conditional upsert, and released only by its holder.
 - **Global upstream limit:** at most 1 call every 2 seconds across the whole server (atomic compare-and-set on `meta.upstream_last_call`). A request that can't get a slot isn't queued; the tile comes back `pending` and the app retries.
-- A request waits for at most **one** upstream call (never-complete tiles only). Remaining gaps, or a stale tile's refresh, are filled in the background (`waitUntil`, up to 4 calls per request), paced by the 2 s interval. The app re-requests pending tiles with growing gaps for about 90 s.
-- Nonce cached server-side; on nonce expiry refresh and retry once.
+- A request waits for at most **one** upstream call (never-complete tiles only). Remaining gaps, or a stale tile's refresh, are filled in the background (`waitUntil`, up to 4 calls per request), paced by the 2 s interval. Only **one background fill per tile** runs at a time (`tiles.background_until`, 30 s); other requests meanwhile just get what's there. The app re-requests pending tiles with growing gaps for about 90 s.
+- **Backoff:** after 3 failed upstream calls in a row, calls are allowed every 5 minutes instead of every 2 s, until one succeeds.
+- **Daily cap on request-triggered calls:** 2,000 per UTC day (`meta.request_calls`; seeds have their own caps). Normal use is far below it; reaching it is reported to Sentry (`where: request-cap`), and tiles then stay as they are until the next UTC day.
+- Nonce cached server-side (written only when it changes); on nonce expiry, including WordPress's bare `-1` reply, refresh and retry once.
 
 **Edge cache.** Complete (`fresh`) tile responses are stored in the Workers Cache API for 1 hour, keyed by tile. It's per Cloudflare data centre, free, and doesn't touch D1; Australian users go through a handful of data centres, so popular tiles are nearly always cached. Pending tiles are never cached. A cached response can be up to an hour behind the database, which is fine for data that changes daily at most. (The Cache API only works on the custom domain, not on workers.dev.)
 
@@ -79,8 +81,8 @@ What this means:
 | Limit | Expected use |
 |---|---|
 | D1 reads, 5M/day | Only edge-cache misses reach D1. A fresh tile: 1 tile row + its libraries (up to a few hundred in a city). A non-fresh tile adds its area's recent circles (tens to ~100 rows). The snapshot reads every library (~6k rows) per miss, a few times a day per data centre. |
-| D1 writes, 100k/day | ~1–9 circle rows per call + changed libraries + a tile row, bounded by our own 1 call per 2 s. Seeds: ~100–150 calls, ~1.5k rows/day. |
-| Worker requests, 100k/day | Likely the first ceiling: every tile request runs the Worker, even on an edge-cache hit. |
+| D1 writes, 100k/day | ~1–9 circle rows per call + changed libraries + a few tile/meta rows. Bounded by the daily caps: request-triggered calls 2,000/day (~25k rows at most), seeds 300 calls and a 20k-row budget. |
+| Worker requests, 100k/day | Likely the first ceiling: every tile request runs the Worker, even on an edge-cache hit. One client looping at the per-IP limit could use it up in a few hours (see "Abuse protection"). |
 | Street Library | Seeds ~100–150 calls/day, plus on-view refreshes (at most once per area per 24 h, whatever the number of users). |
 
 If a limit is ever reached, the Workers paid plan ($5/month) raises all of them far beyond what the app will need.
@@ -114,7 +116,6 @@ One precision-4 geohash tile (e.g. `r1f9`, central Adelaide).
       "title": "Flinders St Baptist Courtyard Library",
       "latitude": -34.9272319,
       "longitude": 138.6031511,
-      "excerpt": "Let's Get Reading!! Free books to Take, Read and Share…",
       "permalink": "https://streetlibrary.org.au/library/flinders-st-baptist-courtyard-library/",
       "updatedAt": "2026-10-08T00:37:02Z",
       "removed": false
@@ -126,7 +127,7 @@ One precision-4 geohash tile (e.g. `r1f9`, central Adelaide).
 - `status`: `fresh` (complete within 24 h) | `stale` (was complete; served as-is while a refresh runs in the background) | `pending` (never complete yet: still filling, rate limited or upstream failed; the libraries found so far are included, and the app retries).
 - `fetchedAt`: the time of the tile's oldest covering call, or null if never complete. `updatedAt`: when the library last changed.
 - Only libraries inside the tile are returned. Tiles outside Australia/NZ answer `fresh` and empty without calling upstream.
-- The server normalises data: numeric lat/lng, HTML stripped and entities decoded in `excerpt`, whitespace trimmed in `title`.
+- The server normalises data: numeric lat/lng, HTML stripped, entities decoded and whitespace trimmed in `title`. `permalink` is only kept if it's a `streetlibrary.org.au` page (the app opens it). `excerpt` is no longer stored, so it's left out.
 - `ETag` / `If-None-Match` supported so unchanged responses are a cheap `304`.
 
 ### `GET /v1/snapshot`
@@ -148,7 +149,7 @@ Every library the server knows, so the app has the whole map from its first laun
 
 ### `GET /v1/libraries/:id`
 
-Single library (for deep links / detail refresh).
+Single library (for deep links / detail refresh). IDs other than `sl:<number>` are a 404 without a database read.
 
 ### `GET /v1/config`
 
@@ -156,7 +157,7 @@ Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported 
 
 ### `GET /v1/health`
 
-Last successful upstream call time, and `ok`. It's a **503** when the last 3 Street Library calls failed or none has succeeded for 12 h, so an uptime monitor catches upstream breakage, not just downtime (docs/monitoring.md).
+Last successful upstream call time, and `ok`. It's a **503** when the last 3 Street Library calls failed or none has succeeded for 26 h (seeds re-query at 20 h, so a quiet day can go ~20 h without a call; a stopped cron also alerts through its Sentry check-in), so an uptime monitor catches upstream breakage, not just downtime (docs/monitoring.md).
 
 Errors (e.g. the database unavailable) are a JSON `503`.
 
@@ -173,11 +174,12 @@ Errors (e.g. the database unavailable) are a JSON `503`.
 
 - Per-IP rate limit: 300 requests/min on `/v1/*` (Workers rate limiting binding). It's one request per tile, so a zoomed-out view with retries can need a few dozen a minute.
 - Tile IDs are validated (precision 4, geohash alphabet).
-- Upstream calls are only ever triggered by tile staleness, never directly by a client parameter, so clients can't make us hammer the Street Library site.
+- Upstream calls are only ever triggered by tile staleness, never directly by a client parameter. Requests for many never-seen tiles (e.g. random tiles in the outback) could still keep the server calling upstream every 2 s, so request-triggered calls are capped at 2,000 a day (above).
+- Not covered: the per-IP limit still lets one client make ~430k requests a day against the free plan's 100k Worker requests. A **Cloudflare WAF rate limiting rule** on `api.novelroute.app` (the free plan includes one) blocks at the edge before the Worker runs, so blocked requests don't count. The `workers.dev` address has no edge cache, so each snapshot request there reads the whole libraries table: turn it off (`"workers_dev": false`) once no tester build uses it.
 
 ## Data model
 
-`apps/server/migrations/`: `libraries` (with its precision-5 `cell`, `first_seen`, `last_seen` = last change, `removed_at`), `coverage` (`area`, centre, `radius_m`, `fetched_at`), `tiles` (`complete_at`, `refreshing_until`, `last_error`) and `meta` (upstream nonce, rate-limit slot, last upstream success, seed stats). `0002_coverage_circles.sql` replaced the old `cells` table.
+`apps/server/migrations/`: `libraries` (with its precision-5 `cell`, `first_seen`, `last_seen` = last change, `removed_at`), `coverage` (`area`, centre, `radius_m`, `fetched_at`), `tiles` (`complete_at`, `refreshing_until`, `last_error`, `background_until` from `0003_tile_background.sql`) and `meta` (upstream nonce, rate-limit slot, last upstream success and failures, seed stats, request-triggered calls today). `0002_coverage_circles.sql` replaced the old `cells` table.
 
 ## Privacy / logging
 

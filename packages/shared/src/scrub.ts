@@ -9,18 +9,24 @@ const COORDINATE = /-?\b\d{1,3}\.\d{3,}\b/g;
 const CELLS_PARAM = /cells=[^&\s"]*/g;
 // Geohash tiles in API paths, e.g. /v1/tiles/r1f9
 const TILE_PATH = /\/tiles\/[0-9a-z]+/gi;
+// Library IDs (each is a public library's exact location), e.g. sl:45760 or /v1/libraries/sl%3A45760
+const LIBRARY_PATH = /\/libraries\/[^/?#\s"]+/gi;
+const LIBRARY_ID = /\b(sl|c):[0-9a-f-]+/gi;
 
 export function scrubLocation(text: string): string {
   return text
     .replace(CELLS_PARAM, 'cells=[removed]')
     .replace(TILE_PATH, '/tiles/[removed]')
+    .replace(LIBRARY_PATH, '/libraries/[removed]')
+    .replace(LIBRARY_ID, '$1:[removed]')
     .replace(COORDINATE, '[coord]');
 }
 
-/** Recursively scrub every string in a JSON-like value. */
+/** Recursively scrub every string in a JSON-like value; anything nested deeper than 8 levels is dropped. */
 export function scrubDeep<T>(value: T, depth = 0): T {
-  if (depth > 8 || value == null) return value;
+  if (value == null) return value;
   if (typeof value === 'string') return scrubLocation(value) as T;
+  if (depth > 8 && typeof value === 'object') return '[truncated]' as T;
   if (Array.isArray(value)) return value.map((v) => scrubDeep(v, depth + 1)) as T;
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};

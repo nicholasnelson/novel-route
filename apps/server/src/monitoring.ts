@@ -6,7 +6,7 @@ import { scrubDeep } from '@novel-route/shared';
  * client per request, CPU the free plan doesn't have. This costs nothing until something fails.
  *
  * Privacy as in the app: no IPs or headers, only the request's method and path, and every string
- * passes through scrubDeep (coordinates, tile IDs). Disabled when SENTRY_DSN isn't set (tests,
+ * passes through scrubDeep (coordinates, tile and library IDs). Disabled when SENTRY_DSN isn't set (tests,
  * local dev).
  */
 
