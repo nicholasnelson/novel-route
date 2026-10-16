@@ -1,6 +1,6 @@
 # MVP data server
 
-Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (also `https://novel-route-api.novel-route-server.workers.dev`) (the owner's Cloudflare account; D1 `novel-route` in Oceania). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
+Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (the `workers.dev` address was turned off on 2026-10-17) (the owner's Cloudflare account; D1 `novel-route` in Oceania). Code: `apps/server`; deployment steps: [apps/server/README.md](../apps/server/README.md).
 
 ## Purpose
 
@@ -175,7 +175,7 @@ Errors (e.g. the database unavailable) are a JSON `503`.
 - Per-IP rate limit: 300 requests/min on `/v1/*` (Workers rate limiting binding). It's one request per tile, so a zoomed-out view with retries can need a few dozen a minute.
 - Tile IDs are validated (precision 4, geohash alphabet).
 - Upstream calls are only ever triggered by tile staleness, never directly by a client parameter. Requests for many never-seen tiles (e.g. random tiles in the outback) could still keep the server calling upstream every 2 s, so request-triggered calls are capped at 2,000 a day (above).
-- Not covered: the per-IP limit still lets one client make ~430k requests a day against the free plan's 100k Worker requests. A **Cloudflare WAF rate limiting rule** on `api.novelroute.app` (the free plan includes one) blocks at the edge before the Worker runs, so blocked requests don't count. The `workers.dev` address has no edge cache, so each snapshot request there reads the whole libraries table: turn it off (`"workers_dev": false`) once no tester build uses it.
+- Not covered: the per-IP limit still lets one client make ~430k requests a day against the free plan's 100k Worker requests. A **Cloudflare WAF rate limiting rule** on `api.novelroute.app` (the free plan includes one) blocks at the edge before the Worker runs, so blocked requests don't count. The `workers.dev` address had no edge cache (each snapshot request there read the whole libraries table), so it's off (`"workers_dev": false`).
 
 ## Data model
 

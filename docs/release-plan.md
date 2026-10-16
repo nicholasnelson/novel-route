@@ -124,7 +124,7 @@ Plan:
 - [x] Visit log (visit-log.md), including migration of existing visited IDs and `sl:` ID prefix
 - [x] Mapbox account and dedicated public token (in `.env.local`, not in git)
 - [x] Token as an EAS env var (all environments, plaintext)
-- [ ] Mapbox usage alerts (maps.md)
+- [x] Mapbox usage alerts (maps.md)
 - [x] Map spike on the emulator: 3,000 points, freshness colours, clustering, taps
 - [ ] Repeat the map check on a real mid-range Android phone
 - [x] Replace WebView/Leaflet with `LibraryMap` on `@rnmapbox/maps`; remove `react-native-webview`
@@ -136,18 +136,18 @@ Plan:
 - [x] Monitoring in code: `/v1/health` 503 on upstream failure, server errors and seed cron check-ins to Sentry, app sync failures (docs/monitoring.md)
 - [x] Monitoring setup in Sentry (docs/monitoring.md "One-off setup"): server project + `SENTRY_DSN` secret, uptime monitor on `/v1/health`, alert rules on every new or regressed issue, `seed-cron` alerts, Spike Protection
 - [ ] Play Console Android vitals emails; domain auto-renew check (docs/monitoring.md step 4)
-- [ ] App spike alert rule in Sentry, before public release (docs/monitoring.md step 3)
+- [x] App spike alert rule in Sentry, before public release (docs/monitoring.md step 3)
 - [x] "About" screen: privacy policy link, data source disclaimer (in the map key; Mapbox attribution stays on the map itself)
 
 ### Phase 2 — Closed testing (≥14 days)
-- [ ] Play Console app created; Play App Signing with EAS-managed keystore
+- [x] Play Console app created; Play App Signing with EAS-managed keystore (local builds use the same EAS key)
 - [x] Landing page and privacy policy live at https://novelroute.app (`apps/site`, Cloudflare)
 - [x] API at https://api.novelroute.app; EAS `EXPO_PUBLIC_API_URL` points there
 - [x] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
-- [ ] Privacy policy URL in Play Console (already linked from the app's map key)
+- [x] Privacy policy URL in Play Console (also linked from the app's map key)
 - [x] Update the privacy policy when the server replaces the direct Street Library calls
 - [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
-- [ ] Confirm target API level and 16 KB page size compliance with the upgraded SDK
+- [x] Confirm target API level and 16 KB page size compliance with the upgraded SDK (build 8: target and compile SDK 36, min 24; all 40 64-bit native libraries 16 KB aligned; checked 2026-10-17)
 - [x] Google Group `novel-route-testers` created (settings above)
 - [x] Google Group set as the closed track's testers (2026-10-09)
 - [x] Testers page (https://novelroute.app/testing) and in-app *Send feedback*

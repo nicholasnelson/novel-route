@@ -4,9 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
-  // Served at api.novelroute.app (Cloudflare creates the DNS record and certificate) and on workers.dev.
+  // Served only at api.novelroute.app (Cloudflare creates the DNS record and certificate). Not on
+  // workers.dev: the edge cache doesn't work there, so every snapshot request would read all of D1.
   "routes": [{ "pattern": "api.novelroute.app", "custom_domain": true }],
-  "workers_dev": true,
+  "workers_dev": false,
   // Seed areas: keeps the major cities covered, up to 3 Street Library calls per run (src/seeds.ts).
   "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
