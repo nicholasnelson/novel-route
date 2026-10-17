@@ -98,6 +98,8 @@ const SLOW_FIRST_LOAD_MS = 1200;
 const LIST_PICK_ZOOM = 16;
 /** Recent visits shown on the visits screen. */
 const RECENT_VISITS = 5;
+/** "Show on map" frames at least this far around each circle's centre. */
+const MIN_FRAME_RADIUS_M = 250;
 /** Lets one floating panel close before the next opens (they're separate modals). */
 const PANEL_SWAP_MS = 250;
 
@@ -612,10 +614,12 @@ export default function MapScreen() {
     setSelectedId(null);
     closeWalk();
     setCirclesShown(true);
-    const outer = circles?.reach ?? circles?.cleared;
-    if (outer) {
-      mapRef.current?.frame(circleRing(outer, 8).map(([longitude, latitude]) => ({ latitude, longitude })));
-    }
+    // Frame both circles (at least a few streets across, so a tiny one doesn't zoom in forever).
+    const shown = [circles?.reach, circles?.cleared].filter((c): c is NonNullable<typeof c> => !!c);
+    const points = shown.flatMap((c) =>
+      circleRing({ ...c, radiusM: Math.max(c.radiusM, MIN_FRAME_RADIUS_M) }, 8).map(([longitude, latitude]) => ({ latitude, longitude }))
+    );
+    if (points.length > 0) mapRef.current?.frame(points);
   };
 
   const openFromVisits = (id: string) => {

@@ -417,11 +417,14 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         />
       </ShapeSource>
 
+      {/* Clusters (white rings with a count) look like walk stop numbers, so a walk turns them off.
+          Clustering can't change on a live source, hence the key. */}
       <ShapeSource
+        key={walk ? 'libraries-unclustered' : 'libraries'}
         id="libraries"
         ref={sourceRef}
         shape={shape}
-        cluster
+        cluster={!walk}
         clusterRadius={44}
         clusterMaxZoomLevel={13}
         clusterProperties={{ unvisited: ['+', ['get', 'unvisited']] }}

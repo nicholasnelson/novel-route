@@ -5,7 +5,8 @@ import { LatLng } from '../types';
  * "Your circles" on the visits screen (docs/ux.md):
  * - cleared: the largest circle around one of your visited libraries with no unvisited library
  *   inside; of those, the one holding the most visited libraries (then the larger).
- * - reach: the smallest circle around every library you've visited.
+ * - reach: the smallest circle around every library you've visited (from two libraries: one
+ *   alone is a point).
  */
 export type GeoCircle = { center: LatLng; radiusM: number; libraries: number };
 
@@ -77,7 +78,7 @@ function minimalCircle(points: Point[]): PlaneCircle {
 }
 
 export function reachCircle(visited: LatLng[]): GeoCircle | null {
-  if (visited.length === 0) return null;
+  if (visited.length < 2) return null;
   // A flat projection around the points' middle: plenty accurate at city to state scale.
   const lat0 = visited.reduce((s, v) => s + v.latitude, 0) / visited.length;
   const lng0 = visited.reduce((s, v) => s + v.longitude, 0) / visited.length;

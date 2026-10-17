@@ -97,6 +97,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
                   detail={reach.libraries === 1 ? 'The library you’ve visited' : `All ${reach.libraries} libraries you’ve visited`}
                 />
               )}
+              {!reach && <Text style={styles.circleNote}>Visit a second library to measure your reach.</Text>}
               <Pressable onPress={onShowCircles} accessibilityRole="button" hitSlop={8} style={styles.link}>
                 <Ionicons name="map-outline" size={16} color={colors.green} />
                 <Text style={styles.linkText}>Show on map</Text>
@@ -265,6 +266,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
+  },
+  circleNote: {
+    fontSize: 12.5,
+    color: colors.inkSoft,
+    paddingVertical: 4,
   },
   link: {
     flexDirection: 'row',

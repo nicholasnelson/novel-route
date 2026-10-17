@@ -37,8 +37,8 @@ describe('reachCircle', () => {
     expect(c.libraries).toBe(4);
   });
 
-  it('handles one library and many in a row', () => {
-    expect(reachCircle([P(0, 0)])!.radiusM).toBeCloseTo(0, 3);
+  it('needs two libraries, and handles many in a row', () => {
+    expect(reachCircle([P(0, 0)])).toBeNull();
     const row = [0, 1, 2, 3, 4].map((i) => P(i * 0.001, 0));
     expect(reachCircle(row)!.radiusM).toBeCloseTo(dist(row[0], row[4]) / 2, -1);
   });
