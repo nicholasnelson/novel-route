@@ -8,6 +8,8 @@ export const KV_KEYS = {
   snapshotCheckedAt: 'snapshot_checked_at',
   /** After a server error, don't ask for the snapshot again before this time (epoch ms). */
   snapshotRetryAt: 'snapshot_retry_at',
+  /** "1" when the map shows only libraries due for a visit. */
+  dueOnly: 'map_due_only',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {

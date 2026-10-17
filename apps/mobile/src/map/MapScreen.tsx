@@ -3,16 +3,21 @@ import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
-import LibraryMap, { LibraryMapHandle, MapRegion } from './LibraryMap';
+import LibraryMap, { CirclesOverlay, LibraryMapHandle, MapRegion, WalkOverlay } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
+import LibraryList from './overlays/LibraryList';
 import MapKey from './overlays/MapKey';
+import YourVisits, { RecentVisit } from './overlays/YourVisits';
 import {
+  CirclesCard,
   DirectionReference,
   HintCard,
   LibraryPreviewCard,
   NearbyCard,
   UndoToast,
+  WalkCard,
 } from './overlays/cards';
+import { estimatePlan, PlannedWalk, planWalk } from './routing';
 import { MapControls, StatusPill, StatusPillKind } from './overlays/chrome';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
@@ -32,12 +37,18 @@ import {
   clearVisits,
   deleteVisit,
   DUPLICATE_VISIT_WINDOW_MS,
+  getRecentVisits,
   getVisits,
   getVisitSummaries,
+  getVisitTimes,
   logVisit,
   restoreVisit,
 } from '../store/visitLog';
 import { freshnessFor } from '../store/freshness';
+import { getKv, KV_KEYS, setKv } from '../store/kv';
+import { streakFromVisits, visitsThisMonth } from '../store/stats';
+import { circleAreaKm2, circleRing, clearedCircle, formatArea, reachCircle } from '../geo/circles';
+import { googleMapsWalkUrl } from '../geo/walk';
 import { getPromptedToday, markPrompted, nearbyCardState } from '../store/nearby';
 import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
 import { formatDistance } from '../geo/bearing';
@@ -83,6 +94,12 @@ const MIN_COURSE_SPEED = 0.8;
 const UNDO_TIMEOUT_MS = 6000;
 /** With the whole map on the device, a first look at an area shows "Updating" after this long. */
 const SLOW_FIRST_LOAD_MS = 1200;
+/** Zoom when a library is picked from the list. */
+const LIST_PICK_ZOOM = 16;
+/** Recent visits shown on the visits screen. */
+const RECENT_VISITS = 5;
+/** Lets one floating panel close before the next opens (they're separate modals). */
+const PANEL_SWAP_MS = 250;
 
 function directionsUrl(library: Library) {
   return `https://www.google.com/maps/dir/?api=1&destination=${library.latitude},${library.longitude}&travelmode=walking`;
@@ -121,6 +138,19 @@ export default function MapScreen() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedVisits, setSelectedVisits] = useState<Visit[]>([]);
   const [mapKeyOpen, setMapKeyOpen] = useState(false);
+  /** Only libraries due for a visit on the map (and in the list). Remembered between launches. */
+  const [dueOnly, setDueOnly] = useState(false);
+  /** The list panel, open as a list or straight into the walk planner. */
+  const [listOpen, setListOpen] = useState<{ planning: boolean; initialStops: string[] } | null>(null);
+  /** A planned walk: its stops (in the order picked) and the route, once worked out. */
+  const [walkStops, setWalkStops] = useState<Library[] | null>(null);
+  const [walkPlan, setWalkPlan] = useState<PlannedWalk | null>(null);
+  const [walkLoading, setWalkLoading] = useState(false);
+  const walkRequestRef = useRef(0);
+  const [visitsOpen, setVisitsOpen] = useState(false);
+  const [visitTimes, setVisitTimes] = useState<number[]>([]);
+  const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
+  const [circlesShown, setCirclesShown] = useState(false);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [toast, setToast] = useState<Visit | null>(null);
   const [region, setRegion] = useState<MapRegion | null>(null);
@@ -256,15 +286,17 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, snapshot, visitSummaries, hints, perm] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm, due] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
           hasSnapshot(database),
           getVisitSummaries(database),
           getSeenHints(database),
           getLocationPermission(),
+          getKv(database, KV_KEYS.dueOnly),
         ]);
         if (cancelled) return;
+        setDueOnly(due === '1');
         setLibraries(libs);
         setLoadedTiles(loaded);
         setSnapshotReady(snapshot);
@@ -501,6 +533,104 @@ export default function MapScreen() {
     if (tiles.length > 0) syncTiles(db, tiles.slice(0, MAX_TILES_PER_VIEW));
   };
 
+  // --- Due filter, list, walk planner, your visits ---
+
+  const changeDueOnly = (value: boolean) => {
+    setDueOnly(value);
+    if (db) setKv(db, KV_KEYS.dueOnly, value ? '1' : '0').catch(() => {});
+  };
+
+  /** Distances in the list and the walk start from you, or the middle of the map without location. */
+  const origin: LatLng = location ?? region?.center ?? AUSTRALIA;
+
+  const pickFromList = (id: string) => {
+    setListOpen(null);
+    const library = libraries.find((l) => l.id === id);
+    selectLibrary(id);
+    if (library) mapRef.current?.centerOn(library, LIST_PICK_ZOOM);
+  };
+
+  const showRoute = (ids: string[]) => {
+    setListOpen(null);
+    setSelectedId(null);
+    setCirclesShown(false);
+    const stops = ids.map((id) => libraries.find((l) => l.id === id)).filter((l): l is Library => !!l);
+    if (stops.length === 0) return;
+    const start = origin;
+    const request = ++walkRequestRef.current;
+    setWalkStops(stops);
+    // The straight-line plan straight away; the route along paths replaces it when it arrives.
+    setWalkPlan(estimatePlan(start, stops));
+    setWalkLoading(true);
+    mapRef.current?.frame([start, ...stops]);
+    planWalk(start, stops)
+      .then((plan) => { if (request === walkRequestRef.current) setWalkPlan(plan); })
+      .finally(() => { if (request === walkRequestRef.current) setWalkLoading(false); });
+  };
+
+  const closeWalk = () => {
+    walkRequestRef.current++;
+    setWalkStops(null);
+    setWalkPlan(null);
+    setWalkLoading(false);
+  };
+
+  const startWalk = () => {
+    if (!walkStops || !walkPlan) return;
+    const ordered = walkPlan.order.map((i) => walkStops[i]);
+    Linking.openURL(googleMapsWalkUrl(ordered)).catch((err) => console.warn('Could not open Google Maps:', err?.message));
+  };
+
+  const walkOverlay = useMemo<WalkOverlay | null>(
+    () => (walkStops && walkPlan ? { lines: walkPlan.lines, stops: walkPlan.order.map((i) => walkStops[i]) } : null),
+    [walkStops, walkPlan]
+  );
+
+  const openVisits = async () => {
+    if (!db) return;
+    const [times, recent] = await Promise.all([getVisitTimes(db), getRecentVisits(db, RECENT_VISITS)]);
+    setVisitTimes(times);
+    setRecentVisits(recent);
+    setNow(Date.now());
+    setVisitsOpen(true);
+  };
+
+  // Your circles: worked out only while the visits screen or the circles are showing.
+  const circles = useMemo<CirclesOverlay | null>(() => {
+    if (!visitsOpen && !circlesShown) return null;
+    const visited = libraries.filter((l) => summaries.has(l.id));
+    const unvisited = libraries.filter((l) => !summaries.has(l.id));
+    return { cleared: clearedCircle(visited, unvisited), reach: reachCircle(visited) };
+  }, [visitsOpen, circlesShown, libraries, summaries]);
+  const circleStats = {
+    cleared: circles?.cleared ? { area: formatArea(circleAreaKm2(circles.cleared)), libraries: circles.cleared.libraries } : null,
+    reach: circles?.reach ? { area: formatArea(circleAreaKm2(circles.reach)), libraries: circles.reach.libraries } : null,
+  };
+
+  const showCircles = () => {
+    setVisitsOpen(false);
+    setSelectedId(null);
+    closeWalk();
+    setCirclesShown(true);
+    const outer = circles?.reach ?? circles?.cleared;
+    if (outer) {
+      mapRef.current?.frame(circleRing(outer, 8).map(([longitude, latitude]) => ({ latitude, longitude })));
+    }
+  };
+
+  const openFromVisits = (id: string) => {
+    setVisitsOpen(false);
+    setTimeout(() => openDetail(id), PANEL_SWAP_MS);
+  };
+
+  const recent: RecentVisit[] = recentVisits.map((v) => ({
+    id: v.id,
+    libraryId: v.libraryId,
+    title: libraries.find((l) => l.id === v.libraryId)?.title ?? 'A library no longer listed',
+    visitedAt: v.visitedAt,
+    freshness: freshnessFor(summaries.get(v.libraryId), now),
+  }));
+
   // --- Status pill (top) ---
 
   // Which parts of the view have library data on the device. Tiles that haven't loaded get a
@@ -546,12 +676,14 @@ export default function MapScreen() {
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
+  else if (dueOnly) pill = 'due-only';
 
   const handlePillAction = () => {
     if (pill === 'error') retrySync();
     else if (pill === 'zoom-in') mapRef.current?.zoomTo(MIN_SYNC_ZOOM + 1);
     else if (pill === 'not-loaded') retrySync();
     else if (pill === 'location-off') askForLocation();
+    else if (pill === 'due-only') changeDueOnly(false);
   };
 
   // --- Bottom slot: one card at a time, highest priority first ---
@@ -582,6 +714,21 @@ export default function MapScreen() {
         onClose={() => setSelectedId(null)}
       />
     );
+  } else if (walkStops && walkPlan) {
+    bottomCard = (
+      <WalkCard
+        stops={walkStops.length}
+        meters={walkPlan.meters}
+        minutes={walkPlan.minutes}
+        onStreets={walkPlan.source === 'streets'}
+        loading={walkLoading}
+        onStart={startWalk}
+        onEdit={() => setListOpen({ planning: true, initialStops: walkStops.map((l) => l.id) })}
+        onClose={closeWalk}
+      />
+    );
+  } else if (circlesShown && circles) {
+    bottomCard = <CirclesCard cleared={circleStats.cleared} reach={circleStats.reach} onClose={() => setCirclesShown(false)} />;
   } else if (showLocationExplainer) {
     bottomCard = (
       <HintCard
@@ -685,6 +832,9 @@ export default function MapScreen() {
         selectedId={selectedId}
         loadedTiles={loadedTiles}
         allLoaded={snapshotReady}
+        dueOnly={dueOnly}
+        walk={walkOverlay}
+        circles={circlesShown ? circles : null}
         initialCenter={AUSTRALIA}
         initialZoom={AUSTRALIA_ZOOM}
         followUser={followUser}
@@ -709,7 +859,11 @@ export default function MapScreen() {
         <MapControls
           following={followUser && locationGranted}
           locationAvailable={locationGranted}
+          dueOnly={dueOnly}
           onLocate={() => (locationGranted ? setFollowUser(true) : askForLocation())}
+          onShowList={() => setListOpen({ planning: false, initialStops: [] })}
+          onToggleDueOnly={() => changeDueOnly(!dueOnly)}
+          onShowVisits={openVisits}
           onShowKey={() => setMapKeyOpen(true)}
         />
       </View>
@@ -757,6 +911,37 @@ export default function MapScreen() {
         }}
         onDirections={() => detailLibrary && openDirections(detailLibrary)}
         onClose={() => setDetailOpen(false)}
+      />
+
+      <LibraryList
+        visible={listOpen !== null}
+        planning={listOpen?.planning ?? false}
+        initialStops={listOpen?.initialStops ?? []}
+        libraries={libraries}
+        summaries={summaries}
+        now={now}
+        origin={origin}
+        originIsUser={!!location}
+        dueOnly={dueOnly}
+        onDueOnlyChange={changeDueOnly}
+        onSelectLibrary={pickFromList}
+        onShowRoute={showRoute}
+        onClose={() => setListOpen(null)}
+      />
+
+      <YourVisits
+        visible={visitsOpen}
+        streak={visitsOpen ? streakFromVisits(visitTimes, now) : null}
+        libraries={summaries.size}
+        visits={visitTimes.length}
+        thisMonth={visitsThisMonth(visitTimes, now)}
+        cleared={circleStats.cleared}
+        reach={circleStats.reach}
+        recent={recent}
+        now={now}
+        onShowCircles={showCircles}
+        onOpenLibrary={openFromVisits}
+        onClose={() => setVisitsOpen(false)}
       />
 
       <MapKey visible={mapKeyOpen} onClose={() => setMapKeyOpen(false)} />

@@ -5,6 +5,7 @@ import { Freshness, Library, VisitSummary } from '../../types';
 import { NearbyCardState, visitedToday } from '../../store/nearby';
 import { describeLastVisit } from '../../store/freshness';
 import { compassPoint, formatDistance, normalizeDegrees } from '../../geo/bearing';
+import { formatDuration } from '../../geo/walk';
 import { LARGE_MARKER_IMAGES } from '../markerImages';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 
@@ -211,6 +212,90 @@ export function LibraryPreviewCard({ library, freshness, summary, now, distance,
   );
 }
 
+// --- Planned walk ---
+
+export function WalkCard({ stops, meters, minutes, onStreets, loading, onStart, onEdit, onClose }: {
+  stops: number;
+  meters: number;
+  minutes: number;
+  /** The route follows real paths (Mapbox); otherwise it's a straight-line estimate. */
+  onStreets: boolean;
+  /** Still asking for the route along streets. */
+  loading: boolean;
+  onStart(): void;
+  onEdit(): void;
+  onClose(): void;
+}) {
+  const kind = onStreets ? 'along footpaths' : 'straight-line estimate';
+  return (
+    <BottomCard>
+      <View style={styles.row}>
+        <View style={styles.grow}>
+          <Text style={styles.kicker}>Your walk</Text>
+          <Text style={styles.title}>{stops === 1 ? '1 library' : `${stops} libraries`}</Text>
+          <Text style={styles.sub} numberOfLines={2}>
+            {loading
+              ? 'Finding the best route…'
+              : `About ${formatDistance(meters)} round trip · ${formatDuration(minutes)} (${kind})`}
+          </Text>
+        </View>
+        <CloseButton onPress={onClose} label="Close walk" />
+      </View>
+      <View style={styles.buttons}>
+        <PrimaryButton label="Start in Google Maps" icon="walk" onPress={onStart} style={styles.flex} />
+        <Pressable
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel="Change stops"
+          style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="list" size={20} color={colors.ink} />
+        </Pressable>
+      </View>
+    </BottomCard>
+  );
+}
+
+// --- Your circles ---
+
+export function CirclesCard({ cleared, reach, onClose }: {
+  cleared: { area: string; libraries: number } | null;
+  reach: { area: string; libraries: number } | null;
+  onClose(): void;
+}) {
+  return (
+    <BottomCard>
+      <View style={styles.row}>
+        <View style={styles.grow}>
+          <Text style={styles.kicker}>Your circles</Text>
+          {cleared && <CircleRow kind="cleared" label="Cleared" area={cleared.area} libraries={cleared.libraries} />}
+          {reach && <CircleRow kind="reach" label="Reach" area={reach.area} libraries={reach.libraries} />}
+        </View>
+        <CloseButton onPress={onClose} label="Hide circles" />
+      </View>
+    </BottomCard>
+  );
+}
+
+export function CircleRow({ kind, label, area, libraries, detail }: {
+  kind: 'cleared' | 'reach';
+  label: string;
+  area: string;
+  libraries: number;
+  detail?: string;
+}) {
+  return (
+    <View style={styles.circleRow} accessible accessibilityLabel={`${label} circle: ${area}, ${libraries} libraries. ${detail ?? ''}`}>
+      <View style={[styles.swatch, kind === 'cleared' ? styles.swatchCleared : styles.swatchReach]} />
+      <View style={styles.grow}>
+        <Text style={styles.circleLabel}>{label}</Text>
+        <Text style={styles.circleDetail} numberOfLines={2}>{detail ?? (libraries === 1 ? '1 library' : `${libraries} libraries`)}</Text>
+      </View>
+      <Text style={styles.circleArea}>{area}</Text>
+    </View>
+  );
+}
+
 // --- Hint card ---
 
 export function HintCard({ title, body, actions, onDismiss }: {
@@ -399,6 +484,48 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: '600',
+  },
+  roundButton: {
+    width: TOUCH - 4,
+    height: TOUCH - 4,
+    borderRadius: (TOUCH - 4) / 2,
+    backgroundColor: colors.greenTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 5,
+  },
+  swatch: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.green,
+  },
+  swatchCleared: {
+    backgroundColor: 'rgba(31, 143, 58, 0.22)',
+  },
+  swatchReach: {
+    borderStyle: 'dashed',
+  },
+  circleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  circleDetail: {
+    fontSize: 12.5,
+    color: colors.inkSoft,
+  },
+  circleArea: {
+    fontSize: 18,
+    fontFamily: serif,
+    color: colors.ink,
+    fontVariant: ['tabular-nums'],
   },
   hint: {
     backgroundColor: colors.hint,

@@ -2,7 +2,9 @@ import { createTestDb } from '../../test/testDb';
 import {
   clearVisits,
   deleteVisit,
+  getRecentVisits,
   getVisits,
+  getVisitTimes,
   getVisitSummaries,
   logVisit,
   restoreVisit,
@@ -79,5 +81,19 @@ describe('visitLog', () => {
     await clearVisits(db, 'sl:1');
     expect(await getVisits(db, 'sl:1')).toEqual([]);
     expect((await getVisitSummaries(db)).size).toBe(0);
+  });
+});
+
+describe('visit history for stats', () => {
+  it('lists every visit time and the latest visits across libraries', async () => {
+    const db = await createTestDb();
+    await logVisit(db, 'sl:1', 'manual', T0);
+    await logVisit(db, 'sl:2', 'manual', T0 + 10 * MINUTE);
+    await logVisit(db, 'sl:1', 'manual', T0 + 20 * MINUTE);
+    expect((await getVisitTimes(db)).sort()).toEqual([T0, T0 + 10 * MINUTE, T0 + 20 * MINUTE]);
+    expect((await getRecentVisits(db, 2)).map((v) => [v.libraryId, v.visitedAt])).toEqual([
+      ['sl:1', T0 + 20 * MINUTE],
+      ['sl:2', T0 + 10 * MINUTE],
+    ]);
   });
 });

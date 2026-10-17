@@ -79,6 +79,21 @@ export async function getVisits(db: Db, libraryId: string): Promise<Visit[]> {
   return rows.map(fromRow);
 }
 
+/** When every visit happened (epoch ms), for streaks and monthly counts. */
+export async function getVisitTimes(db: Db): Promise<number[]> {
+  const rows = await db.getAllAsync<{ visited_at: number }>('SELECT visited_at FROM visits', []);
+  return rows.map((r) => r.visited_at);
+}
+
+/** The latest visits across all libraries, most recent first. */
+export async function getRecentVisits(db: Db, limit: number): Promise<Visit[]> {
+  const rows = await db.getAllAsync<VisitRow>(
+    'SELECT id, library_id, visited_at, source, note FROM visits ORDER BY visited_at DESC LIMIT ?',
+    [limit]
+  );
+  return rows.map(fromRow);
+}
+
 /** One summary per visited library. Libraries with no visits are absent from the map. */
 export async function getVisitSummaries(db: Db): Promise<Map<string, VisitSummary>> {
   const rows = await db.getAllAsync<{

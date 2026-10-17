@@ -33,7 +33,7 @@ export function freshnessFor(summary: VisitSummary | undefined, now: number): Fr
 }
 
 /** Midnight UTC on the local calendar date of `timestamp`, so day counts ignore DST shifts. */
-function localDayNumber(timestamp: number): number {
+export function localDayNumber(timestamp: number): number {
   const d = new Date(timestamp);
   return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
 }

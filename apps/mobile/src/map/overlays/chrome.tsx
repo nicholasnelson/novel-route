@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 
-export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off';
+export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'due-only';
 
 /** Small status message under the status bar. `onAction` retries, fixes location, or opens the link. */
 export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(): void }) {
@@ -37,6 +37,13 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
           <Text style={styles.action}>Try again</Text>
         </Pressable>
       );
+    case 'due-only':
+      return (
+        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button" accessibilityLabel="Showing libraries due for a visit only. Show all">
+          <Text style={styles.text}>Due for a visit only</Text>
+          <Text style={styles.action}>Show all</Text>
+        </Pressable>
+      );
     case 'location-off':
       return (
         <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button">
@@ -49,10 +56,15 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
 }
 
 /** Round buttons on the right edge of the map. */
-export function MapControls({ following, locationAvailable, onLocate, onShowKey }: {
+export function MapControls({ following, locationAvailable, dueOnly, onLocate, onShowList, onToggleDueOnly, onShowVisits, onShowKey }: {
   following: boolean;
   locationAvailable: boolean;
+  /** The map only shows libraries due for a visit. */
+  dueOnly: boolean;
   onLocate(): void;
+  onShowList(): void;
+  onToggleDueOnly(): void;
+  onShowVisits(): void;
   onShowKey(): void;
 }) {
   return (
@@ -69,6 +81,31 @@ export function MapControls({ following, locationAvailable, onLocate, onShowKey 
           size={21}
           color={colors.blue}
         />
+      </Pressable>
+      <Pressable
+        onPress={onShowList}
+        accessibilityRole="button"
+        accessibilityLabel="Libraries near you"
+        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+      >
+        <Ionicons name="list" size={22} color={colors.ink} />
+      </Pressable>
+      <Pressable
+        onPress={onToggleDueOnly}
+        accessibilityRole="switch"
+        accessibilityLabel="Only libraries due for a visit"
+        accessibilityState={{ checked: dueOnly }}
+        style={({ pressed }) => [styles.fab, dueOnly && styles.fabOn, pressed && styles.pressed]}
+      >
+        <Ionicons name={dueOnly ? 'funnel' : 'funnel-outline'} size={19} color={dueOnly ? '#fff' : colors.ink} />
+      </Pressable>
+      <Pressable
+        onPress={onShowVisits}
+        accessibilityRole="button"
+        accessibilityLabel="Your visits"
+        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+      >
+        <Ionicons name="flame" size={21} color={colors.amberDeep} />
       </Pressable>
       <Pressable
         onPress={onShowKey}
@@ -118,6 +155,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow,
+  },
+  fabOn: {
+    backgroundColor: colors.amber,
   },
   pressed: {
     opacity: 0.8,

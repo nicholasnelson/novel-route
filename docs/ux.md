@@ -124,12 +124,23 @@ No wizard. Instead, small, one-off nudges that appear at the moment they're usef
 - Logging a visit: haptic feedback + the doors animation in the detail panel header.
 - Visual language matches the website: warm paper background for cards, brand green, rounded 20 pt corners, soft shadows. Icons from `@expo/vector-icons` (already bundled with Expo).
 
+### 6. List, due filter, walk planner and your visits (2026-10-18)
+
+Mockups: `docs/ux/features-mockup.html`. Three more round buttons under "show my location": **List**, **Due only** and **Your visits**.
+
+- **Due only** hides libraries visited in the last 30 days (only "never" and "over 30 days" remain). The button turns amber and a pill says "Due for a visit only · Show all". Remembered between launches (`kv` `map_due_only`).
+- **Libraries near you** (`overlays/LibraryList.tsx`): the 50 nearest, from you or, without location, the middle of the map; status line, distance and a north-up arrow. **All / Due** is the same setting as the map filter. Tapping a row closes the list and selects the library on the map. The accessible alternative to the markers.
+- **Plan a walk**: the list turns into checkboxes with the 5 nearest due libraries ticked, up to 9 (Google Maps' limit: 9 stops plus a destination). The footer gives a straight-line estimate. **Show route** draws the walk with numbered stops and a bottom card: "Start in Google Maps" opens walking directions through the stops in order (from wherever Maps puts you; our link never contains your position), and the list button reopens the planner.
+  - Route (`map/routing.ts`): online, one Mapbox Optimization API request (walking, round trip) with **only the libraries' positions**, starting from the stop nearest you (picked on the phone); the legs between you and that stop are straight-line estimates. The line follows footpaths. Offline or on any error, the order is the exact shortest straight-line round trip, worked out on the phone (`geo/walk.ts`, Held-Karp), with distance × 1.3 for streets at 4.8 km/h, drawn as dashed straight lines. The card says which ("along footpaths" / "straight-line estimate").
+- **Your visits** (`overlays/YourVisits.tsx`): weekly streak (calendar weeks, Monday to Sunday, with at least one visit; the streak only breaks after a whole week without one), best streak and the last 12 weeks; libraries visited, visits, visits this month; your circles; the 5 latest visits (tap opens the library).
+- **Your circles** (`geo/circles.ts`), with "Show on map" (filled and dashed circles plus a bottom card):
+  - **Cleared**: the largest circle centred on a visited library with no unvisited library inside (its edge reaches the nearest one); of those, the one holding the most visited libraries, then the larger. Counting libraries first stops one remote visit winning with a huge empty circle.
+  - **Reach**: the smallest circle around every visited library (all visits, so a trip interstate makes it large).
+
 ## Later (not in this pass)
 
-- **List view** ("Libraries near you", sorted by distance with status). Good for planning a round, and the accessible alternative to map markers for screen-reader users.
-- **Your visits** screen and simple stats ("You've visited 14 of 52 libraries within 5 km").
-- Route planning (docs/maps.md).
 - Dark mode (Mapbox Standard's night light preset).
+- Route planning on the device along streets (offline OpenStreetMap routing): weeks of work and large downloads for a nicer line; the Mapbox route covers it online.
 
 ## Decisions (2026-10-07)
 

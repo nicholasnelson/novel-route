@@ -5,6 +5,7 @@ import Mapbox, {
   CircleLayer,
   FillLayer,
   Images,
+  LineLayer,
   LocationPuck,
   MapView,
   ShapeSource,
@@ -15,6 +16,7 @@ import Mapbox, {
 import { TILE_PRECISION, geohashBounds, geohashCenter, geohashesForBounds, isInServiceArea } from '@novel-route/shared';
 import { LatLng, Library, VisitSummary } from '../types';
 import { freshnessFor } from '../store/freshness';
+import { circleRing, GeoCircle } from '../geo/circles';
 import { MAP_MARKER_IMAGES } from './markerImages';
 import { colors } from '../ui/theme';
 
@@ -57,11 +59,22 @@ const HOUR_MS = 60 * 60 * 1000;
 export type MapBounds = { north: number; south: number; east: number; west: number };
 export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
 
+/** A planned walk to draw: its lines, and the stops in walking order (numbered from 1). */
+export type WalkOverlay = {
+  lines: { kind: 'streets' | 'straight'; coordinates: [number, number][] }[];
+  stops: LatLng[];
+};
+
+/** "Your circles" to draw (docs/ux.md). */
+export type CirclesOverlay = { cleared: GeoCircle | null; reach: GeoCircle | null };
+
 export type LibraryMapHandle = {
   /** Fit the camera around the given points (e.g. the user and a library). */
   frame(points: LatLng[]): void;
   /** Zoom in or out around the current centre. */
   zoomTo(zoom: number): void;
+  /** Move the camera to a point (e.g. a library picked from the list). */
+  centerOn(point: LatLng, zoom: number): void;
 };
 
 type Props = {
@@ -73,6 +86,10 @@ type Props = {
   loadedTiles: Set<string>;
   /** Every library is on the device (a server snapshot), so nothing gets the veil. */
   allLoaded: boolean;
+  /** Hide libraries visited in the last 30 days (only due ones remain). */
+  dueOnly: boolean;
+  walk: WalkOverlay | null;
+  circles: CirclesOverlay | null;
   initialCenter: LatLng;
   initialZoom: number;
   followUser: boolean;
@@ -102,6 +119,9 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     selectedId,
     loadedTiles,
     allLoaded,
+    dueOnly,
+    walk,
+    circles,
     initialCenter,
     initialZoom,
     followUser,
@@ -139,6 +159,17 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     zoomTo(zoom: number) {
       cameraRef.current?.zoomTo(zoom, 500);
     },
+    centerOn(point: LatLng, zoom: number) {
+      onFollowUserChange(false);
+      setTimeout(() => {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [point.longitude, point.latitude],
+          zoomLevel: zoom,
+          padding: { paddingTop: padding.top, paddingBottom: padding.bottom + 120, paddingLeft: 0, paddingRight: 0 },
+          animationDuration: 600,
+        });
+      }, 50);
+    },
   }));
 
   // The whole country can be thousands of markers, so the shape is only rebuilt when libraries or
@@ -148,8 +179,10 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
   const shape = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
     () => ({
       type: 'FeatureCollection',
-      features: libraries.map((lib) => {
+      features: libraries.flatMap((lib) => {
         const freshness = freshnessFor(visitSummaries.get(lib.id), freshnessHour * HOUR_MS);
+        // Due means never visited or not for 30 days: everything but 'fresh'.
+        if (dueOnly && freshness === 'fresh') return [];
         return {
           type: 'Feature',
           id: lib.id,
@@ -159,10 +192,52 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
             icon: `marker-${freshness}`,
             unvisited: freshness === 'never' ? 1 : 0,
           },
-        };
+        } as GeoJSON.Feature<GeoJSON.Point>;
       }),
     }),
-    [libraries, visitSummaries, freshnessHour]
+    [libraries, visitSummaries, freshnessHour, dueOnly]
+  );
+
+  const walkLines = useMemo<GeoJSON.FeatureCollection<GeoJSON.LineString>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (walk?.lines ?? []).map((line, i) => ({
+        type: 'Feature',
+        id: `walk-${i}`,
+        properties: { kind: line.kind },
+        geometry: { type: 'LineString', coordinates: line.coordinates },
+      })),
+    }),
+    [walk]
+  );
+  const walkStops = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (walk?.stops ?? []).map((stop, i) => ({
+        type: 'Feature',
+        id: `stop-${i}`,
+        properties: { number: String(i + 1) },
+        geometry: { type: 'Point', coordinates: [stop.longitude, stop.latitude] },
+      })),
+    }),
+    [walk]
+  );
+
+  const circleShapes = useMemo<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (['reach', 'cleared'] as const).flatMap((kind) => {
+        const circle = circles?.[kind];
+        if (!circle) return [];
+        return [{
+          type: 'Feature',
+          id: `circle-${kind}`,
+          properties: { kind },
+          geometry: { type: 'Polygon', coordinates: [circleRing(circle)] },
+        } as GeoJSON.Feature<GeoJSON.Polygon>];
+      }),
+    }),
+    [circles]
   );
 
   // The veil follows the camera (throttled) and extends a full view beyond every edge, so an
@@ -309,6 +384,39 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         />
       </ShapeSource>
 
+      {/* "Your circles": reach (dashed outline) and cleared (filled), beneath the markers. */}
+      <ShapeSource id="visit-circles" shape={circleShapes}>
+        <FillLayer
+          id="visit-circles-fill"
+          filter={['==', ['get', 'kind'], 'cleared']}
+          style={{ fillColor: colors.green, fillOpacity: 0.16 }}
+        />
+        <LineLayer
+          id="visit-circles-cleared-line"
+          filter={['==', ['get', 'kind'], 'cleared']}
+          style={{ lineColor: colors.green, lineWidth: 2.5 }}
+        />
+        <LineLayer
+          id="visit-circles-reach-line"
+          filter={['==', ['get', 'kind'], 'reach']}
+          style={{ lineColor: colors.green, lineWidth: 2.5, lineDasharray: [3, 2] }}
+        />
+      </ShapeSource>
+
+      {/* A planned walk's route, beneath the markers. */}
+      <ShapeSource id="walk-route" shape={walkLines}>
+        <LineLayer
+          id="walk-route-streets"
+          filter={['==', ['get', 'kind'], 'streets']}
+          style={{ lineColor: colors.green, lineWidth: 4, lineOpacity: 0.85, lineJoin: 'round', lineCap: 'round' }}
+        />
+        <LineLayer
+          id="walk-route-straight"
+          filter={['==', ['get', 'kind'], 'straight']}
+          style={{ lineColor: colors.green, lineWidth: 3, lineDasharray: [2, 1.5], lineJoin: 'round' }}
+        />
+      </ShapeSource>
+
       <ShapeSource
         id="libraries"
         ref={sourceRef}
@@ -357,6 +465,25 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
               12, ['case', isSelected, 0.95, 0.7],
               16, ['case', isSelected, 1.35, 1],
             ],
+          }}
+        />
+      </ShapeSource>
+
+      {/* Walk stop numbers, above the markers. */}
+      <ShapeSource id="walk-stops" shape={walkStops}>
+        <CircleLayer
+          id="walk-stop-badges"
+          style={{ circleColor: colors.green, circleRadius: 11, circleStrokeColor: '#ffffff', circleStrokeWidth: 2 }}
+        />
+        <SymbolLayer
+          id="walk-stop-numbers"
+          style={{
+            textField: ['get', 'number'],
+            textSize: 12,
+            textColor: '#ffffff',
+            textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+            textAllowOverlap: true,
+            textIgnorePlacement: true,
           }}
         />
       </ShapeSource>
