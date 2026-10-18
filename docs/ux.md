@@ -137,6 +137,22 @@ Mockups: `docs/ux/features-mockup.html`. Three more round buttons under "show my
   - **Cleared**: the largest circle centred on a visited library with no unvisited library inside (its edge reaches the nearest one); of those, the one holding the most visited libraries, then the larger. Counting libraries first stops one remote visit winning with a huge empty circle.
   - **Reach**: the smallest circle around every visited library (all visits, so a trip interstate makes it large).
 
+### 7. Menu, walk mode and plain wording (2026-10-19)
+
+Mockup: `docs/ux/walk-mode-mockup.html` (v3). Replaces parts of §6: the round buttons, "Due", and handing walks to Google Maps.
+
+- **Menu** (`overlays/chrome.tsx` `MapMenu`): one round ••• button opens a column of pills, short words with the icons on the right, lined up under the button: **Nearby**, **Plan a walk**, **To visit** (a switch), **My visits** (journal icon), and **?** with no words. A one-off hint points it out. **Centre on me** appears above the bottom card only when the map isn't following you.
+- **Where a walk starts**: you, the middle of the map, or a library. The planner shows "Start and finish: …" with **Change**. **Walk from here** in a library's details starts (and finishes) there with that library as stop 1. **Nearby** measures from the middle of the map when it's more than 300 m from you ("Around the map centre", with **Near me**).
+- **Order** is your choice: **Set order** (the shortest loop, numbered) or **As I go** (after each stop, the rest is re-planned from that stop on footpaths, still ending where you chose, so you aren't left at the far end). **Finish**: where I started, or the last library.
+- **Honest numbers**: straight-line distances are labelled "in a straight line" (not "as the crow flies": an idiom). Before footpaths arrive, or offline, the walk is a range (straight line × 1.2–1.6) marked as an estimate. Times are walking + 5 minutes per library. Over 5 km or 90 minutes: "A long walk: take water and sun protection, and check the weather."
+- **Walking in Novel Route**: "Start walking" follows you on the map. The card shows progress, the next stop, the walking distance left along the footpath, the straight-line distance, and an arrow (compass, then walking direction, then north-up). **Google Maps** is a smaller button, through the stops still to go.
+- **Path-following arrow** (`geo/pursuit.ts`): the arrow points at a target 25 m (or 1.5 × GPS accuracy) further along the leg than the point nearest you, so on the path it leads along it and round corners, and off it it turns you back gradually. Within 40 m of the library it points at the library. The Mapbox route is split into one leg per stop at the stops' footpath positions. Straight-line legs point straight at the stop.
+- **At a stop** (within 30 m plus GPS allowance, any stop still to go): "Stop 2 of 5 · You're here" with **I visited** and **Skip**. Visiting a stop any other way ticks it too. **Walk done** shows the streak; **Done** clears it. Ending a walk early asks first.
+- **On the map**: stops are numbered circles instead of markers (a tick once visited, grey if skipped, the next one larger); other libraries fade to 45%; walked legs fade, the next leg is strongest, straight legs are dashed. No clustering during a walk.
+- **Saved** (`store/walkSession.ts`, `kv` `walk_session`) after every change, so a walk survives the app being closed.
+- **Wording** (`ui/strings.ts`, all new text lives there for consistency and later translation): **I visited** (was Log visit), **To visit** (was Due), **Fully explored** / **Furthest out** (were Cleared / Reach), **Add a past visit**, **Directions** with "Google Maps" under it.
+- **Accessibility**: library names wrap to two lines instead of being cut off; marker tap area 44 × 52 dp (the art stays the same); the "To visit" switch uses a dark amber with a white knob (no white-on-amber icon); switches, radios and checkboxes have their roles for TalkBack.
+
 ## Later (not in this pass)
 
 - Dark mode (Mapbox Standard's night light preset).

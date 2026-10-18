@@ -1,4 +1,4 @@
-import { bestOrder, estimateWalk, formatDuration, googleMapsWalkUrl, MAX_WALK_STOPS, roundTripMeters } from '../walk';
+import { bestOrder, estimateRange, estimateWalk, formatDuration, googleMapsWalkUrl, isLongWalk, MAX_WALK_STOPS, roundTripMeters, totalMinutes, walkMeters } from '../walk';
 
 const P = (dLat: number, dLng: number) => ({ latitude: -34.93 + dLat, longitude: 138.6 + dLng });
 
@@ -47,5 +47,25 @@ describe('googleMapsWalkUrl', () => {
 
   it('has no waypoints for a single stop', () => {
     expect(new URL(googleMapsWalkUrl([P(0, 0)])).searchParams.get('waypoints')).toBeNull();
+  });
+});
+
+describe('one-way walks and honest estimates', () => {
+  it('finds the shortest walk that ends at the last stop when not returning', () => {
+    const start = P(0, 0);
+    const stops = [P(0.004, 0), P(0.002, 0), P(0.006, 0)];
+    const order = bestOrder(start, stops, null);
+    expect(order).toEqual([1, 0, 2]); // straight out, ending at the far one
+    const open = (o: number[]) => walkMeters(start, o.map((i) => stops[i]), null);
+    const shortest = Math.min(...permutations(3).map(open));
+    expect(open(order)).toBeCloseTo(shortest, 6);
+  });
+
+  it('ranges straight lines, adds time at libraries and flags long walks', () => {
+    expect(estimateRange(1000)).toEqual([1200, 1600]);
+    expect(totalMinutes(80, 5)).toBe(105);
+    expect(isLongWalk(6000, 60)).toBe(true);
+    expect(isLongWalk(3000, 95)).toBe(true);
+    expect(isLongWalk(3000, 60)).toBe(false);
   });
 });

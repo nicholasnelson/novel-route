@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
+import { S } from '../../ui/strings';
 
 export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'due-only';
 
@@ -39,9 +40,9 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
       );
     case 'due-only':
       return (
-        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button" accessibilityLabel="Showing libraries due for a visit only. Show all">
-          <Text style={styles.text}>Due for a visit only</Text>
-          <Text style={styles.action}>Show all</Text>
+        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button" accessibilityLabel={`${S.pill.toVisitOnly}. ${S.pill.showAll}`}>
+          <Text style={styles.text}>{S.pill.toVisitOnly}</Text>
+          <Text style={styles.action}>{S.pill.showAll}</Text>
         </Pressable>
       );
     case 'location-off':
@@ -55,67 +56,80 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
   }
 }
 
-/** Round buttons on the right edge of the map. */
-export function MapControls({ following, locationAvailable, dueOnly, onLocate, onShowList, onToggleDueOnly, onShowVisits, onShowKey }: {
-  following: boolean;
-  locationAvailable: boolean;
-  /** The map only shows libraries due for a visit. */
-  dueOnly: boolean;
-  onLocate(): void;
-  onShowList(): void;
-  onToggleDueOnly(): void;
-  onShowVisits(): void;
-  onShowKey(): void;
+/**
+ * The map's menu (docs/ux.md "Menu"): one round button that opens a column of pills, short words
+ * with the icons on the right so they line up under the button. "To visit" is a switch.
+ */
+export function MapMenu({ open, toVisitOnly, onToggle, onNearby, onPlanWalk, onToggleToVisit, onMyVisits, onHelp }: {
+  open: boolean;
+  /** The map only shows libraries to visit. */
+  toVisitOnly: boolean;
+  onToggle(): void;
+  onNearby(): void;
+  onPlanWalk(): void;
+  onToggleToVisit(): void;
+  onMyVisits(): void;
+  onHelp(): void;
 }) {
   return (
-    <View style={styles.controls}>
+    <View style={styles.menu}>
       <Pressable
-        onPress={onLocate}
+        onPress={onToggle}
         accessibilityRole="button"
-        accessibilityLabel={following ? 'Following your location' : 'Show my location'}
-        accessibilityState={{ selected: following }}
+        accessibilityLabel={open ? S.menu.close : S.menu.open}
+        accessibilityState={{ expanded: open }}
         style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
       >
-        <Ionicons
-          name={!locationAvailable ? 'locate-outline' : following ? 'navigate' : 'navigate-outline'}
-          size={21}
-          color={colors.blue}
-        />
+        <Ionicons name={open ? 'close' : 'ellipsis-horizontal'} size={22} color={colors.ink} />
       </Pressable>
-      <Pressable
-        onPress={onShowList}
-        accessibilityRole="button"
-        accessibilityLabel="Libraries near you"
-        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
-      >
-        <Ionicons name="list" size={22} color={colors.ink} />
-      </Pressable>
-      <Pressable
-        onPress={onToggleDueOnly}
-        accessibilityRole="switch"
-        accessibilityLabel="Only libraries due for a visit"
-        accessibilityState={{ checked: dueOnly }}
-        style={({ pressed }) => [styles.fab, dueOnly && styles.fabOn, pressed && styles.pressed]}
-      >
-        <Ionicons name={dueOnly ? 'funnel' : 'funnel-outline'} size={19} color={dueOnly ? '#fff' : colors.ink} />
-      </Pressable>
-      <Pressable
-        onPress={onShowVisits}
-        accessibilityRole="button"
-        accessibilityLabel="Your visits"
-        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
-      >
-        <Ionicons name="flame" size={21} color={colors.amberDeep} />
-      </Pressable>
-      <Pressable
-        onPress={onShowKey}
-        accessibilityRole="button"
-        accessibilityLabel="Map key and help"
-        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
-      >
-        <Ionicons name="help" size={22} color={colors.ink} />
-      </Pressable>
+      {open && (
+        <>
+          <MenuPill label={S.menu.nearby} icon="list" onPress={onNearby} />
+          <MenuPill label={S.menu.planWalk} icon="git-network-outline" onPress={onPlanWalk} />
+          <Pressable
+            onPress={onToggleToVisit}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: toVisitOnly }}
+            accessibilityLabel={S.menu.toVisit}
+            style={({ pressed }) => [styles.menuPill, toVisitOnly && styles.menuPillOn, pressed && styles.pressed]}
+          >
+            <View style={[styles.switch, toVisitOnly && styles.switchOn]}>
+              <View style={[styles.knob, toVisitOnly && styles.knobOn]} />
+            </View>
+            <Text style={styles.menuText}>{S.menu.toVisit}</Text>
+            <Ionicons name="funnel-outline" size={19} color={colors.ink} />
+          </Pressable>
+          <MenuPill label={S.menu.myVisits} icon="journal-outline" onPress={onMyVisits} />
+          <Pressable
+            onPress={onHelp}
+            accessibilityRole="button"
+            accessibilityLabel={S.menu.help}
+            style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+          >
+            <Ionicons name="help" size={22} color={colors.ink} />
+          </Pressable>
+        </>
+      )}
     </View>
+  );
+}
+
+function MenuPill({ label, icon, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress(): void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.menuPill, pressed && styles.pressed]}>
+      <Text style={styles.menuText}>{label}</Text>
+      <Ionicons name={icon} size={19} color={colors.ink} />
+    </Pressable>
+  );
+}
+
+/** Shown only when the map isn't centred on you; moves it back. */
+export function CentreOnMe({ onPress }: { onPress(): void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.menuPill, pressed && styles.pressed]}>
+      <Text style={styles.menuText}>{S.menu.centreOnMe}</Text>
+      <Ionicons name="navigate" size={19} color={colors.blue} />
+    </Pressable>
   );
 }
 
@@ -144,8 +158,48 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  controls: {
+  menu: {
     gap: 10,
+    alignItems: 'flex-end',
+  },
+  menuPill: {
+    minHeight: TOUCH - 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 16,
+    // Puts each icon's centre under the menu button's.
+    paddingRight: (TOUCH - 19) / 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
+    ...shadow,
+  },
+  menuPillOn: {
+    backgroundColor: '#fdf0db',
+  },
+  menuText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  switch: {
+    width: 34,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.line,
+    padding: 2,
+  },
+  switchOn: {
+    backgroundColor: colors.amberDeep,
+  },
+  knob: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  knobOn: {
+    marginLeft: 14,
   },
   fab: {
     width: TOUCH,
@@ -155,9 +209,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow,
-  },
-  fabOn: {
-    backgroundColor: colors.amber,
   },
   pressed: {
     opacity: 0.8,

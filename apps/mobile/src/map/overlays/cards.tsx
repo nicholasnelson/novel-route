@@ -6,6 +6,7 @@ import { NearbyCardState, visitedToday } from '../../store/nearby';
 import { describeLastVisit } from '../../store/freshness';
 import { compassPoint, formatDistance, normalizeDegrees } from '../../geo/bearing';
 import { formatDuration } from '../../geo/walk';
+import { S } from '../../ui/strings';
 import { LARGE_MARKER_IMAGES } from '../markerImages';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 
@@ -57,16 +58,19 @@ export function PrimaryButton({ label, onPress, icon, style }: {
   );
 }
 
-export function SecondaryButton({ label, onPress, icon, style }: {
+export function SecondaryButton({ label, onPress, icon, style, hint }: {
   label: string;
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   style?: ViewStyle;
+  /** What happens beyond the label, for screen readers (e.g. "Opens Google Maps"). */
+  hint?: string;
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityHint={hint}
       style={({ pressed }) => [styles.secondaryButton, style, pressed && styles.pressed]}
     >
       {icon && <Ionicons name={icon} size={18} color={colors.ink} />}
@@ -109,7 +113,7 @@ export function NearbyCard({ state, freshness, summary, now, reference, onPress,
             <Text style={styles.kicker}>You&apos;re here</Text>
             <Text style={styles.title} numberOfLines={2}>{state.library.title}</Text>
           </View>
-          <PrimaryButton label="Log visit" onPress={onLogVisit} />
+          <PrimaryButton label={S.visit.iVisited} onPress={onLogVisit} />
         </View>
       </BottomCard>
     );
@@ -145,8 +149,8 @@ export function NearbyCard({ state, freshness, summary, now, reference, onPress,
         <MarkerIcon freshness={freshness} />
         <View style={styles.grow}>
           <Text style={styles.kicker}>{isSuggestion ? 'Nothing due nearby' : 'Nearest to visit'}</Text>
-          <Text style={styles.title} numberOfLines={1}>{library.title}</Text>
-          <Text style={styles.sub} numberOfLines={1}>{describeLastVisit(summary, now)}</Text>
+          <Text style={styles.title} numberOfLines={2}>{library.title}</Text>
+          <Text style={styles.sub} numberOfLines={2}>{describeLastVisit(summary, now)}</Text>
         </View>
         <View style={styles.direction}>
           <Text style={styles.distance}>{formatDistance(distance)}</Text>
@@ -201,58 +205,163 @@ export function LibraryPreviewCard({ library, freshness, summary, now, distance,
           // Already logged today: a second visit is rare, so "Log another visit" lives in details.
           <View style={[styles.doneButton, styles.flex]}>
             <Ionicons name="checkmark-circle" size={18} color={colors.green} />
-            <Text style={styles.doneText}>Visited today</Text>
+            <Text style={styles.doneText}>{S.visit.visitedToday}</Text>
           </View>
         ) : (
-          <PrimaryButton label="Log visit" icon="checkmark" onPress={onLogVisit} style={styles.flex} />
+          <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} style={styles.flex} />
         )}
-        <SecondaryButton label="Directions" icon="walk" onPress={onDirections} style={styles.flex} />
+        <SecondaryButton label={S.directions.label} icon="walk" onPress={onDirections} style={styles.flex} hint={S.directions.hint} />
       </View>
     </BottomCard>
   );
 }
 
-// --- Planned walk ---
+// --- Planned walk (docs/ux.md "Plan a walk", "Walking") ---
 
-export function WalkCard({ stops, meters, minutes, onStreets, loading, onStart, onEdit, onClose }: {
+/** A planned walk before setting off: honest distance and time, and a reminder for long walks. */
+export function WalkPlanCard({ stops, order, back, onStreets, meters, range, walkingMinutes, libraryMinutes, long, loading, onStart, onEdit, onClose }: {
   stops: number;
-  meters: number;
-  minutes: number;
-  /** The route follows real paths (Mapbox); otherwise it's a straight-line estimate. */
+  order: 'set' | 'flexible';
+  /** Ends back at the start (else at the last library). */
+  back: boolean;
+  /** The distance follows footpaths (Mapbox); otherwise it's a straight-line range. */
   onStreets: boolean;
-  /** Still asking for the route along streets. */
+  meters: number;
+  range: [number, number];
+  walkingMinutes: number;
+  libraryMinutes: number;
+  long: boolean;
+  /** Still asking Mapbox for the footpaths. */
   loading: boolean;
   onStart(): void;
   onEdit(): void;
   onClose(): void;
 }) {
-  const kind = onStreets ? 'along footpaths' : 'straight-line estimate';
+  const title = onStreets
+    ? S.walk.onFootpaths(formatDistance(meters), back)
+    : S.walk.estimated(`${formatDistance(range[0])}–${formatDistance(range[1])}`, back);
   return (
     <BottomCard>
       <View style={styles.row}>
         <View style={styles.grow}>
-          <Text style={styles.kicker}>Your walk</Text>
-          <Text style={styles.title}>{stops === 1 ? '1 library' : `${stops} libraries`}</Text>
-          <Text style={styles.sub} numberOfLines={2}>
-            {loading
-              ? 'Finding the best route…'
-              : `About ${formatDistance(meters)} round trip · ${formatDuration(minutes)} (${kind})`}
+          <Text style={styles.kicker}>{S.walk.kicker(S.visits.libraries(stops), order === 'set' ? S.walk.setOrder : S.walk.asIGo)}</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.sub}>
+            {loading ? S.walk.finding : onStreets ? S.walk.time(formatDuration(walkingMinutes), formatDuration(libraryMinutes)) : S.walk.estimateNote}
           </Text>
         </View>
-        <CloseButton onPress={onClose} label="Close walk" />
+        <CloseButton onPress={onClose} label={S.walk.close} />
       </View>
+      {long && (
+        <View style={styles.warning} accessibilityRole="alert">
+          <Ionicons name="sunny-outline" size={18} color={colors.amberDeep} />
+          <Text style={styles.warningText}>{S.walk.longWalk}</Text>
+        </View>
+      )}
       <View style={styles.buttons}>
-        <PrimaryButton label="Start in Google Maps" icon="walk" onPress={onStart} style={styles.flex} />
-        <Pressable
-          onPress={onEdit}
-          accessibilityRole="button"
-          accessibilityLabel="Change stops"
-          style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="list" size={20} color={colors.ink} />
-        </Pressable>
+        <PrimaryButton label={S.walk.startWalking} icon="walk" onPress={onStart} style={styles.flex} />
+        <RoundButton icon="list" label={S.walk.editStops} onPress={onEdit} />
       </View>
     </BottomCard>
+  );
+}
+
+/** Walking: the next stop, an arrow to follow, and how far there is to go. */
+export function WalkingCard({ visited, total, nextTitle, walkLeft, straightLine, arrowRotation, compass, onGoogleMaps, onEdit, onEnd }: {
+  visited: number;
+  total: number;
+  nextTitle: string;
+  /** Metres left along the footpath to the next stop, if known. */
+  walkLeft: number | null;
+  straightLine: number;
+  /** Arrow direction, degrees clockwise from the top of the screen. */
+  arrowRotation: number;
+  /** The arrow follows the compass or walking direction (else it's north-up, like the map). */
+  compass: boolean;
+  onGoogleMaps(): void;
+  onEdit(): void;
+  onEnd(): void;
+}) {
+  const parts = [walkLeft !== null ? S.walk.walkLeft(formatDistance(walkLeft)) : null, S.walk.straightLine(formatDistance(straightLine))];
+  return (
+    <BottomCard>
+      <View style={styles.row}>
+        <View style={styles.grow}>
+          <Text style={styles.kicker}>{S.walk.progress(visited, total)}</Text>
+          <Text style={styles.title} numberOfLines={2}>{S.walk.next(nextTitle)}</Text>
+          <Text style={styles.sub}>{parts.filter(Boolean).join(' · ')}</Text>
+        </View>
+        <View style={[styles.arrowBadgeLarge, !compass && styles.arrowBadgeMap]}>
+          <Ionicons
+            name="arrow-up"
+            size={22}
+            color={compass ? '#fff' : colors.green}
+            style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}
+          />
+        </View>
+      </View>
+      <View style={styles.buttons}>
+        <SecondaryButton label={S.walk.googleMaps} icon="walk" onPress={onGoogleMaps} style={styles.flex} hint={S.directions.hint} />
+        <RoundButton icon="list" label={S.walk.editStops} onPress={onEdit} />
+        <RoundButton icon="close" label={S.walk.end} onPress={onEnd} />
+      </View>
+    </BottomCard>
+  );
+}
+
+/** At a stop: mark it visited or skip it. */
+export function WalkArrivedCard({ number, total, library, freshness, summary, now, onVisited, onSkip }: {
+  number: number;
+  total: number;
+  library: Library;
+  freshness: Freshness;
+  summary: VisitSummary | undefined;
+  now: number;
+  onVisited(): void;
+  onSkip(): void;
+}) {
+  return (
+    <BottomCard>
+      <View style={styles.row}>
+        <MarkerIcon freshness={freshness} />
+        <View style={styles.grow}>
+          <Text style={styles.kicker}>{S.walk.stopHere(number, total)}</Text>
+          <Text style={styles.title} numberOfLines={2}>{library.title}</Text>
+          <Text style={styles.sub}>{describeLastVisit(summary, now)}</Text>
+        </View>
+      </View>
+      <View style={styles.buttons}>
+        <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onVisited} style={styles.flex} />
+        <SecondaryButton label={S.walk.skip} onPress={onSkip} style={styles.flex} />
+      </View>
+    </BottomCard>
+  );
+}
+
+/** Every stop visited or skipped. */
+export function WalkDoneCard({ visited, streakWeeks, onDone }: { visited: number; streakWeeks: number; onDone(): void }) {
+  return (
+    <BottomCard>
+      <Text style={styles.kicker}>{S.walk.doneKicker}</Text>
+      <Text style={styles.title}>{S.walk.doneTitle(visited)}</Text>
+      <Text style={styles.sub}>{streakWeeks > 0 ? S.walk.doneStreak(streakWeeks) : S.walk.doneNoStreak}</Text>
+      <View style={styles.buttons}>
+        <PrimaryButton label={S.walk.doneButton} onPress={onDone} style={styles.flex} />
+      </View>
+    </BottomCard>
+  );
+}
+
+function RoundButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress(): void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={20} color={colors.ink} />
+    </Pressable>
   );
 }
 
@@ -267,9 +376,9 @@ export function CirclesCard({ cleared, reach, onClose }: {
     <BottomCard>
       <View style={styles.row}>
         <View style={styles.grow}>
-          <Text style={styles.kicker}>Your circles</Text>
-          {cleared && <CircleRow kind="cleared" label="Cleared" area={cleared.area} libraries={cleared.libraries} />}
-          {reach && <CircleRow kind="reach" label="Reach" area={reach.area} libraries={reach.libraries} />}
+          <Text style={styles.kicker}>{S.visits.circles}</Text>
+          {cleared && <CircleRow kind="cleared" label={S.visits.explored} area={cleared.area} libraries={cleared.libraries} />}
+          {reach && <CircleRow kind="reach" label={S.visits.furthest} area={reach.area} libraries={reach.libraries} />}
         </View>
         <CloseButton onPress={onClose} label="Hide circles" />
       </View>
@@ -289,7 +398,7 @@ export function CircleRow({ kind, label, area, libraries, detail }: {
       <View style={[styles.swatch, kind === 'cleared' ? styles.swatchCleared : styles.swatchReach]} />
       <View style={styles.grow}>
         <Text style={styles.circleLabel}>{label}</Text>
-        <Text style={styles.circleDetail} numberOfLines={2}>{detail ?? (libraries === 1 ? '1 library' : `${libraries} libraries`)}</Text>
+        <Text style={styles.circleDetail} numberOfLines={2}>{detail ?? S.visits.libraries(libraries)}</Text>
       </View>
       <Text style={styles.circleArea}>{area}</Text>
     </View>
@@ -484,6 +593,29 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: '600',
+  },
+  arrowBadgeLarge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warning: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    backgroundColor: '#fff4dc',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13.5,
+    color: colors.ink,
   },
   roundButton: {
     width: TOUCH - 4,

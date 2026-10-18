@@ -42,12 +42,19 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         </View>
 
         <Text style={styles.heading}>Using Novel Route</Text>
-        <Text style={styles.paragraph}>• Tap a library to see what&apos;s there, get directions or log a visit.</Text>
+        <Text style={styles.paragraph}>• Tap a library to see what&apos;s there, get directions or mark it as visited.</Text>
         <Text style={styles.paragraph}>
-          • The card at the bottom points you to the nearest library you&apos;re due to visit. A solid green arrow
+          • The card at the bottom points you to the nearest library to visit. A solid green arrow
           points the way you&apos;re facing; a pale one points relative to the map (north is up).
         </Text>
-        <Text style={styles.paragraph}>• When you&apos;re standing at one, log your visit in one tap.</Text>
+        <Text style={styles.paragraph}>• When you&apos;re standing at one, mark your visit in one tap.</Text>
+        <Text style={styles.paragraph}>
+          • The ••• button at the top has libraries nearby, walks you can plan, the &quot;To visit&quot; filter and your visits.
+        </Text>
+        <Text style={styles.paragraph}>
+          • On a walk, the arrow follows the footpaths to the next library. Distances marked &quot;in a straight line&quot; are
+          shorter than the walk.
+        </Text>
         <Text style={styles.paragraph}>• Your visit history stays on this phone.</Text>
 
         <Text style={styles.heading}>What do you think?</Text>

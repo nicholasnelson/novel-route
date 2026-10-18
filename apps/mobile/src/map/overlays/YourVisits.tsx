@@ -7,6 +7,7 @@ import { Freshness } from '../../types';
 import { describeStreak, Streak, streakNote } from '../../store/stats';
 import { relativeDay } from '../../store/freshness';
 import { colors, TOUCH } from '../../ui/theme';
+import { S } from '../../ui/strings';
 
 export type CircleStat = { area: string; libraries: number };
 export type RecentVisit = { id: string; libraryId: string; title: string; visitedAt: number; freshness: Freshness };
@@ -40,7 +41,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
   return (
     <View style={styles.fill}>
       <View style={styles.header}>
-        <Text style={styles.heading} accessibilityRole="header">Your visits</Text>
+        <Text style={styles.heading} accessibilityRole="header">{S.visits.title}</Text>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.round}>
           <Ionicons name="close" size={22} color={colors.ink} />
         </Pressable>
@@ -48,10 +49,10 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
         {streak && (
-          <View style={styles.streak} accessible accessibilityLabel={`${streakTitle ?? 'No streak yet'}. ${streakNote(streak)}`}>
+          <View style={styles.streak} accessible accessibilityLabel={`${streakTitle ?? S.visits.noStreak}. ${streakNote(streak)}`}>
             <View style={styles.streakTitleRow}>
               <Ionicons name="flame" size={26} color="#ffb44a" />
-              <Text style={styles.streakTitle}>{streakTitle ?? 'No streak yet'}</Text>
+              <Text style={styles.streakTitle}>{streakTitle ?? S.visits.noStreak}</Text>
             </View>
             <Text style={styles.streakNote}>{streakNote(streak)}</Text>
             <View style={styles.weeks}>
@@ -77,30 +78,30 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
 
         {(cleared || reach) && (
           <>
-            <Text style={styles.section}>Your circles</Text>
+            <Text style={styles.section}>{S.visits.circles}</Text>
             <View style={styles.circles}>
               {cleared && (
                 <CircleRow
                   kind="cleared"
-                  label="Cleared"
+                  label={S.visits.explored}
                   area={cleared.area}
                   libraries={cleared.libraries}
-                  detail={`${cleared.libraries === 1 ? '1 library' : `${cleared.libraries} libraries`}, none left to visit inside`}
+                  detail={S.visits.exploredDetail(S.visits.libraries(cleared.libraries))}
                 />
               )}
               {reach && (
                 <CircleRow
                   kind="reach"
-                  label="Reach"
+                  label={S.visits.furthest}
                   area={reach.area}
                   libraries={reach.libraries}
-                  detail={reach.libraries === 1 ? 'The library you’ve visited' : `All ${reach.libraries} libraries you’ve visited`}
+                  detail={S.visits.furthestDetail(reach.libraries)}
                 />
               )}
-              {!reach && <Text style={styles.circleNote}>Visit a second library to measure your reach.</Text>}
+              {!reach && <Text style={styles.circleNote}>{S.visits.secondForFurthest}</Text>}
               <Pressable onPress={onShowCircles} accessibilityRole="button" hitSlop={8} style={styles.link}>
                 <Ionicons name="map-outline" size={16} color={colors.green} />
-                <Text style={styles.linkText}>Show on map</Text>
+                <Text style={styles.linkText}>{S.visits.showOnMap}</Text>
               </Pressable>
             </View>
           </>
@@ -108,7 +109,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
 
         {recent.length > 0 ? (
           <>
-            <Text style={styles.section}>Recent visits</Text>
+            <Text style={styles.section}>{S.visits.recent}</Text>
             {recent.map((r) => (
               <Pressable
                 key={r.id}
@@ -118,7 +119,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
               >
                 <MarkerIcon freshness={r.freshness} size={22} />
                 <View style={styles.grow}>
-                  <Text style={styles.recentTitle} numberOfLines={1}>{r.title}</Text>
+                  <Text style={styles.recentTitle} numberOfLines={2}>{r.title}</Text>
                   <Text style={styles.recentSub}>
                     {new Date(r.visitedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · {relativeDay(r.visitedAt, now)}
                   </Text>
@@ -127,7 +128,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
             ))}
           </>
         ) : (
-          <Text style={styles.empty}>Log a visit at a library to start your streak and your circles.</Text>
+          <Text style={styles.empty}>{S.visits.empty}</Text>
         )}
       </ScrollView>
     </View>

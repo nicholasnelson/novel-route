@@ -59,10 +59,14 @@ const HOUR_MS = 60 * 60 * 1000;
 export type MapBounds = { north: number; south: number; east: number; west: number };
 export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
 
-/** A planned walk to draw: its lines, and the stops in walking order (numbered from 1). */
+/**
+ * A planned walk to draw. Stops are numbered circles in place of their markers (a tick once
+ * visited); other libraries fade back. Legs already walked fade, the one to the next stop is
+ * strongest, and straight-line legs (guesses, not footpaths) are dashed.
+ */
 export type WalkOverlay = {
-  lines: { kind: 'streets' | 'straight'; coordinates: [number, number][] }[];
-  stops: LatLng[];
+  legs: { path: [number, number][]; kind: 'streets' | 'straight'; state: 'done' | 'next' | 'later' }[];
+  stops: { id: string; point: LatLng; number: number; state: 'done' | 'skipped' | 'next' | 'later' }[];
 };
 
 /** "Your circles" to draw (docs/ux.md). */
@@ -172,6 +176,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     },
   }));
 
+  const walkStopIds = useMemo(() => new Set(walk?.stops.map((st) => st.id) ?? []), [walk]);
+
   // The whole country can be thousands of markers, so the shape is only rebuilt when libraries or
   // visits change, or hourly for freshness (its steps are days apart). Selection is a style
   // expression rather than a feature property, so tapping a marker doesn't rebuild it.
@@ -183,6 +189,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         const freshness = freshnessFor(visitSummaries.get(lib.id), freshnessHour * HOUR_MS);
         // Due means never visited or not for 30 days: everything but 'fresh'.
         if (dueOnly && freshness === 'fresh') return [];
+        // A walk's stops are drawn as numbered circles instead.
+        if (walkStopIds.has(lib.id)) return [];
         return {
           type: 'Feature',
           id: lib.id,
@@ -195,29 +203,31 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         } as GeoJSON.Feature<GeoJSON.Point>;
       }),
     }),
-    [libraries, visitSummaries, freshnessHour, dueOnly]
+    [libraries, visitSummaries, freshnessHour, dueOnly, walkStopIds]
   );
 
   const walkLines = useMemo<GeoJSON.FeatureCollection<GeoJSON.LineString>>(
     () => ({
       type: 'FeatureCollection',
-      features: (walk?.lines ?? []).map((line, i) => ({
-        type: 'Feature',
-        id: `walk-${i}`,
-        properties: { kind: line.kind },
-        geometry: { type: 'LineString', coordinates: line.coordinates },
-      })),
+      features: (walk?.legs ?? [])
+        .filter((leg) => leg.path.length >= 2)
+        .map((leg, i) => ({
+          type: 'Feature',
+          id: `walk-${i}`,
+          properties: { kind: leg.kind, state: leg.state },
+          geometry: { type: 'LineString', coordinates: leg.path },
+        })),
     }),
     [walk]
   );
   const walkStops = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
     () => ({
       type: 'FeatureCollection',
-      features: (walk?.stops ?? []).map((stop, i) => ({
+      features: (walk?.stops ?? []).map((stop) => ({
         type: 'Feature',
-        id: `stop-${i}`,
-        properties: { number: String(i + 1) },
-        geometry: { type: 'Point', coordinates: [stop.longitude, stop.latitude] },
+        id: `stop-${stop.id}`,
+        properties: { id: stop.id, label: stop.state === 'done' ? '✓' : String(stop.number), state: stop.state },
+        geometry: { type: 'Point', coordinates: [stop.point.longitude, stop.point.latitude] },
       })),
     }),
     [walk]
@@ -408,12 +418,24 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         <LineLayer
           id="walk-route-streets"
           filter={['==', ['get', 'kind'], 'streets']}
-          style={{ lineColor: colors.green, lineWidth: 4, lineOpacity: 0.85, lineJoin: 'round', lineCap: 'round' }}
+          style={{
+            lineColor: colors.green,
+            lineWidth: ['case', ['==', ['get', 'state'], 'next'], 5, 4],
+            lineOpacity: ['case', ['==', ['get', 'state'], 'done'], 0.3, 0.85],
+            lineJoin: 'round',
+            lineCap: 'round',
+          }}
         />
         <LineLayer
           id="walk-route-straight"
           filter={['==', ['get', 'kind'], 'straight']}
-          style={{ lineColor: colors.green, lineWidth: 3, lineDasharray: [2, 1.5], lineJoin: 'round' }}
+          style={{
+            lineColor: colors.green,
+            lineWidth: 3,
+            lineOpacity: ['case', ['==', ['get', 'state'], 'done'], 0.3, 0.8],
+            lineDasharray: [2, 1.5],
+            lineJoin: 'round',
+          }}
         />
       </ShapeSource>
 
@@ -429,7 +451,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         clusterMaxZoomLevel={13}
         clusterProperties={{ unvisited: ['+', ['get', 'unvisited']] }}
         onPress={handlePress}
-        hitbox={{ width: 28, height: 36 }}
+        // Larger than the marker: 44 dp is about a fingertip (the marker art is smaller).
+        hitbox={{ width: 44, height: 52 }}
       >
         <CircleLayer
           id="library-clusters"
@@ -462,6 +485,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
             symbolSortKey: ['case', isSelected, 1, 0],
+            // During a walk, libraries that aren't stops fade back (still there to discover).
+            iconOpacity: walk ? 0.45 : 1,
             // Zoom expressions must be top-level, so the selected scale goes inside each stop.
             iconSize: [
               'interpolate', ['linear'], ['zoom'],
@@ -472,18 +497,31 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         />
       </ShapeSource>
 
-      {/* Walk stop numbers, above the markers. */}
-      <ShapeSource id="walk-stops" shape={walkStops}>
+      {/* Walk stops: numbered circles in place of their markers (a tick once visited). */}
+      <ShapeSource
+        id="walk-stops"
+        shape={walkStops}
+        hitbox={{ width: 44, height: 44 }}
+        onPress={(event: { features: GeoJSON.Feature[] }) => {
+          const id = event.features[0]?.properties?.id;
+          if (typeof id === 'string') onLibraryPress(id);
+        }}
+      >
         <CircleLayer
           id="walk-stop-badges"
-          style={{ circleColor: colors.green, circleRadius: 11, circleStrokeColor: '#ffffff', circleStrokeWidth: 2 }}
+          style={{
+            circleColor: ['match', ['get', 'state'], 'done', '#ffffff', 'skipped', '#c9cfc9', colors.green],
+            circleRadius: ['case', ['==', ['get', 'state'], 'next'], 14, 12],
+            circleStrokeColor: ['match', ['get', 'state'], 'done', colors.green, '#ffffff'],
+            circleStrokeWidth: ['match', ['get', 'state'], 'done', 2.5, 2],
+          }}
         />
         <SymbolLayer
           id="walk-stop-numbers"
           style={{
-            textField: ['get', 'number'],
-            textSize: 12,
-            textColor: '#ffffff',
+            textField: ['get', 'label'],
+            textSize: ['case', ['==', ['get', 'state'], 'next'], 14, 12],
+            textColor: ['match', ['get', 'state'], 'done', colors.green, 'skipped', colors.inkSoft, '#ffffff'],
             textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
             textAllowOverlap: true,
             textIgnorePlacement: true,

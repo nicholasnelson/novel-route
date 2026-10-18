@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
 import LibraryMap, { CirclesOverlay, LibraryMapHandle, MapRegion, WalkOverlay } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
-import LibraryList from './overlays/LibraryList';
+import LibraryList, { RouteRequest, StartChoice } from './overlays/LibraryList';
 import MapKey from './overlays/MapKey';
 import YourVisits, { RecentVisit } from './overlays/YourVisits';
 import {
@@ -15,10 +15,13 @@ import {
   LibraryPreviewCard,
   NearbyCard,
   UndoToast,
-  WalkCard,
+  WalkArrivedCard,
+  WalkDoneCard,
+  WalkingCard,
+  WalkPlanCard,
 } from './overlays/cards';
-import { estimatePlan, PlannedWalk, planWalk } from './routing';
-import { MapControls, StatusPill, StatusPillKind } from './overlays/chrome';
+import { estimatePlan, planWalk } from './routing';
+import { CentreOnMe, MapMenu, StatusPill, StatusPillKind } from './overlays/chrome';
 import { Db } from '../db/db';
 import { getDb } from '../db/database';
 import {
@@ -48,10 +51,25 @@ import { freshnessFor } from '../store/freshness';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
 import { streakFromVisits, visitsThisMonth } from '../store/stats';
 import { circleAreaKm2, circleRing, clearedCircle, formatArea, reachCircle } from '../geo/circles';
-import { googleMapsWalkUrl } from '../geo/walk';
-import { getPromptedToday, markPrompted, nearbyCardState } from '../store/nearby';
+import { estimateRange, googleMapsWalkUrl, isLongWalk, MINUTES_PER_LIBRARY, totalMinutes, WALK_DETOUR } from '../geo/walk';
+import { pursuitTarget } from '../geo/pursuit';
+import { S } from '../ui/strings';
+import { ARRIVAL_RADIUS_M, getPromptedToday, markPrompted, MAX_ACCURACY_ALLOWANCE_M, nearbyCardState } from '../store/nearby';
+import {
+  isFinished,
+  legTo,
+  loadWalk,
+  markSkipped,
+  markVisited,
+  nextStop,
+  remainingStops,
+  saveWalk,
+  sessionFromPlan,
+  WalkSession,
+  withReplan,
+} from '../store/walkSession';
 import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
-import { formatDistance } from '../geo/bearing';
+import { bearingDegrees, formatDistance, normalizeDegrees } from '../geo/bearing';
 import {
   getCurrentPosition,
   getLocationPermission,
@@ -98,6 +116,8 @@ const SLOW_FIRST_LOAD_MS = 1200;
 const LIST_PICK_ZOOM = 16;
 /** Recent visits shown on the visits screen. */
 const RECENT_VISITS = 5;
+/** Within this distance of you, the middle of the map counts as "where you are" for the list. */
+const NEAR_YOU_M = 300;
 /** "Show on map" frames at least this far around each circle's centre. */
 const MIN_FRAME_RADIUS_M = 250;
 /** Lets one floating panel close before the next opens (they're separate modals). */
@@ -142,13 +162,15 @@ export default function MapScreen() {
   const [mapKeyOpen, setMapKeyOpen] = useState(false);
   /** Only libraries due for a visit on the map (and in the list). Remembered between launches. */
   const [dueOnly, setDueOnly] = useState(false);
-  /** The list panel, open as a list or straight into the walk planner. */
-  const [listOpen, setListOpen] = useState<{ planning: boolean; initialStops: string[] } | null>(null);
-  /** A planned walk: its stops (in the order picked) and the route, once worked out. */
-  const [walkStops, setWalkStops] = useState<Library[] | null>(null);
-  const [walkPlan, setWalkPlan] = useState<PlannedWalk | null>(null);
+  /** The list panel, open as a list or straight into the walk planner, and where it measures from. */
+  const [listOpen, setListOpen] = useState<{ planning: boolean; initialStops: string[]; start: StartChoice } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  /** A planned walk, or one in progress (saved on the phone after every change). */
+  const [walk, setWalk] = useState<WalkSession | null>(null);
+  const walkRef = useRef<WalkSession | null>(null);
   const [walkLoading, setWalkLoading] = useState(false);
   const walkRequestRef = useRef(0);
+  const [walkStreakWeeks, setWalkStreakWeeks] = useState(0);
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [visitTimes, setVisitTimes] = useState<number[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
@@ -288,7 +310,7 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, snapshot, visitSummaries, hints, perm, due] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
           hasSnapshot(database),
@@ -296,9 +318,12 @@ export default function MapScreen() {
           getSeenHints(database),
           getLocationPermission(),
           getKv(database, KV_KEYS.dueOnly),
+          loadWalk(database),
         ]);
         if (cancelled) return;
         setDueOnly(due === '1');
+        walkRef.current = savedWalk;
+        setWalk(savedWalk);
         setLibraries(libs);
         setLoadedTiles(loaded);
         setSnapshotReady(snapshot);
@@ -445,6 +470,9 @@ export default function MapScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setToast(visit);
       await reloadVisitState(db, selectedId);
+      // A stop on the walk, however it was marked visited.
+      const current = walkRef.current;
+      if (current && remainingStops(current).includes(libraryId)) await walkStopFinished(libraryId, 'visited');
     } finally {
       recordingVisitRef.current = false;
     }
@@ -457,18 +485,14 @@ export default function MapScreen() {
     await reloadVisitState(db, selectedId);
   };
 
-  /** "Log visit" from a card or the detail panel: asks first if you're clearly not there. */
+  /** "I visited" from a card or the detail panel: asks first if you're clearly not there. */
   const logVisitNow = (library: Library) => {
     const distance = distanceTo(library);
     if (distance !== null && distance > FAR_VISIT_CONFIRM_M) {
-      Alert.alert(
-        'Log a visit from here?',
-        `You're ${formatDistance(distance)} from ${library.title}. Log a visit anyway?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Log visit', onPress: () => recordVisit(library.id, 'manual') },
-        ]
-      );
+      Alert.alert(S.visit.farTitle, S.visit.far(formatDistance(distance), library.title), [
+        { text: S.visit.cancel, style: 'cancel' },
+        { text: S.visit.iVisited, onPress: () => recordVisit(library.id, 'manual') },
+      ]);
       return;
     }
     recordVisit(library.id, 'manual');
@@ -542,8 +566,16 @@ export default function MapScreen() {
     if (db) setKv(db, KV_KEYS.dueOnly, value ? '1' : '0').catch(() => {});
   };
 
-  /** Distances in the list and the walk start from you, or the middle of the map without location. */
-  const origin: LatLng = location ?? region?.center ?? AUSTRALIA;
+  /**
+   * Where the list measures from: you, unless you've moved the map away from yourself (or location
+   * is off), then the middle of the map.
+   */
+  const defaultStart = (): StartChoice => {
+    if (!location) return { kind: 'map' };
+    if (followUser || !region) return { kind: 'you' };
+    const fromYou = distanceMeters(location.latitude, location.longitude, region.center.latitude, region.center.longitude);
+    return fromYou <= NEAR_YOU_M ? { kind: 'you' } : { kind: 'map' };
+  };
 
   const pickFromList = (id: string) => {
     setListOpen(null);
@@ -552,41 +584,145 @@ export default function MapScreen() {
     if (library) mapRef.current?.centerOn(library, LIST_PICK_ZOOM);
   };
 
-  const showRoute = (ids: string[]) => {
+  const updateWalk = (next: WalkSession | null) => {
+    walkRef.current = next;
+    setWalk(next);
+    if (db) saveWalk(db, next).catch(() => {});
+  };
+
+  const libraryById = (id: string) => libraries.find((l) => l.id === id) ?? null;
+
+  const showRoute = (request: RouteRequest) => {
     setListOpen(null);
     setSelectedId(null);
     setCirclesShown(false);
-    const stops = ids.map((id) => libraries.find((l) => l.id === id)).filter((l): l is Library => !!l);
+    const stops = request.ids.map(libraryById).filter((l): l is Library => !!l);
     if (stops.length === 0) return;
-    const start = origin;
-    const request = ++walkRequestRef.current;
-    setWalkStops(stops);
-    // The straight-line plan straight away; the route along paths replaces it when it arrives.
-    setWalkPlan(estimatePlan(start, stops));
+    const ids = stops.map((l) => l.id);
+    const start = request.start.point;
+    const startStop = request.start.kind === 'library' ? ids.indexOf(request.start.libraryId ?? '') : -1;
+    const options = { finish: request.finish === 'start' ? start : null, startStop: startStop >= 0 ? startStop : undefined };
+    const base = {
+      startKind: request.start.kind,
+      start,
+      startLibraryId: request.start.kind === 'library' ? request.start.libraryId ?? null : null,
+      finish: request.finish,
+      order: request.order,
+    };
+    const requestId = ++walkRequestRef.current;
+    // The straight-line plan straight away; the footpath route replaces it when it arrives.
+    updateWalk(sessionFromPlan(base, ids, estimatePlan(start, stops, options)));
     setWalkLoading(true);
     mapRef.current?.frame([start, ...stops]);
-    planWalk(start, stops)
-      .then((plan) => { if (request === walkRequestRef.current) setWalkPlan(plan); })
-      .finally(() => { if (request === walkRequestRef.current) setWalkLoading(false); });
+    planWalk(start, stops, options)
+      .then((plan) => {
+        if (requestId !== walkRequestRef.current) return;
+        const current = walkRef.current;
+        updateWalk({ ...sessionFromPlan(base, ids, plan), walking: current?.walking ?? false });
+      })
+      .finally(() => { if (requestId === walkRequestRef.current) setWalkLoading(false); });
   };
 
-  const closeWalk = () => {
+  const clearWalk = () => {
     walkRequestRef.current++;
-    setWalkStops(null);
-    setWalkPlan(null);
     setWalkLoading(false);
+    updateWalk(null);
   };
 
-  const startWalk = () => {
-    if (!walkStops || !walkPlan) return;
-    const ordered = walkPlan.order.map((i) => walkStops[i]);
-    Linking.openURL(googleMapsWalkUrl(ordered)).catch((err) => console.warn('Could not open Google Maps:', err?.message));
+  const endWalk = () => {
+    Alert.alert(S.walk.endTitle, S.walk.endBody, [
+      { text: S.walk.keepGoing, style: 'cancel' },
+      { text: S.walk.end, style: 'destructive', onPress: clearWalk },
+    ]);
   };
 
-  const walkOverlay = useMemo<WalkOverlay | null>(
-    () => (walkStops && walkPlan ? { lines: walkPlan.lines, stops: walkPlan.order.map((i) => walkStops[i]) } : null),
-    [walkStops, walkPlan]
-  );
+  const startWalking = () => {
+    if (!walk) return;
+    updateWalk({ ...walk, walking: true });
+    setSelectedId(null);
+    if (locationGranted) setFollowUser(true);
+  };
+
+  /** A stop visited or skipped: tick it off, and with "as I go", plan the rest from here. */
+  async function walkStopFinished(id: string, how: 'visited' | 'skipped') {
+    const current = walkRef.current;
+    if (!current) return;
+    const next = how === 'visited' ? markVisited(current, id) : markSkipped(current, id);
+    updateWalk(next);
+    if (isFinished(next)) {
+      if (db) setWalkStreakWeeks(streakFromVisits(await getVisitTimes(db), Date.now()).current);
+      return;
+    }
+    const here = libraryById(id);
+    if (next.order !== 'flexible' || how !== 'visited' || !here) return;
+    const rest = remainingStops(next);
+    const restLibs = rest.map(libraryById).filter((l): l is Library => !!l);
+    const requestId = ++walkRequestRef.current;
+    setWalkLoading(true);
+    const plan = await planWalk(here, [here, ...restLibs], {
+      finish: next.finish === 'start' ? next.start : null,
+      startStop: 0,
+    });
+    setWalkLoading(false);
+    if (requestId !== walkRequestRef.current || !walkRef.current) return;
+    updateWalk(withReplan(walkRef.current, id, restLibs.map((l) => l.id), plan));
+  }
+
+  /** Google Maps through the stops still to go (back to a start library, if finishing there). */
+  const openWalkInGoogleMaps = () => {
+    if (!walk) return;
+    const points: LatLng[] = remainingStops(walk).map(libraryById).filter((l): l is Library => !!l);
+    const startLibrary = walk.startLibraryId ? libraryById(walk.startLibraryId) : null;
+    if (walk.finish === 'start' && startLibrary) points.push(startLibrary);
+    if (points.length === 0) return;
+    Linking.openURL(googleMapsWalkUrl(points)).catch((err) => console.warn('Could not open Google Maps:', err?.message));
+  };
+
+  const walkNextId = walk ? nextStop(walk) : null;
+  const walkOverlay = useMemo<WalkOverlay | null>(() => {
+    if (!walk) return null;
+    const stateOf = (id: string) =>
+      walk.done.includes(id) ? 'done' : walk.skipped.includes(id) ? 'skipped' : id === walkNextId ? 'next' : 'later';
+    return {
+      legs: walk.legs.map((leg, i) => {
+        const to = walk.stops[i];
+        const state: 'done' | 'next' | 'later' = !to
+          ? 'later'
+          : stateOf(to) === 'done' || stateOf(to) === 'skipped'
+            ? 'done'
+            : stateOf(to) === 'next' ? 'next' : 'later';
+        return { path: leg.path, kind: leg.kind, state };
+      }),
+      stops: walk.stops.flatMap((id, i) => {
+        const library = libraryById(id);
+        return library ? [{ id, point: library, number: i + 1, state: stateOf(id) as 'done' | 'skipped' | 'next' | 'later' }] : [];
+      }),
+    };
+    // libraryById reads `libraries`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walk, walkNextId, libraries]);
+
+  // Walking: are you at a stop still to go, and where does the arrow point?
+  const arrivalRadius = ARRIVAL_RADIUS_M + Math.min(position?.accuracy ?? 0, MAX_ACCURACY_ALLOWANCE_M);
+  const walkArrivedId =
+    walk?.walking && location
+      ? remainingStops(walk).find((id) => {
+          const library = libraryById(id);
+          return library && distanceMeters(location.latitude, location.longitude, library.latitude, library.longitude) <= arrivalRadius;
+        }) ?? null
+      : null;
+  const walkNextLibrary = walkNextId ? libraryById(walkNextId) : null;
+  const walkGuide = useMemo(() => {
+    if (!walk?.walking || !walkNextId || !walkNextLibrary || !location) return null;
+    const leg = legTo(walk, walkNextId);
+    const straightLine = distanceMeters(location.latitude, location.longitude, walkNextLibrary.latitude, walkNextLibrary.longitude);
+    if (!leg || leg.kind !== 'streets' || leg.path.length < 2) {
+      return { target: walkNextLibrary as LatLng, walkLeft: null as number | null, straightLine };
+    }
+    // Each leg is one stop's stretch, so the nearest point on it can't jump to another part of the walk.
+    const t = pursuitTarget(leg.path, location, { accuracyM: position?.accuracy ?? null });
+    return { target: t.target, walkLeft: t.remaining as number | null, straightLine };
+  }, [walk, walkNextId, walkNextLibrary, location, position?.accuracy]);
 
   const openVisits = async () => {
     if (!db) return;
@@ -612,7 +748,6 @@ export default function MapScreen() {
   const showCircles = () => {
     setVisitsOpen(false);
     setSelectedId(null);
-    closeWalk();
     setCirclesShown(true);
     // Frame both circles (at least a few streets across, so a tiny one doesn't zoom in forever).
     const shown = [circles?.reach, circles?.cleared].filter((c): c is NonNullable<typeof c> => !!c);
@@ -630,7 +765,7 @@ export default function MapScreen() {
   const recent: RecentVisit[] = recentVisits.map((v) => ({
     id: v.id,
     libraryId: v.libraryId,
-    title: libraries.find((l) => l.id === v.libraryId)?.title ?? 'A library no longer listed',
+    title: libraries.find((l) => l.id === v.libraryId)?.title ?? S.visits.gone,
     visitedAt: v.visitedAt,
     freshness: freshnessFor(summaries.get(v.libraryId), now),
   }));
@@ -698,6 +833,8 @@ export default function MapScreen() {
   const showTapHint = libraries.length > 0 && !seenHints?.has('tap_library');
   // Wait for the undo toast to go, so two dark cards don't stack.
   const showDoorsHint = summaries.size > 0 && !seenHints?.has('doors') && !toast;
+  // Once the first hints are out of the way, point out the menu.
+  const showMenuHint = !!seenHints?.has('tap_library') && !seenHints?.has('menu') && !toast;
   const showNearby = nearby !== null && !(nearby.kind === 'suggestion' && suggestionDismissed);
 
   let bottomCard: React.ReactNode = null;
@@ -718,17 +855,62 @@ export default function MapScreen() {
         onClose={() => setSelectedId(null)}
       />
     );
-  } else if (walkStops && walkPlan) {
+  } else if (walk && walk.walking && isFinished(walk)) {
+    bottomCard = <WalkDoneCard visited={walk.done.length} streakWeeks={walkStreakWeeks} onDone={clearWalk} />;
+  } else if (walk && walkArrivedId) {
+    const library = libraryById(walkArrivedId)!;
     bottomCard = (
-      <WalkCard
-        stops={walkStops.length}
-        meters={walkPlan.meters}
-        minutes={walkPlan.minutes}
-        onStreets={walkPlan.source === 'streets'}
+      <WalkArrivedCard
+        number={walk.stops.indexOf(walkArrivedId) + 1}
+        total={walk.stops.length}
+        library={library}
+        freshness={freshnessFor(summaries.get(library.id), now)}
+        summary={summaries.get(library.id)}
+        now={now}
+        onVisited={() => recordVisit(library.id, 'nearby_prompt')}
+        onSkip={() => walkStopFinished(library.id, 'skipped')}
+      />
+    );
+  } else if (walk && walk.walking && walkNextLibrary) {
+    const target = walkGuide?.target ?? walkNextLibrary;
+    bottomCard = (
+      <WalkingCard
+        visited={walk.done.length}
+        total={walk.stops.length}
+        nextTitle={walkNextLibrary.title}
+        walkLeft={walkGuide?.walkLeft ?? null}
+        straightLine={walkGuide?.straightLine ?? 0}
+        arrowRotation={location ? normalizeDegrees(bearingDegrees(location, target) - (directionReference?.degrees ?? 0)) : 0}
+        compass={!!directionReference}
+        onGoogleMaps={openWalkInGoogleMaps}
+        onEdit={() => setListOpen({ planning: true, initialStops: remainingStops(walk), start: { kind: location ? 'you' : 'map' } })}
+        onEnd={endWalk}
+      />
+    );
+  } else if (walk) {
+    const libraryCount = walk.stops.length;
+    const total = totalMinutes(walk.walkingMinutes, libraryCount);
+    const range = estimateRange(walk.meters / WALK_DETOUR);
+    const onStreets = walk.source === 'streets';
+    bottomCard = (
+      <WalkPlanCard
+        stops={libraryCount}
+        order={walk.order}
+        back={walk.finish === 'start'}
+        onStreets={onStreets}
+        meters={walk.meters}
+        range={range}
+        walkingMinutes={walk.walkingMinutes}
+        libraryMinutes={libraryCount * MINUTES_PER_LIBRARY}
+        long={isLongWalk(onStreets ? walk.meters : range[1], total)}
         loading={walkLoading}
-        onStart={startWalk}
-        onEdit={() => setListOpen({ planning: true, initialStops: walkStops.map((l) => l.id) })}
-        onClose={closeWalk}
+        onStart={startWalking}
+        onEdit={() => setListOpen({
+          planning: true,
+          initialStops: walk.stops,
+          start: walk.startKind === 'library' && walk.startLibraryId ? { kind: 'library', libraryId: walk.startLibraryId } : { kind: walk.startKind },
+        })}
+        onClose={clearWalk}
       />
     );
   } else if (circlesShown && circles) {
@@ -737,7 +919,7 @@ export default function MapScreen() {
     bottomCard = (
       <HintCard
         title="Find libraries near you"
-        body="Novel Route uses your location to show nearby street libraries and to let you log a visit when you arrive. It stays on your phone."
+        body="Novel Route uses your location to show nearby street libraries and to let you mark a visit when you arrive. It stays on your phone."
         actions={[
           { label: 'Not now', onPress: () => seeHint('location_explained') },
           { label: 'Allow', primary: true, onPress: () => { seeHint('location_explained'); askForLocation(); } },
@@ -763,8 +945,8 @@ export default function MapScreen() {
       <HintCard
         body={
           <Text style={styles.hintText}>
-            <Text style={styles.hintStrong}>Tap a library</Text> to see what&apos;s there, get directions or log a
-            visit. Closed doors mean you haven&apos;t been yet.
+            <Text style={styles.hintStrong}>Tap a library</Text> to see what&apos;s there, get directions or mark it
+            as visited. Closed doors mean you haven&apos;t been yet.
           </Text>
         }
         onDismiss={() => seeHint('tap_library')}
@@ -774,10 +956,12 @@ export default function MapScreen() {
     bottomCard = (
       <HintCard
         title="The doors are open"
-        body="Logging a visit opens a library's doors. They slowly close over the months, a reminder that there might be new books to find."
+        body="Marking a visit opens a library's doors. They slowly close over the months, a reminder that there might be new books to find."
         onDismiss={() => seeHint('doors')}
       />
     );
+  } else if (showMenuHint) {
+    bottomCard = <HintCard body={S.menu.hint} onDismiss={() => seeHint('menu')} />;
   } else if (showNearby && nearby) {
     bottomCard = (
       <NearbyCard
@@ -793,8 +977,9 @@ export default function MapScreen() {
     );
   }
 
-  const arrowShowing = !!bottomCard && showNearby && nearby?.kind !== 'arrived' && !!nearbyLibrary &&
-    !selectedLibrary && !tapHintVisible;
+  const walkingCardShown = !!walk?.walking && !walkArrivedId && !!walkNextLibrary && !selectedLibrary;
+  const arrowShowing = walkingCardShown || (!!bottomCard && !walk && showNearby && nearby?.kind !== 'arrived' && !!nearbyLibrary &&
+    !selectedLibrary && !tapHintVisible);
 
   // Compass, only while the app is in the foreground and the nearby arrow is showing.
   useEffect(() => {
@@ -859,18 +1044,30 @@ export default function MapScreen() {
         </View>
       )}
 
+      {menuOpen && (
+        <Pressable style={styles.menuScrim} onPress={() => setMenuOpen(false)} accessibilityLabel={S.menu.close} accessibilityRole="button" />
+      )}
       <View style={[styles.controls, { top: topOffset + 40, right: insets.right + 12 }]}>
-        <MapControls
-          following={followUser && locationGranted}
-          locationAvailable={locationGranted}
-          dueOnly={dueOnly}
-          onLocate={() => (locationGranted ? setFollowUser(true) : askForLocation())}
-          onShowList={() => setListOpen({ planning: false, initialStops: [] })}
-          onToggleDueOnly={() => changeDueOnly(!dueOnly)}
-          onShowVisits={openVisits}
-          onShowKey={() => setMapKeyOpen(true)}
+        <MapMenu
+          open={menuOpen}
+          toVisitOnly={dueOnly}
+          onToggle={() => {
+            setMenuOpen((open) => !open);
+            if (seenHints && !seenHints.has('menu')) seeHint('menu');
+          }}
+          onNearby={() => { setMenuOpen(false); setListOpen({ planning: false, initialStops: [], start: defaultStart() }); }}
+          onPlanWalk={() => { setMenuOpen(false); setListOpen({ planning: true, initialStops: [], start: defaultStart() }); }}
+          onToggleToVisit={() => changeDueOnly(!dueOnly)}
+          onMyVisits={() => { setMenuOpen(false); openVisits(); }}
+          onHelp={() => { setMenuOpen(false); setMapKeyOpen(true); }}
         />
       </View>
+
+      {locationGranted && !followUser && !menuOpen && (
+        <View style={[styles.centreOnMe, { right: insets.right + 12, bottom: insets.bottom + 22 + bottomHeight }]}>
+          <CentreOnMe onPress={() => setFollowUser(true)} />
+        </View>
+      )}
 
       <View
         style={[styles.bottomSlot, { bottom: insets.bottom + 12, left: insets.left + 10, right: insets.right + 10 }]}
@@ -879,7 +1076,7 @@ export default function MapScreen() {
       >
         {toast && !detailOpen && (
           <UndoToast
-            message={toastLibraryTitle ? `Logged a visit to ${toastLibraryTitle}` : 'Visit logged'}
+            message={toastLibraryTitle ? S.visit.marked(toastLibraryTitle) : S.visit.markedShort}
             onUndo={undoLastVisit}
           />
         )}
@@ -914,6 +1111,12 @@ export default function MapScreen() {
           await reloadVisitState(db, selectedId);
         }}
         onDirections={() => detailLibrary && openDirections(detailLibrary)}
+        onWalkFromHere={() => {
+          if (!detailLibrary) return;
+          const libraryId = detailLibrary.id;
+          setDetailOpen(false);
+          setTimeout(() => setListOpen({ planning: true, initialStops: [], start: { kind: 'library', libraryId } }), PANEL_SWAP_MS);
+        }}
         onClose={() => setDetailOpen(false)}
       />
 
@@ -921,11 +1124,12 @@ export default function MapScreen() {
         visible={listOpen !== null}
         planning={listOpen?.planning ?? false}
         initialStops={listOpen?.initialStops ?? []}
+        initialStart={listOpen?.start ?? { kind: 'you' }}
         libraries={libraries}
         summaries={summaries}
         now={now}
-        origin={origin}
-        originIsUser={!!location}
+        you={location}
+        mapCentre={region?.center ?? AUSTRALIA}
         dueOnly={dueOnly}
         onDueOnlyChange={changeDueOnly}
         onSelectLibrary={pickFromList}
@@ -965,6 +1169,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   controls: {
+    position: 'absolute',
+  },
+  menuScrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.scrim,
+  },
+  centreOnMe: {
     position: 'absolute',
   },
   bottomSlot: {

@@ -21,6 +21,7 @@ import { describeVisits, relativeDay } from '../../store/freshness';
 import { visitedToday } from '../../store/nearby';
 import { formatDistance } from '../../geo/bearing';
 import { colors, radius, TOUCH } from '../../ui/theme';
+import { S } from '../../ui/strings';
 
 /** Below this window height (a phone in landscape) the icon and title share the header row. */
 const COMPACT_HEIGHT = 500;
@@ -44,6 +45,8 @@ type Props = {
   onUndoDelete(visit: Visit): void;
   onClearHistory(): void;
   onDirections(): void;
+  /** Plan a walk that starts (and finishes) at this library. */
+  onWalkFromHere(): void;
   onClose(): void;
 };
 
@@ -85,6 +88,7 @@ function DetailContent({
   onUndoDelete,
   onClearHistory,
   onDirections,
+  onWalkFromHere,
   onClose,
 }: Props & { library: Library }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -191,21 +195,21 @@ function DetailContent({
           <View>
             <View style={styles.doneButton}>
               <Ionicons name="checkmark-circle" size={20} color={colors.green} />
-              <Text style={styles.doneText}>Visited today</Text>
+              <Text style={styles.doneText}>{S.visit.visitedToday}</Text>
             </View>
             {canLogAgain ? (
               <Pressable onPress={onLogVisit} accessibilityRole="button" hitSlop={8}>
-                <Text style={styles.linkCentered}>Log another visit</Text>
+                <Text style={styles.linkCentered}>{S.visit.iVisitedAgain}</Text>
               </Pressable>
             ) : (
               <Text style={styles.noteCentered}>Logged just now</Text>
             )}
           </View>
         ) : (
-          <PrimaryButton label="Log visit" icon="checkmark" onPress={onLogVisit} />
+          <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} />
         )}
         <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
-          <Text style={styles.linkCentered}>Log a past visit</Text>
+          <Text style={styles.linkCentered}>{S.visit.addPastVisit}</Text>
         </Pressable>
         {pickingDate && (
           <DateTimePicker value={pickingDate} mode="date" maximumDate={pickingDate} onChange={handlePastDate} />
@@ -221,7 +225,8 @@ function DetailContent({
         )}
 
         <View style={styles.actions}>
-          <Action icon="walk" label="Directions" onPress={onDirections} />
+          <Action icon="walk" label={S.directions.label} caption={S.directions.opensGoogle} hint={S.directions.hint} onPress={onDirections} />
+          <Action icon="git-network-outline" label={S.planner.walkFromHere} onPress={onWalkFromHere} />
           {library.permalink && (
             <Action icon="book-outline" label="Street Library page" onPress={() => Linking.openURL(library.permalink!).catch(() => {})} />
           )}
@@ -269,11 +274,24 @@ function DetailContent({
   );
 }
 
-function Action({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress(): void }) {
+function Action({ icon, label, caption, hint, onPress }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  /** A small second line, e.g. which app it opens. */
+  caption?: string;
+  hint?: string;
+  onPress(): void;
+}) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityHint={hint}
+      style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+    >
       <Ionicons name={icon} size={20} color={colors.green} />
       <Text style={styles.actionText} numberOfLines={2}>{label}</Text>
+      {caption && <Text style={styles.actionCaption} numberOfLines={1}>{caption}</Text>}
     </Pressable>
   );
 }
@@ -396,7 +414,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginTop: 16,
   },
   action: {
@@ -413,6 +431,11 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 12.5,
     color: colors.ink,
+    textAlign: 'center',
+  },
+  actionCaption: {
+    fontSize: 11,
+    color: colors.inkSoft,
     textAlign: 'center',
   },
   pressed: {
