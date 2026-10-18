@@ -37,11 +37,12 @@ describe('planWalk', () => {
     expect(url).not.toContain('138.600000,-34.930000');
     expect(walk.source).toBe('streets');
     expect(walk.order).toHaveLength(3);
-    expect(walk.legs).toHaveLength(4); // to each stop, then home
+    expect(walk.legs).toHaveLength(5); // to each stop, back to the first on footpaths, then a straight line home
     expect(walk.legs[0].kind).toBe('straight');
     expect(walk.legs[0].path[0]).toEqual(lngLat(start));
     expect(walk.legs[1].kind).toBe('streets');
-    expect(walk.legs[3].path[walk.legs[3].path.length - 1]).toEqual(lngLat(start)); // ends back at you
+    expect(walk.legs[3].kind).toBe('streets');
+    expect(walk.legs[4]).toEqual({ kind: 'straight', path: [walk.legs[3].path[walk.legs[3].path.length - 1], lngLat(start)] });
     expect(walk.meters).toBeGreaterThan(2400);
   });
 

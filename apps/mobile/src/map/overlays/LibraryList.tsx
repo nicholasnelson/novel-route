@@ -532,7 +532,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionLabel: {
-    width: 52,
+    // Sized to the word (never broken mid-word with large text); the choices take the rest.
+    minWidth: 48,
+    flexShrink: 0,
     fontSize: 13,
     color: colors.inkSoft,
   },

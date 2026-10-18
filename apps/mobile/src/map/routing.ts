@@ -19,7 +19,10 @@ export type Leg = { path: Path; kind: 'streets' | 'straight' };
 export type PlannedWalk = {
   /** Indices into the stops, in walking order. */
   order: number[];
-  /** legs[i] leads to stops[order[i]]; with a finish point, one more leg leads there. */
+  /**
+   * legs[i] leads to stops[order[i]]; with a finish point, the rest lead there (the footpath back
+   * to the first stop, then a straight line, when the walk started from you).
+   */
   legs: Leg[];
   /** Total length: footpath legs as measured, straight legs times the street detour. */
   meters: number;
@@ -121,21 +124,19 @@ export async function planWalk(
       legs.push(...streetLegs);
     } else if (returning) {
       // Mapbox's last leg returns to the first stop; from there it's a straight line back to you.
-      const back = streetLegs.pop()!;
-      legs.push(...streetLegs, { path: [...back.path, lngLat(options.finish!)], kind: 'streets' });
+      legs.push(...streetLegs, straight(stops[first], options.finish!));
     } else {
       legs.push(...streetLegs);
       if (options.finish) legs.push(straight(stops[order[order.length - 1]], options.finish));
     }
 
     const straightMeters = legs.filter((l) => l.kind === 'straight').reduce((s, l) => s + legMeters(l), 0);
-    const tailMeters = returning ? dist(stops[first], options.finish!) * WALK_DETOUR : 0;
-    const meters = trip.distance + straightMeters + tailMeters;
+    const meters = trip.distance + straightMeters;
     return {
       order,
       legs,
       meters,
-      walkingMinutes: Math.round((trip.duration + (straightMeters + tailMeters) / WALK_SPEED_MPS) / 60),
+      walkingMinutes: Math.round((trip.duration + straightMeters / WALK_SPEED_MPS) / 60),
       source: 'streets',
     };
   } catch (err: any) {
