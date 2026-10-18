@@ -31,7 +31,8 @@ export function smoothAngle(previous: number | null, next: number, factor = 0.25
 export function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.max(10, Math.round(meters / 10) * 10)} m`;
   const km = meters / 1000;
-  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+  // 9.96 km would round to "10.0 km" with one decimal: from there, whole kilometres.
+  return km < 9.95 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
 }
 
 const COMPASS_POINTS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];

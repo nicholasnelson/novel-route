@@ -228,7 +228,13 @@ function DetailContent({
           <Action icon="walk" label={S.directions.label} caption={S.directions.opensGoogle} hint={S.directions.hint} onPress={onDirections} />
           <Action icon="git-network-outline" label={S.planner.walkFromHere} onPress={onWalkFromHere} />
           {library.permalink && (
-            <Action icon="book-outline" label="Street Library page" onPress={() => Linking.openURL(library.permalink!).catch(() => {})} />
+            <Action
+              icon="book-outline"
+              label={S.streetLibrary.label}
+              caption={S.streetLibrary.caption}
+              hint={S.streetLibrary.hint}
+              onPress={() => Linking.openURL(library.permalink!).catch(() => {})}
+            />
           )}
           <Action icon="share-outline" label="Share" onPress={share} />
         </View>

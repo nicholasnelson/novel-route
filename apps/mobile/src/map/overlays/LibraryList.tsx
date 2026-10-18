@@ -170,7 +170,7 @@ function ListContent({
           <Text style={styles.pick}>{S.planner.startHere}</Text>
         ) : (
           <>
-            <Text style={styles.distance}>{formatDistance(item.distance)}</Text>
+            {!(isStart && planning) && <Text style={styles.distance}>{formatDistance(item.distance)}</Text>}
             {!planning && (
               <Ionicons name="arrow-up" size={15} color={colors.green} style={{ transform: [{ rotate: `${item.bearing}deg` }] }} />
             )}

@@ -31,6 +31,8 @@ describe('formatDistance', () => {
     expect(formatDistance(4)).toBe('10 m');
     expect(formatDistance(263)).toBe('260 m');
     expect(formatDistance(1440)).toBe('1.4 km');
+    expect(formatDistance(9960)).toBe('10 km');
+    expect(formatDistance(9940)).toBe('9.9 km');
     expect(formatDistance(12400)).toBe('12 km');
   });
 });

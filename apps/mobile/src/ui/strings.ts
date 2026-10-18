@@ -35,6 +35,11 @@ export const S = {
     opensGoogle: 'Google Maps',
     hint: 'Opens Google Maps',
   },
+  streetLibrary: {
+    label: 'Street Library',
+    caption: 'website',
+    hint: 'Opens this library on the Street Library Australia website',
+  },
   list: {
     nearby: 'Nearby',
     aroundMap: 'Around the map centre',
