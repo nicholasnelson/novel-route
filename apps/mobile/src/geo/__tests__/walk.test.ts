@@ -62,7 +62,7 @@ describe('one-way walks and honest estimates', () => {
   });
 
   it('ranges straight lines, adds time at libraries and flags long walks', () => {
-    expect(estimateRange(1000)).toEqual([1200, 1600]);
+    expect(estimateRange(1000)).toEqual([1200, 1800]);
     expect(totalMinutes(80, 5)).toBe(105);
     expect(isLongWalk(6000, 60)).toBe(true);
     expect(isLongWalk(3000, 95)).toBe(true);

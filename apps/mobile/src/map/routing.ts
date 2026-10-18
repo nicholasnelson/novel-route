@@ -19,10 +19,7 @@ export type Leg = { path: Path; kind: 'streets' | 'straight' };
 export type PlannedWalk = {
   /** Indices into the stops, in walking order. */
   order: number[];
-  /**
-   * legs[i] leads to stops[order[i]]; with a finish point, the rest lead there (the footpath back
-   * to the first stop, then a straight line, when the walk started from you).
-   */
+  /** legs[i] leads to stops[order[i]]; with a finish point, one more leg leads there. */
   legs: Leg[];
   /** Total length: footpath legs as measured, straight legs times the street detour. */
   meters: number;
@@ -86,14 +83,14 @@ export async function planWalk(
   const first = estimate.order[0];
   const last = estimate.order[estimate.order.length - 1];
   const startsAtStop = options.startStop !== undefined;
-  // Back to a stop we start at: Mapbox's own round trip. Otherwise from the first stop to the
-  // last one (picked on the phone), with straight legs for anything Mapbox isn't told about.
+  // Back to a library we start at: Mapbox's own round trip. Otherwise one way from the first stop
+  // to the last (both picked on the phone, so a walk home from you ends at the stop nearest you),
+  // with straight legs for what Mapbox isn't told about: your position, never sent.
   const roundTrip = !!options.finish && dist(options.finish, stops[first]) < SAME_PLACE_M;
-  const returning = !!options.finish && dist(options.finish, start) < SAME_PLACE_M && !startsAtStop;
-  const middle = estimate.order.filter((i) => i !== first && (roundTrip || returning || i !== last));
-  const inputs = roundTrip || returning ? [first, ...middle] : [first, ...middle, last];
+  const middle = estimate.order.filter((i) => i !== first && (roundTrip || i !== last));
+  const inputs = roundTrip ? [first, ...middle] : [first, ...middle, last];
   const coords = inputs.map((i) => `${stops[i].longitude.toFixed(6)},${stops[i].latitude.toFixed(6)}`).join(';');
-  const params = roundTrip || returning ? 'roundtrip=true&source=first' : 'roundtrip=false&source=first&destination=last';
+  const params = roundTrip ? 'roundtrip=true&source=first' : 'roundtrip=false&source=first&destination=last';
   const url = `${OPTIMIZATION_URL}/${coords}?${params}&geometries=geojson&overview=full&access_token=${encodeURIComponent(token)}`;
 
   const controller = new AbortController();
@@ -111,7 +108,7 @@ export async function planWalk(
       .sort((a, b) => a.position - b.position);
     const order = visits.map((v) => v.stop);
     const at = (p: [number, number]): LatLng => ({ latitude: p[1], longitude: p[0] });
-    const cutAt = roundTrip || returning ? visits.slice(1) : visits.slice(1, -1);
+    const cutAt = roundTrip ? visits.slice(1) : visits.slice(1, -1);
     const streetLegs: Leg[] = splitAtStops(trip.geometry.coordinates, cutAt.map((v) => at(v.at))).map((path) => ({
       path,
       kind: 'streets',
@@ -122,9 +119,6 @@ export async function planWalk(
     legs.push(startsAtStop ? straight(stops[first], stops[first]) : straight(start, stops[first]));
     if (roundTrip) {
       legs.push(...streetLegs);
-    } else if (returning) {
-      // Mapbox's last leg returns to the first stop; from there it's a straight line back to you.
-      legs.push(...streetLegs, straight(stops[first], options.finish!));
     } else {
       legs.push(...streetLegs);
       if (options.finish) legs.push(straight(stops[order[order.length - 1]], options.finish));

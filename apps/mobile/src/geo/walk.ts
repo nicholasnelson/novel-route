@@ -12,7 +12,7 @@ export const WALK_SPEED_MPS = 1.33;
 /** Time allowed at each library (people stop to browse). */
 export const MINUTES_PER_LIBRARY = 5;
 /** Straight-line estimates are shown as a range: this much to this much of the straight line. */
-export const ESTIMATE_RANGE = [1.2, 1.6] as const;
+export const ESTIMATE_RANGE = [1.2, 1.8] as const;
 /** Walks longer than this (or LONG_WALK_MINUTES, including time at libraries) get a reminder. */
 export const LONG_WALK_METERS = 5000;
 export const LONG_WALK_MINUTES = 90;

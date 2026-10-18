@@ -30,19 +30,21 @@ beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}));
 
 describe('planWalk', () => {
   it('starting from you: a straight leg to the first stop, footpaths after, back to you; your position is never sent', async () => {
-    const fetchMock = mockMapbox([0, 2, 1]);
+    const fetchMock = mockMapbox([0, 1, 2]);
     const walk = await planWalk(start, stops, { finish: start }, 'pk.test');
     const url = fetchMock.mock.calls[0][0];
-    expect(url).toContain('roundtrip=true&source=first');
+    // One way from the first stop to the last (the one nearest home), not back to the first.
+    expect(url).toContain('roundtrip=false&source=first&destination=last');
     expect(url).not.toContain('138.600000,-34.930000');
     expect(walk.source).toBe('streets');
     expect(walk.order).toHaveLength(3);
-    expect(walk.legs).toHaveLength(5); // to each stop, back to the first on footpaths, then a straight line home
+    expect(walk.legs).toHaveLength(4); // a straight line to the first stop, footpaths between stops, a straight line home
     expect(walk.legs[0].kind).toBe('straight');
     expect(walk.legs[0].path[0]).toEqual(lngLat(start));
     expect(walk.legs[1].kind).toBe('streets');
-    expect(walk.legs[3].kind).toBe('streets');
-    expect(walk.legs[4]).toEqual({ kind: 'straight', path: [walk.legs[3].path[walk.legs[3].path.length - 1], lngLat(start)] });
+    expect(walk.legs[2].kind).toBe('streets');
+    expect(walk.legs[3].kind).toBe('straight');
+    expect(walk.legs[3].path[1]).toEqual(lngLat(start));
     expect(walk.meters).toBeGreaterThan(2400);
   });
 
