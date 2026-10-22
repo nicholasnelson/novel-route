@@ -32,8 +32,10 @@ jobs:
       - run: npm test
       - name: Shipped migrations unchanged
         run: node scripts/check-migrations.mjs "${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}"
+      # A warning, not a failure: Expo ships patch releases at any time, so this would otherwise
+      # turn CI red without any change here. Fix with `npx expo install --fix` in apps/mobile.
       - name: Expo SDK package versions match
-        run: npx expo install --check
+        run: npx expo install --check || echo "::warning title=Expo packages out of date::Run 'npx expo install --fix' in apps/mobile"
         working-directory: apps/mobile
       - name: Server bundles for Workers
         run: npx wrangler deploy --dry-run --outdir dist
