@@ -1104,19 +1104,22 @@ export default function MapScreen() {
       {menuOpen && (
         <Pressable style={styles.menuScrim} onPress={() => setMenuOpen(false)} accessibilityLabel={S.menu.close} accessibilityRole="button" />
       )}
-      <View style={[styles.controls, { top: topOffset + 40, right: insets.right + 12 }]}>
-        <MapMenu
-          open={menuOpen}
-          onToggle={() => {
-            setMenuOpen((open) => !open);
-            if (seenHints && !seenHints.has('menu')) seeHint('menu');
-          }}
-          onNearby={() => { setMenuOpen(false); setList({ start: defaultStart(), draft: null, onMap: false }); }}
-          onPlanWalk={() => { setMenuOpen(false); openPlanner(defaultStart(), newDraft()); }}
-          onMyVisits={() => { setMenuOpen(false); openVisits(); }}
-          onHelp={() => { setMenuOpen(false); setMapKeyOpen(true); }}
-        />
-      </View>
+      {/* Hidden while picking a walk on the map: its items would replace the walk being planned. */}
+      {!picking && (
+        <View style={[styles.controls, { top: topOffset + 40, right: insets.right + 12 }]}>
+          <MapMenu
+            open={menuOpen}
+            onToggle={() => {
+              setMenuOpen((open) => !open);
+              if (seenHints && !seenHints.has('menu')) seeHint('menu');
+            }}
+            onNearby={() => { setMenuOpen(false); setList({ start: defaultStart(), draft: null, onMap: false }); }}
+            onPlanWalk={() => { setMenuOpen(false); openPlanner(defaultStart(), newDraft()); }}
+            onMyVisits={() => { setMenuOpen(false); openVisits(); }}
+            onHelp={() => { setMenuOpen(false); setMapKeyOpen(true); }}
+          />
+        </View>
+      )}
 
       {locationGranted && !followUser && !menuOpen && !detailLibrary && (
         <View style={[styles.centreOnMe, { right: insets.right + 12, bottom: insets.bottom + 22 + bottomHeight }]}>
