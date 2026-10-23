@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
-export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'due-only';
+export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'picking';
 
 /** Small status message under the status bar. `onAction` retries, fixes location, or opens the link. */
 export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(): void }) {
@@ -38,12 +38,12 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
           <Text style={styles.action}>Try again</Text>
         </Pressable>
       );
-    case 'due-only':
+    case 'picking':
       return (
-        <Pressable style={styles.pill} onPress={onAction} accessibilityRole="button" accessibilityLabel={`${S.pill.toVisitOnly}. ${S.pill.showAll}`}>
-          <Text style={styles.text}>{S.pill.toVisitOnly}</Text>
-          <Text style={styles.action}>{S.pill.showAll}</Text>
-        </Pressable>
+        <View style={styles.pill} accessibilityLiveRegion="polite">
+          <Ionicons name="hand-left-outline" size={14} color="#fff" />
+          <Text style={styles.text}>{S.planner.tapToAdd}</Text>
+        </View>
       );
     case 'location-off':
       return (
@@ -58,16 +58,13 @@ export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(
 
 /**
  * The map's menu (docs/ux.md "Menu"): one round button that opens a column of pills, short words
- * with the icons on the right so they line up under the button. "To visit" is a switch.
+ * with the icons on the right so they line up under the button.
  */
-export function MapMenu({ open, toVisitOnly, onToggle, onNearby, onPlanWalk, onToggleToVisit, onMyVisits, onHelp }: {
+export function MapMenu({ open, onToggle, onNearby, onPlanWalk, onMyVisits, onHelp }: {
   open: boolean;
-  /** The map only shows libraries to visit. */
-  toVisitOnly: boolean;
   onToggle(): void;
   onNearby(): void;
   onPlanWalk(): void;
-  onToggleToVisit(): void;
   onMyVisits(): void;
   onHelp(): void;
 }) {
@@ -86,19 +83,6 @@ export function MapMenu({ open, toVisitOnly, onToggle, onNearby, onPlanWalk, onT
         <>
           <MenuPill label={S.menu.nearby} icon="list" onPress={onNearby} />
           <MenuPill label={S.menu.planWalk} icon="git-network-outline" onPress={onPlanWalk} />
-          <Pressable
-            onPress={onToggleToVisit}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: toVisitOnly }}
-            accessibilityLabel={S.menu.toVisit}
-            style={({ pressed }) => [styles.menuPill, toVisitOnly && styles.menuPillOn, pressed && styles.pressed]}
-          >
-            <View style={[styles.switch, toVisitOnly && styles.switchOn]}>
-              <View style={[styles.knob, toVisitOnly && styles.knobOn]} />
-            </View>
-            <Text style={styles.menuText}>{S.menu.toVisit}</Text>
-            <Ionicons name="funnel-outline" size={19} color={colors.ink} />
-          </Pressable>
           <MenuPill label={S.menu.myVisits} icon="journal-outline" onPress={onMyVisits} />
           <Pressable
             onPress={onHelp}
@@ -174,32 +158,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     ...shadow,
   },
-  menuPillOn: {
-    backgroundColor: '#fdf0db',
-  },
   menuText: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.ink,
-  },
-  switch: {
-    width: 34,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.line,
-    padding: 2,
-  },
-  switchOn: {
-    backgroundColor: colors.amberDeep,
-  },
-  knob: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  knobOn: {
-    marginLeft: 14,
   },
   fab: {
     width: TOUCH,

@@ -63,10 +63,14 @@ export type MapRegion = { center: LatLng; zoom: number; bounds: MapBounds };
  * A planned walk to draw. Stops are numbered circles in place of their markers (a tick once
  * visited); other libraries fade back. Legs already walked fade, the one to the next stop is
  * strongest, and straight-line legs (guesses, not footpaths) are dashed.
+ *
+ * While libraries are being picked on the map (`picking`), the picked ones are green ticks and
+ * every other library stays at full strength, ready to be tapped.
  */
 export type WalkOverlay = {
   legs: { path: [number, number][]; kind: 'streets' | 'straight'; state: 'done' | 'next' | 'later' }[];
-  stops: { id: string; point: LatLng; number: number; state: 'done' | 'skipped' | 'next' | 'later' }[];
+  stops: { id: string; point: LatLng; number: number; state: 'done' | 'skipped' | 'next' | 'later' | 'picked' }[];
+  picking?: boolean;
 };
 
 /** "Your circles" to draw (docs/ux.md). */
@@ -79,6 +83,8 @@ export type LibraryMapHandle = {
   zoomTo(zoom: number): void;
   /** Move the camera to a point (e.g. a library picked from the list). */
   centerOn(point: LatLng, zoom: number): void;
+  /** Move a point into view above `bottom` (a drawer's height), keeping the zoom. */
+  reveal(point: LatLng, bottom: number): void;
 };
 
 type Props = {
@@ -90,8 +96,6 @@ type Props = {
   loadedTiles: Set<string>;
   /** Every library is on the device (a server snapshot), so nothing gets the veil. */
   allLoaded: boolean;
-  /** Hide libraries visited in the last 30 days (only due ones remain). */
-  dueOnly: boolean;
   walk: WalkOverlay | null;
   circles: CirclesOverlay | null;
   initialCenter: LatLng;
@@ -123,7 +127,6 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
     selectedId,
     loadedTiles,
     allLoaded,
-    dueOnly,
     walk,
     circles,
     initialCenter,
@@ -174,6 +177,16 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         });
       }, 50);
     },
+    reveal(point: LatLng, bottom: number) {
+      onFollowUserChange(false);
+      setTimeout(() => {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [point.longitude, point.latitude],
+          padding: { paddingTop: padding.top, paddingBottom: bottom, paddingLeft: 0, paddingRight: 0 },
+          animationDuration: 400,
+        });
+      }, 50);
+    },
   }));
 
   const walkStopIds = useMemo(() => new Set(walk?.stops.map((st) => st.id) ?? []), [walk]);
@@ -187,8 +200,6 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       type: 'FeatureCollection',
       features: libraries.flatMap((lib) => {
         const freshness = freshnessFor(visitSummaries.get(lib.id), freshnessHour * HOUR_MS);
-        // Due means never visited or not for 30 days: everything but 'fresh'.
-        if (dueOnly && freshness === 'fresh') return [];
         // A walk's stops are drawn as numbered circles instead.
         if (walkStopIds.has(lib.id)) return [];
         return {
@@ -203,7 +214,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         } as GeoJSON.Feature<GeoJSON.Point>;
       }),
     }),
-    [libraries, visitSummaries, freshnessHour, dueOnly, walkStopIds]
+    [libraries, visitSummaries, freshnessHour, walkStopIds]
   );
 
   const walkLines = useMemo<GeoJSON.FeatureCollection<GeoJSON.LineString>>(
@@ -226,7 +237,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       features: (walk?.stops ?? []).map((stop) => ({
         type: 'Feature',
         id: `stop-${stop.id}`,
-        properties: { id: stop.id, label: stop.state === 'done' ? '✓' : String(stop.number), state: stop.state },
+        properties: { id: stop.id, label: stop.state === 'done' || stop.state === 'picked' ? '✓' : String(stop.number), state: stop.state },
         geometry: { type: 'Point', coordinates: [stop.point.longitude, stop.point.latitude] },
       })),
     }),
@@ -439,7 +450,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         />
       </ShapeSource>
 
-      {/* Clusters (white rings with a count) look like walk stop numbers, so a walk turns them off.
+      {/* Clusters (white rings with a count) look like walk stop numbers, so a walk turns them off
+          (and picking stops on the map needs every library tappable).
           Clustering can't change on a live source, hence the key. */}
       <ShapeSource
         key={walk ? 'libraries-unclustered' : 'libraries'}
@@ -447,8 +459,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         ref={sourceRef}
         shape={shape}
         cluster={!walk}
-        clusterRadius={44}
-        clusterMaxZoomLevel={13}
+        clusterRadius={30}
+        clusterMaxZoomLevel={11}
         clusterProperties={{ unvisited: ['+', ['get', 'unvisited']] }}
         onPress={handlePress}
         // Larger than the marker: 44 dp is about a fingertip (the marker art is smaller).
@@ -486,7 +498,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
             iconIgnorePlacement: true,
             symbolSortKey: ['case', isSelected, 1, 0],
             // During a walk, libraries that aren't stops fade back (still there to discover).
-            iconOpacity: walk ? 0.45 : 1,
+            iconOpacity: walk && !walk.picking ? 0.45 : 1,
             // Zoom expressions must be top-level, so the selected scale goes inside each stop.
             iconSize: [
               'interpolate', ['linear'], ['zoom'],

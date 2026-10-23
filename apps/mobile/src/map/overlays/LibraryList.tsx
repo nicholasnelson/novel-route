@@ -8,33 +8,71 @@ import { LatLng, Library, VisitSummary } from '../../types';
 import { describeLastVisit, freshnessFor } from '../../store/freshness';
 import { isDue } from '../../store/nearby';
 import { bearingDegrees, compassPoint, formatDistance } from '../../geo/bearing';
-import { DEFAULT_WALK_STOPS, estimateRange, MAX_WALK_STOPS, WALK_DETOUR } from '../../geo/walk';
-import { estimatePlan } from '../routing';
+import { estimateRange, extraMeters, FAR_EXTRA_METERS, MAX_WALK_STOPS, WALK_DETOUR } from '../../geo/walk';
+import { estimatePlan, PlannedWalk } from '../routing';
 import { colors, radius, TOUCH } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
-/** The list shows this many of the nearest libraries. */
+/** The list shows this many libraries (the nearest, or the least extra walking). */
 const LIST_LIMIT = 50;
 
 export type StartKind = 'you' | 'map' | 'library';
-export type StartChoice = { kind: StartKind; libraryId?: string };
+/** Where a walk starts. "The middle of the map" is fixed when chosen (`point`), so panning doesn't move it. */
+export type StartChoice = { kind: StartKind; libraryId?: string; point?: LatLng };
 export type RouteRequest = {
   ids: string[];
   start: StartChoice & { point: LatLng };
   order: 'set' | 'flexible';
   finish: 'start' | 'last';
 };
+/** A walk being planned: kept while switching between the list and picking on the map. */
+export type WalkDraft = { stops: string[]; order: 'set' | 'flexible'; finish: 'start' | 'last' };
 
-type Row = { library: Library; distance: number; bearing: number; due: boolean };
+/** The point a walk starts from (or the list measures from). */
+export function startPointFor(start: StartChoice, libraries: Library[], you: LatLng | null, mapCentre: LatLng): LatLng {
+  if (start.kind === 'library') {
+    const library = libraries.find((l) => l.id === start.libraryId);
+    if (library) return library;
+  }
+  if (start.kind === 'you' && you) return you;
+  return start.point ?? mapCentre;
+}
+
+/** The straight-line plan for a draft (null with nothing picked): its order, length and legs. */
+export function estimateDraft(
+  draft: WalkDraft,
+  start: StartChoice,
+  startPoint: LatLng,
+  libraries: Library[]
+): { stops: Library[]; plan: PlannedWalk } | null {
+  const stops = draft.stops.map((id) => libraries.find((l) => l.id === id)).filter((l): l is Library => !!l);
+  if (stops.length === 0) return null;
+  const startStop = start.kind === 'library' ? stops.findIndex((l) => l.id === start.libraryId) : -1;
+  const plan = estimatePlan(startPoint, stops, {
+    finish: draft.finish === 'start' ? startPoint : null,
+    startStop: startStop >= 0 ? startStop : undefined,
+  });
+  return { stops, plan };
+}
+
+/** Takes a library out of the draft, or adds it (up to MAX_WALK_STOPS). */
+export function toggleStop(stops: string[], id: string): string[] {
+  if (stops.includes(id)) return stops.filter((s) => s !== id);
+  return stops.length < MAX_WALK_STOPS ? [...stops, id] : stops;
+}
+
+type Row = { library: Library; distance: number; bearing: number; due: boolean; extra: number | null };
 
 type Props = {
   visible: boolean;
-  /** Open straight into the walk planner. */
-  planning: boolean;
-  /** Where distances are measured from (and where a walk starts) when the panel opens. */
-  initialStart: StartChoice;
-  /** Stops to start the planner with (else the nearest libraries to visit). */
-  initialStops: string[];
+  start: StartChoice;
+  onStartChange(start: StartChoice): void;
+  /** The walk being planned, or null for the plain "Nearby libraries" list. */
+  draft: WalkDraft | null;
+  onDraftChange(change: Partial<WalkDraft>): void;
+  onToggleStop(id: string): void;
+  onBeginPlanning(): void;
+  onPickOnMap(): void;
   libraries: Library[];
   summaries: Map<string, VisitSummary>;
   now: number;
@@ -48,7 +86,7 @@ type Props = {
   onClose(): void;
 };
 
-/** "Nearby", which becomes the walk planner (docs/ux.md "Plan a walk"). */
+/** "Nearby libraries", which becomes the walk planner (docs/ux.md "Plan a walk"). */
 export default function LibraryList(props: Props) {
   return (
     <FloatingPanel visible={props.visible} onClose={props.onClose}>
@@ -58,9 +96,13 @@ export default function LibraryList(props: Props) {
 }
 
 function ListContent({
-  planning: startPlanning,
-  initialStart,
-  initialStops,
+  start,
+  onStartChange,
+  draft,
+  onDraftChange,
+  onToggleStop,
+  onBeginPlanning,
+  onPickOnMap,
   libraries,
   summaries,
   now,
@@ -72,89 +114,72 @@ function ListContent({
   onShowRoute,
   onClose,
 }: Props) {
-  const [start, setStart] = useState<StartChoice>(initialStart);
-  const startLibrary = start.kind === 'library' ? libraries.find((l) => l.id === start.libraryId) ?? null : null;
-  const startPoint: LatLng = startLibrary ?? (start.kind === 'you' && you ? you : mapCentre);
-
-  const rows = useMemo<Row[]>(() => {
-    const all = libraries.map((library) => ({
-      library,
-      distance: distanceMeters(startPoint.latitude, startPoint.longitude, library.latitude, library.longitude),
-      bearing: bearingDegrees(startPoint, library),
-      due: isDue(summaries.get(library.id), now),
-    }));
-    return all
-      .filter((r) => !dueOnly || r.due || r.library.id === start.libraryId)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, LIST_LIMIT);
-  }, [libraries, summaries, now, startPoint, dueOnly, start.libraryId]);
-
-  const defaultStops = (from: StartChoice, list: Row[]) => {
-    const near = list.filter((r) => r.due && r.library.id !== from.libraryId).map((r) => r.library.id);
-    return from.kind === 'library' && from.libraryId
-      ? [from.libraryId, ...near.slice(0, DEFAULT_WALK_STOPS - 1)]
-      : near.slice(0, DEFAULT_WALK_STOPS);
-  };
-  const [planning, setPlanning] = useState(startPlanning);
-  const [selected, setSelected] = useState<string[]>(() =>
-    startPlanning ? (initialStops.length > 0 ? initialStops : defaultStops(initialStart, rows)) : []
-  );
-  const [order, setOrder] = useState<'set' | 'flexible'>('set');
-  const [finish, setFinish] = useState<'start' | 'last'>('start');
+  const planning = draft !== null;
   const [choosingStart, setChoosingStart] = useState(false);
   const [pickingLibrary, setPickingLibrary] = useState(false);
+  const startLibrary = start.kind === 'library' ? libraries.find((l) => l.id === start.libraryId) ?? null : null;
+  const startPoint = startPointFor(start, libraries, you, mapCentre);
 
-  const beginPlanning = () => {
-    setSelected(defaultStops(start, rows));
-    setPlanning(true);
-  };
+  const estimate = useMemo(
+    () => (draft ? estimateDraft(draft, start, startPoint, libraries) : null),
+    [draft, start, startPoint, libraries]
+  );
+  // The walk so far in walking order: what "extra walking" is measured against.
+  const ordered = useMemo(() => estimate?.plan.order.map((i) => estimate.stops[i]) ?? [], [estimate]);
+  const byExtra = planning && !pickingLibrary && ordered.length > 0;
 
-  const toggle = (id: string) =>
-    setSelected((current) =>
-      current.includes(id) ? current.filter((s) => s !== id) : current.length < MAX_WALK_STOPS ? [...current, id] : current
-    );
+  const rows = useMemo<Row[]>(() => {
+    const finish = draft?.finish === 'last' ? null : startPoint;
+    const chosen = new Set(draft?.stops ?? []);
+    return libraries
+      .filter((library) => !(byExtra && chosen.has(library.id)))
+      .map((library) => ({
+        library,
+        distance: distanceMeters(startPoint.latitude, startPoint.longitude, library.latitude, library.longitude),
+        bearing: bearingDegrees(startPoint, library),
+        due: isDue(summaries.get(library.id), now),
+        extra: byExtra ? extraMeters(startPoint, ordered, finish, library) : null,
+      }))
+      .filter((r) => !dueOnly || r.due || r.library.id === start.libraryId)
+      .sort((a, b) => (a.extra ?? a.distance) - (b.extra ?? b.distance))
+      .slice(0, LIST_LIMIT);
+  }, [libraries, summaries, now, startPoint, dueOnly, start.libraryId, draft, byExtra, ordered]);
 
   const pickStartLibrary = (id: string) => {
-    setStart({ kind: 'library', libraryId: id });
-    setSelected((current) => [id, ...current.filter((s) => s !== id)].slice(0, MAX_WALK_STOPS));
+    onStartChange({ kind: 'library', libraryId: id });
+    if (draft) onDraftChange({ stops: [id, ...draft.stops.filter((s) => s !== id)].slice(0, MAX_WALK_STOPS) });
     setPickingLibrary(false);
   };
 
-  const estimate = useMemo(() => {
-    const stops = selected.map((id) => libraries.find((l) => l.id === id)).filter((l): l is Library => !!l);
-    if (stops.length === 0) return null;
-    const startStop = start.kind === 'library' ? selected.indexOf(start.libraryId ?? '') : -1;
-    const plan = estimatePlan(startPoint, stops, {
-      finish: finish === 'start' ? startPoint : null,
-      startStop: startStop >= 0 ? startStop : undefined,
-    });
-    return estimateRange(plan.meters / WALK_DETOUR);
-  }, [selected, libraries, startPoint, finish, start]);
-
+  const range = estimate ? estimateRange(estimate.plan.meters / WALK_DETOUR) : null;
   const startLabel =
     start.kind === 'library' ? startLibrary?.title ?? S.planner.fromLibrary : start.kind === 'you' ? S.planner.fromYou : S.planner.fromMap;
   const listTitle = start.kind === 'map' ? S.list.aroundMap : S.list.nearby;
+  const full = (draft?.stops.length ?? 0) >= MAX_WALK_STOPS;
 
   const renderRow = ({ item }: { item: Row }) => {
     const summary = summaries.get(item.library.id);
     const status = describeLastVisit(summary, now);
-    const checked = selected.includes(item.library.id);
-    const full = !checked && selected.length >= MAX_WALK_STOPS;
+    const checked = !!draft?.stops.includes(item.library.id);
+    const disabled = planning && !pickingLibrary && !checked && full;
     const isStart = item.library.id === start.libraryId;
-    const label = `${item.library.title}. ${status}. ${formatDistance(item.distance)} ${compassPoint(item.bearing)}`;
+    const where = item.extra !== null
+      ? S.planner.extraSpoken(formatDistance(item.extra))
+      : `${formatDistance(item.distance)} ${compassPoint(item.bearing)}`;
+    const label = `${item.library.title}. ${status}. ${where}`;
     const onPress = pickingLibrary
       ? () => pickStartLibrary(item.library.id)
       : planning
-        ? () => toggle(item.library.id)
+        ? () => onToggleStop(item.library.id)
         : () => onSelectLibrary(item.library.id);
     return (
       <Pressable
         onPress={onPress}
-        disabled={planning && !pickingLibrary && full}
+        disabled={disabled}
         accessibilityRole={planning && !pickingLibrary ? 'checkbox' : 'button'}
-        accessibilityState={planning && !pickingLibrary ? { checked, disabled: full } : undefined}
+        accessibilityState={planning && !pickingLibrary ? { checked, disabled } : undefined}
         accessibilityLabel={pickingLibrary ? `${label}. ${S.planner.startHere}` : planning ? label : `${label}. ${S.list.showOnMap}`}
-        style={({ pressed }) => [styles.row, pressed && styles.pressed, planning && !pickingLibrary && full && styles.dimmed]}
+        style={({ pressed }) => [styles.row, pressed && styles.pressed, disabled && styles.dimmed]}
       >
         {planning && !pickingLibrary && (
           <View style={[styles.check, checked && styles.checkOn]}>
@@ -168,6 +193,8 @@ function ListContent({
         </View>
         {pickingLibrary ? (
           <Text style={styles.pick}>{S.planner.startHere}</Text>
+        ) : item.extra !== null ? (
+          <Text style={[styles.distance, item.extra > FAR_EXTRA_METERS && styles.far]}>{S.planner.extra(formatDistance(item.extra))}</Text>
         ) : (
           <>
             {!(isStart && planning) && <Text style={styles.distance}>{formatDistance(item.distance)}</Text>}
@@ -180,11 +207,67 @@ function ListContent({
     );
   };
 
+  // The libraries already in the walk, in the order they were ticked, above the rest.
+  const inThisWalk = byExtra && estimate && (
+    <View style={styles.inWalk}>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionHeading} accessibilityRole="header">{S.planner.inThisWalk(estimate.stops.length)}</Text>
+        <Pressable onPress={() => onDraftChange({ stops: [] })} accessibilityRole="button" accessibilityHint={S.planner.clearHint} hitSlop={12}>
+          <Text style={styles.link}>{S.planner.clear}</Text>
+        </Pressable>
+      </View>
+      {estimate.stops.map((library) => {
+        const summary = summaries.get(library.id);
+        const isStart = library.id === start.libraryId;
+        const fromStart = distanceMeters(startPoint.latitude, startPoint.longitude, library.latitude, library.longitude);
+        return (
+          <Pressable
+            key={library.id}
+            onPress={() => onToggleStop(library.id)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: true }}
+            accessibilityLabel={library.title}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          >
+            <View style={[styles.check, styles.checkOn]}>
+              <Ionicons name="checkmark" size={16} color="#fff" />
+            </View>
+            <MarkerIcon freshness={freshnessFor(summary, now)} size={22} />
+            <View style={styles.grow}>
+              <Text style={styles.title} numberOfLines={2}>{library.title}</Text>
+              <Text style={styles.sub} numberOfLines={1}>
+                {isStart ? S.planner.startHere : S.planner.fromStart(formatDistance(fromStart))}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => onToggleStop(library.id)}
+              accessibilityRole="button"
+              accessibilityLabel={S.planner.remove(library.title)}
+              hitSlop={8}
+              style={styles.remove}
+            >
+              <Ionicons name="close" size={16} color={colors.inkSoft} />
+            </Pressable>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  const listHeader = planning && !pickingLibrary ? (
+    <>
+      {inThisWalk}
+      <Text style={[styles.sectionHeading, styles.listHeading]} accessibilityRole="header">
+        {byExtra ? S.planner.addMore : S.planner.distanceFromStart}
+      </Text>
+    </>
+  ) : null;
+
   return (
     <View style={styles.fill}>
       <View style={styles.header}>
         <Text style={styles.heading} accessibilityRole="header">{planning ? S.planner.title : listTitle}</Text>
-        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.round}>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={planning ? S.planner.close : 'Close'} style={styles.round}>
           <Ionicons name="close" size={22} color={colors.ink} />
         </Pressable>
       </View>
@@ -193,7 +276,7 @@ function ListContent({
         <Text style={styles.note}>
           {S.list.aroundMapNote}{' '}
           {you && (
-            <Text style={styles.link} onPress={() => setStart({ kind: 'you' })} accessibilityRole="link">{S.list.nearMe}</Text>
+            <Text style={styles.link} onPress={() => onStartChange({ kind: 'you' })} accessibilityRole="link">{S.list.nearMe}</Text>
           )}
         </Text>
       )}
@@ -202,12 +285,12 @@ function ListContent({
         <Pressable
           onPress={() => setChoosingStart((open) => !open)}
           accessibilityRole="button"
-          accessibilityLabel={`${finish === 'start' ? S.planner.startAndFinish : S.planner.start} ${startLabel}. ${S.planner.change}`}
+          accessibilityLabel={`${draft.finish === 'start' ? S.planner.startAndFinish : S.planner.start} ${startLabel}. ${S.planner.change}`}
           style={styles.startRow}
         >
           <Ionicons name="location-outline" size={18} color={colors.green} />
           <View style={styles.grow}>
-            <Text style={styles.startLabel}>{finish === 'start' ? S.planner.startAndFinish : S.planner.start}</Text>
+            <Text style={styles.startLabel}>{draft.finish === 'start' ? S.planner.startAndFinish : S.planner.start}</Text>
             <Text style={styles.startValue} numberOfLines={1}>{startLabel}</Text>
           </View>
           <Text style={styles.link}>{S.planner.change}</Text>
@@ -222,13 +305,13 @@ function ListContent({
             note={S.planner.fromYouNote}
             on={start.kind === 'you'}
             disabled={!you}
-            onPress={() => { setStart({ kind: 'you' }); setChoosingStart(false); }}
+            onPress={() => { onStartChange({ kind: 'you' }); setChoosingStart(false); }}
           />
           <Choice
             label={S.planner.fromMap}
             note={S.planner.fromMapNote}
             on={start.kind === 'map'}
-            onPress={() => { setStart({ kind: 'map' }); setChoosingStart(false); }}
+            onPress={() => { onStartChange({ kind: 'map', point: mapCentre }); setChoosingStart(false); }}
           />
           <Choice
             label={S.planner.fromLibrary}
@@ -240,18 +323,26 @@ function ListContent({
       )}
       {pickingLibrary && <Text style={styles.note}>{S.planner.pickLibrary}</Text>}
 
-      <View style={styles.segments} accessibilityRole="radiogroup">
-        {([false, true] as const).map((due) => (
-          <Pressable
-            key={String(due)}
-            onPress={() => onDueOnlyChange(due)}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: dueOnly === due }}
-            style={[styles.segment, dueOnly === due && styles.segmentOn]}
-          >
-            <Text style={[styles.segmentText, dueOnly === due && styles.segmentTextOn]}>{due ? S.list.toVisit : S.list.all}</Text>
+      <View style={styles.tools}>
+        <View style={[styles.segments, styles.toolSegments]} accessibilityRole="radiogroup">
+          {([false, true] as const).map((due) => (
+            <Pressable
+              key={String(due)}
+              onPress={() => onDueOnlyChange(due)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: dueOnly === due }}
+              style={[styles.segment, dueOnly === due && styles.segmentOn]}
+            >
+              <Text style={[styles.segmentText, dueOnly === due && styles.segmentTextOn]}>{due ? S.list.toVisit : S.list.all}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {planning && !pickingLibrary && (
+          <Pressable onPress={onPickOnMap} accessibilityRole="button" style={({ pressed }) => [styles.mapButton, pressed && styles.pressed]}>
+            <Ionicons name="map-outline" size={17} color={colors.green} />
+            <Text style={styles.mapButtonText}>{S.planner.pickOnMap}</Text>
           </Pressable>
-        ))}
+        )}
       </View>
 
       <FlatList
@@ -259,38 +350,44 @@ function ListContent({
         data={rows}
         keyExtractor={(r) => r.library.id}
         renderItem={renderRow}
-        extraData={[planning, selected, pickingLibrary, start]}
+        extraData={[draft, pickingLibrary, start]}
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={<Text style={styles.empty}>{dueOnly ? S.list.noneToVisit : S.list.noneLoaded}</Text>}
       />
 
       <View style={styles.footer}>
-        {planning ? (
+        {draft ? (
           <>
-            <Option<'set' | 'flexible'>
-              label={S.planner.order}
-              value={order}
-              choices={[['set', S.planner.setOrder], ['flexible', S.planner.asIGo]]}
-              onChange={setOrder}
-            />
-            <Option<'start' | 'last'>
-              label={S.planner.finish}
-              value={finish}
-              choices={[['start', S.planner.whereStarted], ['last', S.planner.lastLibrary]]}
-              onChange={setFinish}
-            />
+            {estimate && (
+              <>
+                <Option<'set' | 'flexible'>
+                  label={S.planner.order}
+                  value={draft.order}
+                  choices={[['set', S.planner.setOrder], ['flexible', S.planner.asIGo]]}
+                  onChange={(order) => onDraftChange({ order })}
+                />
+                <Option<'start' | 'last'>
+                  label={S.planner.finish}
+                  value={draft.finish}
+                  choices={[['start', S.planner.whereStarted], ['last', S.planner.lastLibrary]]}
+                  onChange={(finish) => onDraftChange({ finish })}
+                />
+              </>
+            )}
             <Text style={styles.summary}>
-              {estimate
-                ? S.planner.estimate(S.visits.libraries(selected.length), `${formatDistance(estimate[0])}–${formatDistance(estimate[1])}`)
+              {estimate && range
+                ? S.planner.estimate(S.visits.libraries(estimate.stops.length), `${formatDistance(range[0])}–${formatDistance(range[1])}`)
                 : S.planner.tickUpTo(MAX_WALK_STOPS)}
             </Text>
             <PrimaryButton
               label={S.planner.showRoute}
               icon="map-outline"
-              onPress={() => selected.length > 0 && onShowRoute({ ids: selected, start: { ...start, point: startPoint }, order, finish })}
+              disabled={!estimate}
+              onPress={() => estimate && onShowRoute({ ids: draft.stops, start: { ...start, point: startPoint }, order: draft.order, finish: draft.finish })}
             />
           </>
         ) : (
-          <PrimaryButton label={S.planner.title} icon="git-network-outline" onPress={beginPlanning} />
+          <PrimaryButton label={S.planner.title} icon="git-network-outline" onPress={onBeginPlanning} />
         )}
       </View>
     </View>
@@ -432,6 +529,36 @@ const styles = StyleSheet.create({
     borderWidth: 6,
     borderColor: colors.green,
   },
+  tools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 18,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  toolSegments: {
+    flex: 1,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 42,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: '#fff',
+  },
+  mapButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.ink,
+  },
   segments: {
     flexDirection: 'row',
     backgroundColor: '#f1eee6',
@@ -508,6 +635,38 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '600',
     color: colors.ink,
+  },
+  far: {
+    color: colors.amberDeep,
+  },
+  inWalk: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 32,
+  },
+  sectionHeading: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.inkSoft,
+  },
+  listHeading: {
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  remove: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1eee6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pick: {
     color: colors.green,

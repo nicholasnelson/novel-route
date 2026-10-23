@@ -2,10 +2,10 @@ import React from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Freshness, Library, VisitSummary } from '../../types';
-import { NearbyCardState, visitedToday } from '../../store/nearby';
+import { NearbyCardState } from '../../store/nearby';
 import { describeLastVisit } from '../../store/freshness';
 import { compassPoint, formatDistance, normalizeDegrees } from '../../geo/bearing';
-import { formatDuration } from '../../geo/walk';
+import { formatDuration, MAX_WALK_STOPS } from '../../geo/walk';
 import { S } from '../../ui/strings';
 import { LARGE_MARKER_IMAGES } from '../markerImages';
 import { colors, radius, shadow, TOUCH } from '../../ui/theme';
@@ -40,17 +40,20 @@ export function MarkerIcon({ freshness, size = 30 }: { freshness: Freshness; siz
   );
 }
 
-export function PrimaryButton({ label, onPress, icon, style }: {
+export function PrimaryButton({ label, onPress, icon, style, disabled }: {
   label: string;
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   style?: ViewStyle;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.primaryButton, style, pressed && styles.pressed]}
+      accessibilityState={disabled ? { disabled } : undefined}
+      style={({ pressed }) => [styles.primaryButton, disabled && styles.primaryButtonDisabled, style, pressed && styles.pressed]}
     >
       {icon && <Ionicons name={icon} size={18} color="#fff" />}
       <Text style={styles.primaryButtonText}>{label}</Text>
@@ -169,53 +172,6 @@ export function NearbyCard({ state, freshness, summary, now, reference, onPress,
   );
 }
 
-// --- Preview card (tapped marker) ---
-
-export function LibraryPreviewCard({ library, freshness, summary, now, distance, onOpen, onLogVisit, onDirections, onClose }: {
-  library: Library;
-  freshness: Freshness;
-  summary: VisitSummary | undefined;
-  now: number;
-  distance: number | null;
-  onOpen(): void;
-  onLogVisit(): void;
-  onDirections(): void;
-  onClose(): void;
-}) {
-  const status = describeLastVisit(summary, now);
-  return (
-    <BottomCard onPress={onOpen} accessibilityLabel={`${library.title}. ${status}. Open details`}>
-      <View style={styles.row}>
-        <MarkerIcon freshness={freshness} />
-        <View style={styles.grow}>
-          <Text style={styles.title} numberOfLines={2}>{library.title}</Text>
-          <Text style={styles.sub} numberOfLines={1}>
-            {status}{distance !== null ? ` · ${formatDistance(distance)}` : ''}
-          </Text>
-          {/* The whole card opens details too, but this says so. */}
-          <Pressable onPress={onOpen} accessibilityRole="button" hitSlop={12} style={styles.detailsLink}>
-            <Text style={styles.detailsLinkText}>Details</Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.green} />
-          </Pressable>
-        </View>
-        <CloseButton onPress={onClose} label="Close preview" />
-      </View>
-      <View style={styles.buttons}>
-        {visitedToday(summary, now) ? (
-          // Already logged today: a second visit is rare, so "Log another visit" lives in details.
-          <View style={[styles.doneButton, styles.flex]}>
-            <Ionicons name="checkmark-circle" size={18} color={colors.green} />
-            <Text style={styles.doneText}>{S.visit.visitedToday}</Text>
-          </View>
-        ) : (
-          <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} style={styles.flex} />
-        )}
-        <SecondaryButton label={S.directions.label} icon="walk" onPress={onDirections} style={styles.flex} hint={S.directions.hint} />
-      </View>
-    </BottomCard>
-  );
-}
-
 // --- Planned walk (docs/ux.md "Plan a walk", "Walking") ---
 
 /** A planned walk before setting off: honest distance and time, and a reminder for long walks. */
@@ -261,6 +217,31 @@ export function WalkPlanCard({ stops, order, back, onStreets, meters, range, wal
       <View style={styles.buttons}>
         <PrimaryButton label={S.walk.startWalking} icon="walk" onPress={onStart} style={styles.flex} />
         <RoundButton icon="list" label={S.walk.editStops} onPress={onEdit} />
+      </View>
+    </BottomCard>
+  );
+}
+
+/** Picking a walk's libraries on the map: how it adds up so far, back to the list, or the route. */
+export function WalkPickCard({ count, range, onClose, onList, onShowRoute }: {
+  count: number;
+  /** Straight-line estimate, or null with nothing picked yet. */
+  range: [number, number] | null;
+  onClose(): void;
+  onList(): void;
+  onShowRoute(): void;
+}) {
+  return (
+    <BottomCard>
+      <Text style={styles.pickSummary} accessibilityLiveRegion="polite">
+        {range
+          ? S.planner.pickEstimate(S.visits.libraries(count), `${formatDistance(range[0])}–${formatDistance(range[1])}`)
+          : S.planner.tickUpTo(MAX_WALK_STOPS)}
+      </Text>
+      <View style={[styles.buttons, styles.pickButtons]}>
+        <RoundButton icon="close" label={S.planner.close} onPress={onClose} />
+        <SecondaryButton label={S.planner.list} icon="list" onPress={onList} style={styles.flex} />
+        <PrimaryButton label={S.planner.showRoute} icon="map-outline" onPress={onShowRoute} disabled={count === 0} style={styles.flex} />
       </View>
     </BottomCard>
   );
@@ -501,32 +482,6 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     marginTop: 1,
   },
-  detailsLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 1,
-    marginTop: 4,
-  },
-  detailsLinkText: {
-    color: colors.green,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  doneButton: {
-    minHeight: TOUCH - 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.greenTint,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  doneText: {
-    color: colors.green,
-    fontSize: 15,
-    fontWeight: '700',
-  },
   body: {
     fontSize: 14,
     color: colors.ink,
@@ -574,6 +529,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
+  primaryButtonDisabled: {
+    backgroundColor: colors.line,
+  },
   primaryButtonText: {
     color: '#fff',
     fontSize: 15,
@@ -601,6 +559,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pickSummary: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+  pickButtons: {
+    marginTop: 10,
   },
   warning: {
     flexDirection: 'row',

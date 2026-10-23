@@ -3,14 +3,14 @@ import { LatLng } from '../types';
 
 /** Most libraries in one planned walk: Google Maps takes 9 stops plus a destination. */
 export const MAX_WALK_STOPS = 9;
-/** Libraries ticked when the planner opens (the nearest ones shown). */
-export const DEFAULT_WALK_STOPS = 5;
 /** Walking distance over straight-line distance, typical for city streets. */
 export const WALK_DETOUR = 1.3;
 /** About 4.8 km/h. */
 export const WALK_SPEED_MPS = 1.33;
 /** Time allowed at each library (people stop to browse). */
 export const MINUTES_PER_LIBRARY = 5;
+/** In the planner, a library that adds more walking than this is marked as out of the way. */
+export const FAR_EXTRA_METERS = 1000;
 /** Straight-line estimates are shown as a range: this much to this much of the straight line. */
 export const ESTIMATE_RANGE = [1.2, 1.8] as const;
 /** Walks longer than this (or LONG_WALK_MINUTES, including time at libraries) get a reminder. */
@@ -68,6 +68,22 @@ export function walkMeters(start: LatLng, ordered: LatLng[], finish: LatLng | nu
   let total = dist(start, ordered[0]) + (finish ? dist(ordered[ordered.length - 1], finish) : 0);
   for (let i = 1; i < ordered.length; i++) total += dist(ordered[i - 1], ordered[i]);
   return total;
+}
+
+/**
+ * How much longer a walk gets with one more library, slotted in wherever it adds least (between
+ * two stops, or at the start or end), by straight lines with the street detour. Used to sort the
+ * planner, so it is quick and needs no routing: `ordered` is the walk so far in walking order.
+ */
+export function extraMeters(start: LatLng, ordered: LatLng[], finish: LatLng | null, candidate: LatLng): number {
+  const points = [start, ...ordered];
+  let least = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = i + 1 < points.length ? points[i + 1] : finish;
+    least = Math.min(least, b ? dist(a, candidate) + dist(candidate, b) - dist(a, b) : dist(a, candidate));
+  }
+  return least * WALK_DETOUR;
 }
 
 /** Straight-line length of the round trip start → stops in order → start. */

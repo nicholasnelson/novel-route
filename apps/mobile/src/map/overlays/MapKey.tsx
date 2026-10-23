@@ -49,7 +49,7 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         </Text>
         <Text style={styles.paragraph}>• When you&apos;re standing at one, mark your visit in one tap.</Text>
         <Text style={styles.paragraph}>
-          • The ••• button at the top has libraries nearby, walks you can plan, the &quot;To visit&quot; filter and your visits.
+          • The ••• button at the top has libraries nearby, walks you can plan and your visits.
         </Text>
         <Text style={styles.paragraph}>
           • On a walk, the arrow follows the footpaths to the next library. Distances marked &quot;in a straight line&quot; are

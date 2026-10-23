@@ -5,16 +5,14 @@ import {
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   Share,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import FloatingPanel from './FloatingPanel';
+import BottomDrawer from './BottomDrawer';
 import { MarkerIcon, PrimaryButton } from './cards';
 import { Freshness, Library, Visit, VisitSummary } from '../../types';
 import { describeVisits, relativeDay } from '../../store/freshness';
@@ -22,9 +20,6 @@ import { visitedToday } from '../../store/nearby';
 import { formatDistance } from '../../geo/bearing';
 import { colors, radius, TOUCH } from '../../ui/theme';
 import { S } from '../../ui/strings';
-
-/** Below this window height (a phone in landscape) the icon and title share the header row. */
-const COMPACT_HEIGHT = 500;
 
 type Props = {
   library: Library | null;
@@ -48,6 +43,8 @@ type Props = {
   /** Plan a walk that starts (and finishes) at this library. */
   onWalkFromHere(): void;
   onClose(): void;
+  /** The height the drawer settles at, for keeping the library clear of it on the map. */
+  onHeightChange?(height: number): void;
 };
 
 function formatVisitDate(timestamp: number, now: number): { primary: string; secondary: string } {
@@ -63,13 +60,15 @@ function formatVisitDate(timestamp: number, now: number): { primary: string; sec
   };
 }
 
+/**
+ * A library's details in a drawer over the bottom of the map (docs/ux.md "Library drawer"),
+ * opened straight from its marker. It opens far enough to show the visit button and actions;
+ * your visits are further down.
+ */
 export default function LibraryDetail(props: Props) {
-  const { library, onClose } = props;
-  return (
-    <FloatingPanel visible={library !== null} onClose={onClose}>
-      {library && <DetailContent {...props} library={library} />}
-    </FloatingPanel>
-  );
+  if (!props.library) return null;
+  // Keyed, so another library starts fresh (no undo or menu left over from the last one).
+  return <DetailContent key={props.library.id} {...props} library={props.library} />;
 }
 
 function DetailContent({
@@ -90,6 +89,7 @@ function DetailContent({
   onDirections,
   onWalkFromHere,
   onClose,
+  onHeightChange,
 }: Props & { library: Library }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [lastDeleted, setLastDeleted] = useState<Visit | null>(null);
@@ -97,6 +97,8 @@ function DetailContent({
   // the picker and would undo the date being chosen.
   const [pickingDate, setPickingDate] = useState<Date | null>(null);
   const [bounce] = useState(() => new Animated.Value(1));
+  /** Where the first part (visit button and actions) ends: the drawer opens that far. */
+  const [peek, setPeek] = useState<number | null>(null);
   const previousFreshness = useRef(freshness);
 
   // A little bounce when the doors change (e.g. a visit was just logged).
@@ -110,10 +112,6 @@ function DetailContent({
   }, [freshness, bounce]);
 
   const today = visitedToday(summary, now);
-  const compact = useWindowDimensions().height < COMPACT_HEIGHT;
-  const title = (
-    <Text style={[styles.title, compact && styles.titleCompact]} accessibilityRole="header">{library.title}</Text>
-  );
 
   const confirmClear = () => {
     setMenuOpen(false);
@@ -154,91 +152,95 @@ function DetailContent({
     Share.share({ message }).catch(() => {});
   };
 
-  return (
-    <View style={styles.fill}>
-      <View style={styles.header}>
-        <Animated.View style={{ transform: [{ scale: bounce }] }}>
-          <MarkerIcon freshness={freshness} size={compact ? 30 : 60} />
-        </Animated.View>
-        {compact && title}
-        <View style={styles.tools}>
-          {visits.length > 0 && (
-            <Pressable
-              onPress={() => setMenuOpen((open) => !open)}
-              accessibilityRole="button"
-              accessibilityLabel="More options"
-              style={styles.round}
-            >
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors.ink} />
-            </Pressable>
-          )}
-          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.round}>
-            <Ionicons name="close" size={22} color={colors.ink} />
+  const header = (
+    <View style={styles.header}>
+      <Animated.View style={{ transform: [{ scale: bounce }] }}>
+        <MarkerIcon freshness={freshness} size={40} />
+      </Animated.View>
+      <View style={styles.heading}>
+        <Text style={styles.title} accessibilityRole="header">{library.title}</Text>
+        {distance !== null && <Text style={styles.meta}>{formatDistance(distance)} away</Text>}
+      </View>
+      <View style={styles.tools}>
+        {visits.length > 0 && (
+          <Pressable
+            onPress={() => setMenuOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            style={styles.round}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.ink} />
+          </Pressable>
+        )}
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.round}>
+          <Ionicons name="close" size={22} color={colors.ink} />
+        </Pressable>
+      </View>
+      {menuOpen && (
+        <View style={styles.menu}>
+          <Pressable onPress={confirmClear} accessibilityRole="button" style={styles.menuItem}>
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            <Text style={styles.menuDanger}>Clear visit history</Text>
           </Pressable>
         </View>
-        {menuOpen && (
-          <View style={styles.menu}>
-            <Pressable onPress={confirmClear} accessibilityRole="button" style={styles.menuItem}>
-              <Ionicons name="trash-outline" size={18} color={colors.danger} />
-              <Text style={styles.menuDanger}>Clear visit history</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
+      )}
+    </View>
+  );
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} onScrollBeginDrag={() => setMenuOpen(false)}>
-        {!compact && title}
-        {distance !== null && <Text style={styles.meta}>{formatDistance(distance)} away</Text>}
-        <Text style={styles.status}>{describeVisits(summary, now)}</Text>
+  return (
+    <BottomDrawer header={header} peek={peek} resetKey={library.id} onClose={onClose} onHeightChange={onHeightChange}>
+      <View style={styles.body}>
+        <View onLayout={(e) => setPeek(e.nativeEvent.layout.y + e.nativeEvent.layout.height + 16)}>
+          <Text style={styles.status}>{describeVisits(summary, now)}</Text>
 
-        {today ? (
-          <View>
-            <View style={styles.doneButton}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.green} />
-              <Text style={styles.doneText}>{S.visit.visitedToday}</Text>
+          {today ? (
+            <View>
+              <View style={styles.doneButton}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.green} />
+                <Text style={styles.doneText}>{S.visit.visitedToday}</Text>
+              </View>
+              {canLogAgain ? (
+                <Pressable onPress={onLogVisit} accessibilityRole="button" hitSlop={8}>
+                  <Text style={styles.linkCentered}>{S.visit.iVisitedAgain}</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.noteCentered}>Logged just now</Text>
+              )}
             </View>
-            {canLogAgain ? (
-              <Pressable onPress={onLogVisit} accessibilityRole="button" hitSlop={8}>
-                <Text style={styles.linkCentered}>{S.visit.iVisitedAgain}</Text>
-              </Pressable>
-            ) : (
-              <Text style={styles.noteCentered}>Logged just now</Text>
-            )}
-          </View>
-        ) : (
-          <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} />
-        )}
-        <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
-          <Text style={styles.linkCentered}>{S.visit.addPastVisit}</Text>
-        </Pressable>
-        {pickingDate && (
-          <DateTimePicker value={pickingDate} mode="date" maximumDate={pickingDate} onChange={handlePastDate} />
-        )}
-
-        {justLogged && (
-          <View style={styles.undoBar}>
-            <Text style={styles.undoText}>Visit logged</Text>
-            <Pressable onPress={onUndoLog} accessibilityRole="button" hitSlop={10}>
-              <Text style={styles.undoAction}>Undo</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <View style={styles.actions}>
-          <Action icon="walk" label={S.directions.label} caption={S.directions.opensGoogle} hint={S.directions.hint} onPress={onDirections} />
-          <Action icon="git-network-outline" label={S.planner.walkFromHere} onPress={onWalkFromHere} />
-          {library.permalink && (
-            <Action
-              icon="book-outline"
-              label={S.streetLibrary.label}
-              caption={S.streetLibrary.caption}
-              hint={S.streetLibrary.hint}
-              onPress={() => Linking.openURL(library.permalink!).catch(() => {})}
-            />
+          ) : (
+            <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} />
           )}
-          <Action icon="share-outline" label="Share" onPress={share} />
-        </View>
+          <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
+            <Text style={styles.linkCentered}>{S.visit.addPastVisit}</Text>
+          </Pressable>
+          {pickingDate && (
+            <DateTimePicker value={pickingDate} mode="date" maximumDate={pickingDate} onChange={handlePastDate} />
+          )}
 
+          {justLogged && (
+            <View style={styles.undoBar}>
+              <Text style={styles.undoText}>Visit logged</Text>
+              <Pressable onPress={onUndoLog} accessibilityRole="button" hitSlop={10}>
+                <Text style={styles.undoAction}>Undo</Text>
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.actions}>
+            <Action icon="walk" label={S.directions.label} caption={S.directions.opensGoogle} hint={S.directions.hint} onPress={onDirections} />
+            <Action icon="git-network-outline" label={S.planner.walkFromHere} onPress={onWalkFromHere} />
+            {library.permalink && (
+              <Action
+                icon="book-outline"
+                label={S.streetLibrary.label}
+                caption={S.streetLibrary.caption}
+                hint={S.streetLibrary.hint}
+                onPress={() => Linking.openURL(library.permalink!).catch(() => {})}
+              />
+            )}
+            <Action icon="share-outline" label="Share" onPress={share} />
+          </View>
+        </View>
 
         {lastDeleted && (
           <View style={styles.undoBar}>
@@ -275,8 +277,8 @@ function DetailContent({
             })}
           </View>
         )}
-      </ScrollView>
-    </View>
+      </View>
+    </BottomDrawer>
   );
 }
 
@@ -305,23 +307,21 @@ function Action({ icon, label, caption, hint, onPress }: {
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
 const styles = StyleSheet.create({
-  fill: {
-    flexShrink: 1,
-  },
-  scroll: {
-    flexGrow: 0,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 12,
     paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 6,
+    paddingTop: 10,
+    paddingBottom: 4,
     zIndex: 2,
   },
+  heading: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 2,
+  },
   tools: {
-    marginLeft: 'auto',
-    paddingLeft: 12,
     flexDirection: 'row',
     gap: 8,
   },
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   menu: {
     position: 'absolute',
-    top: 62,
+    top: 56,
     right: 66,
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -364,22 +364,13 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 20,
-    paddingBottom: 28,
   },
   title: {
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 20,
+    lineHeight: 25,
     fontWeight: '700',
     fontFamily: serif,
     color: colors.ink,
-    marginTop: 8,
-  },
-  titleCompact: {
-    flexShrink: 1,
-    fontSize: 20,
-    lineHeight: 25,
-    marginTop: 6,
-    marginLeft: 12,
   },
   meta: {
     fontSize: 14,
@@ -390,8 +381,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.ink,
-    marginTop: 12,
-    marginBottom: 14,
+    marginTop: 8,
+    marginBottom: 12,
   },
   doneButton: {
     minHeight: TOUCH - 4,

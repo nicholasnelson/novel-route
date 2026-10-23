@@ -1,4 +1,4 @@
-import { bestOrder, estimateRange, estimateWalk, formatDuration, googleMapsWalkUrl, isLongWalk, MAX_WALK_STOPS, roundTripMeters, totalMinutes, walkMeters } from '../walk';
+import { bestOrder, estimateRange, estimateWalk, extraMeters, formatDuration, googleMapsWalkUrl, isLongWalk, MAX_WALK_STOPS, roundTripMeters, totalMinutes, WALK_DETOUR, walkMeters } from '../walk';
 
 const P = (dLat: number, dLng: number) => ({ latitude: -34.93 + dLat, longitude: 138.6 + dLng });
 
@@ -67,5 +67,31 @@ describe('one-way walks and honest estimates', () => {
     expect(isLongWalk(6000, 60)).toBe(true);
     expect(isLongWalk(3000, 95)).toBe(true);
     expect(isLongWalk(3000, 60)).toBe(false);
+  });
+});
+
+describe('extraMeters', () => {
+  // About 1 km either side of the start, and three more a little further west.
+  const start = P(0, 0);
+  const east = P(0, 0.011);
+  const west = P(0, -0.011);
+  const furtherWest = [P(0.001, -0.0132), P(-0.001, -0.0132), P(0, -0.014)];
+
+  it('is there and back for the first library, or one way when not returning', () => {
+    const oneWay = walkMeters(start, [west], null);
+    expect(extraMeters(start, [], start, west)).toBeCloseTo(oneWay * 2 * WALK_DETOUR, 3);
+    expect(extraMeters(start, [], null, west)).toBeCloseTo(oneWay * WALK_DETOUR, 3);
+  });
+
+  it('makes libraries beside the walk cheap and ones the other way dear', () => {
+    const extraWest = furtherWest.map((p) => extraMeters(start, [west], start, p));
+    const extraEast = extraMeters(start, [west], start, east);
+    extraWest.forEach((m) => expect(m).toBeLessThan(800));
+    expect(extraEast).toBeGreaterThan(2000);
+  });
+
+  it('adds nothing for a library already on the line', () => {
+    const halfway = P(0, -0.0055);
+    expect(extraMeters(start, [west], start, halfway)).toBeCloseTo(0, 0);
   });
 });

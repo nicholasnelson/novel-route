@@ -69,6 +69,8 @@ Why not exactly the "direction bubble + I found it" idea: the direction bubble i
 
 ### 2. Library details: preview card + floating detail panel
 
+*Replaced on 2026-10-23 by the library drawer (§8): no preview card, the details open straight from the marker. The content below still applies.*
+
 Two levels, so quick decisions stay on the map and details get a proper page:
 
 - **Preview card** (tap a marker): sits in the bottom card slot, about 140 pt tall. Marker icon, title, distance, status ("Last visited 3 months ago"), a green **Details ›** link, and two buttons: **Log visit** (or a "Visited today ✓" pill once logged today), **Directions**. Tapping the link or anywhere else on the card → detail. (The link was added on 2026-10-12: testers didn't realise the card opened anything. Mockup: [`ux/details-mockup.html`](ux/details-mockup.html).) Tapping another marker swaps the card, so you can compare libraries on your round without opening and closing anything.
@@ -152,6 +154,18 @@ Mockup: `docs/ux/walk-mode-mockup.html` (v3). Replaces parts of §6: the round b
 - **Saved** (`store/walkSession.ts`, `kv` `walk_session`) after every change, so a walk survives the app being closed.
 - **Wording** (`ui/strings.ts`, all new text lives there for consistency and later translation): **I visited** (was Log visit), **To visit** (was Due), **Fully explored** / **Furthest out** (were Cleared / Reach), **Add a past visit**, **Directions** with "Google Maps" under it.
 - **Accessibility**: library names wrap to two lines instead of being cut off; marker tap area 44 × 52 dp (the art stays the same); the "To visit" switch uses a dark amber with a white knob (no white-on-amber icon); switches, radios and checkboxes have their roles for TalkBack.
+
+### 8. Library drawer and planner v3 (2026-10-23)
+
+Mockup: `docs/ux/planner-v2-mockup.html`. Replaces the preview card (§2), the map's "To visit" filter and the planner's pre-ticked libraries.
+
+- **Library drawer** (`overlays/BottomDrawer.tsx`, `LibraryDetail.tsx`): tapping a marker opens the details straight away in a drawer over the bottom of the map, not a panel covering it. It opens far enough to show the visit button, "Add a past visit" and the four actions; your visits are further down (drag the header up, or scroll). Drag down, ✕, the back gesture or a tap on the map closes it; tapping another marker switches to that library. At most 560 dp wide, centred on tablets and sideways phones, and never higher than just below the top of the screen. If the drawer would cover its library, the map moves it up.
+- **Planner starts empty** (except **Walk from here**, which ticks its library) and is forgotten when closed with ✕. **Change stops** on a walk opens with that walk's libraries, order and finish.
+- **In this walk**: ticked libraries move to the top, with ✕ to take one out and **Clear**.
+- **Extra walking**: once something is ticked, the other libraries are sorted by how much longer each makes the walk ("+250 m"): the cheapest place to slot it in (between two stops, or at the start or end), by straight lines × 1.3 (`geo/walk.ts` `extraMeters`). Worked out on the phone with no routing calls. Over 1 km is amber. Before anything is ticked, the list is by distance from the start.
+- **Pick on map**: the planner shrinks to a bottom card (libraries, estimate, ✕, **List**, **Show route**) and a pill says "Tap libraries to add them to the walk". Tapping a library adds it (a green tick in place of its marker) or takes it out; a dashed line shows the straight-line walk so far. Same selection as the list. No clustering while picking. "The middle of the map" as a start is fixed when chosen, so panning while picking doesn't move it.
+- **Menu**: **Nearby libraries** (was Nearby); **To visit** is gone from the map (the amber closed-door markers already stand out). The list and planner keep **All / To visit** (`kv` `map_due_only`).
+- **Clustering**: markers group within 30 px (was 44) and only up to zoom 11 (was 13).
 
 ## Later (not in this pass)
 

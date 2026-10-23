@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planner and drawer mockup</title>
+<style>
+  /* Colours from apps/mobile/src/ui/theme.ts; layout as docs/ux/details-mockup.html */
+  :root {
+    --paper: #fbf8f1; --card: #fffdf8; --ink: #1d2721; --soft: #5b665f; --line: #e7e0d0;
+    --green: #1f8f3a; --tint: #eef3ee; --tile: #f1eee6; --amber: #e9a23b; --amber-deep: #b9721a;
+    --hint: #24432f; --scrim: rgba(20, 30, 25, 0.28); --shadow: 0 8px 18px rgba(20, 32, 26, 0.18);
+    --serif: "Noto Serif", Georgia, serif;
+    --sans: Roboto, system-ui, "Segoe UI", sans-serif;
+  }
+  body { margin: 0; background: #e8e3d8; font-family: var(--sans); color: var(--ink); }
+  header { max-width: 1240px; margin: 0 auto; padding: 28px 16px 4px; }
+  h1 { font-family: var(--serif); margin: 0 0 6px; font-size: 26px; }
+  header p { margin: 0 0 6px; color: var(--soft); max-width: 62em; line-height: 1.5; }
+  h2.group { max-width: 1240px; margin: 26px auto 0; padding: 0 16px; font-family: var(--serif); font-size: 20px; }
+  .screens { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 28px; }
+  .screen { width: 300px; }
+  .screen h3 { font-size: 15px; margin: 0 0 4px; }
+  .screen .note { font-size: 13px; color: var(--soft); margin: 0 0 10px; min-height: 5.8em; line-height: 1.4; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-right: 4px; background: #d6ecd9; color: #17652b; }
+  .hl { outline: 2px dashed #e0782f; outline-offset: 3px; border-radius: 10px; }
+  svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; flex: none; }
+
+  /* A 360 x 800 dp phone, drawn at 300 x 667. */
+  .phone { width: 300px; height: 667px; border-radius: 34px; background: #111; padding: 8px; box-shadow: 0 18px 44px rgba(0,0,0,.25); box-sizing: border-box; }
+  .vp { position: relative; width: 100%; height: 100%; border-radius: 27px; overflow: hidden; background: #f4f1e9 url(details-map.webp) center top / 100% auto no-repeat; font-size: 13px; }
+  .vp.schematic { background: #f4f1e9; }
+  .vp.dim::after { content: ""; position: absolute; inset: 0; background: var(--scrim); z-index: 1; }
+
+  /* Map controls (chrome.tsx), drawn over the ones in the background image */
+  .controls { position: absolute; right: 7px; top: 51px; display: flex; flex-direction: column; gap: 7px; z-index: 2; }
+  .fab { width: 36px; height: 36px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(20,32,26,.2); display: grid; place-items: center; color: var(--ink); font-size: 18px; }
+  .fab.blue { color: #2f7ae5; }
+  .fab.on { background: var(--amber); color: #fff; }
+  .pill { position: absolute; top: 52px; left: 50%; transform: translateX(-56%); background: var(--hint); color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; white-space: nowrap; display: flex; gap: 8px; z-index: 2; }
+  .pill b { color: #8fd6a0; font-weight: 600; }
+  .patch { position: absolute; background: #d6dbe7; }
+  .pin { position: absolute; width: 22px; height: 30px; }
+  /* Over the photo background, the card covers the one baked into the screenshot. */
+  .vp:not(.schematic):not(.dim) .card { bottom: 40px; min-height: 76px; }
+
+  /* Bottom card (cards.tsx) */
+  .card { position: absolute; left: 8px; right: 8px; bottom: 22px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 11px 12px 12px; z-index: 2; }
+  .row { display: flex; gap: 9px; align-items: flex-start; }
+  .card img.icon { width: 26px; height: 35px; margin-top: 2px; flex: none; }
+  .grow { flex: 1; min-width: 0; }
+  .kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--green); }
+  .card .title { font-family: var(--serif); font-size: 15px; line-height: 1.22; }
+  .card .sub { color: var(--soft); font-size: 12px; margin-top: 3px; }
+  .btns { display: flex; gap: 7px; margin-top: 11px; }
+  .btn { flex: 1; height: 38px; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+  .btn.primary { background: var(--green); color: #fff; }
+  .btn.ghost { background: var(--tint); color: var(--ink); }
+  .btn.round { flex: 0 0 38px; padding: 0; }
+
+  /* Panels (as LibraryDetail.tsx) */
+  .panel { position: absolute; left: 10px; right: 10px; top: 34px; bottom: 30px; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px 14px 0; overflow: hidden; z-index: 2; display: flex; flex-direction: column; }
+  .phead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .phead h4 { font-family: var(--serif); font-size: 19px; margin: 0; }
+  .x { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; flex: none; }
+  .seg { display: flex; background: var(--tile); border-radius: 999px; padding: 3px; margin: 11px 0 6px; }
+  .seg span { flex: 1; text-align: center; padding: 6px 0; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--soft); }
+  .seg span.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .list { flex: 1; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .item img { width: 20px; height: 27px; flex: none; }
+  .item b { display: block; font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item small { color: var(--soft); font-size: 11px; }
+  .dist { text-align: right; font-size: 12px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+  .dist svg { color: var(--green); }
+  .check { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line); flex: none; display: grid; place-items: center; color: #fff; font-size: 13px; }
+  .check.on { background: var(--green); border-color: var(--green); }
+  .foot { margin: 0 -14px; padding: 10px 14px 14px; background: var(--paper); border-top: 1px solid var(--line); }
+  .foot .summary { font-size: 12px; color: var(--soft); text-align: center; margin-bottom: 8px; }
+  .foot .summary b { color: var(--ink); }
+  .section { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--soft); margin: 14px 0 6px; }
+
+  /* Your visits */
+  .streak { background: var(--hint); color: #fff; border-radius: 16px; padding: 12px 13px; margin-top: 12px; }
+  .streak .big { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 22px; }
+  .streak .big svg { color: #ffb44a; font-size: 24px; }
+  .streak .best { font-size: 11.5px; color: #cfe3d4; margin-top: 2px; }
+  .weeks { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 10px; }
+  .weeks i { height: 16px; border-radius: 4px; background: rgba(255,255,255,.16); }
+  .weeks i.v { background: #8fd6a0; }
+  .weeks i.now { outline: 2px solid #fff; outline-offset: 1px; }
+  .weeklabels { display: flex; justify-content: space-between; font-size: 10px; color: #cfe3d4; margin-top: 4px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { background: var(--tile); border-radius: 12px; padding: 8px 6px; text-align: center; }
+  .stat b { display: block; font-family: var(--serif); font-size: 19px; font-variant-numeric: tabular-nums; }
+  .stat small { font-size: 10.5px; color: var(--soft); }
+  .circles { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .crow { display: flex; align-items: center; gap: 9px; padding: 4px 0; }
+  .swatch { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+  .swatch.cleared { background: rgba(31,143,58,.22); border: 2px solid var(--green); }
+  .swatch.reach { border: 2px dashed var(--green); }
+  .crow b { font-size: 13px; font-weight: 600; }
+  .crow small { display: block; color: var(--soft); font-size: 11px; }
+  .crow .area { margin-left: auto; font-family: var(--serif); font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .textlink { color: var(--green); font-weight: 600; font-size: 12.5px; text-align: center; margin-top: 8px; }
+
+  .schematic svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .cover-baked { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; background: #f4f1e9; }
+  .scrim { position: absolute; inset: 0; background: rgba(20,30,25,.28); z-index: 2; }
+  .dial { position: absolute; right: 7px; top: 51px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 3; }
+  .dpill { display: flex; align-items: center; gap: 9px; background: #fff; border-radius: 999px; padding: 0 9px 0 14px; height: 36px; font-size: 13px; font-weight: 600; box-shadow: 0 3px 8px rgba(20,32,26,.2); white-space: nowrap; }
+  .dpill.on { background: #fdf0db; }
+  .dpill .sw { width: 28px; height: 16px; border-radius: 999px; background: var(--amber); position: relative; }
+  .dpill svg { font-size: 18px; }
+  .dpill .sw i { position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .locpill { position: absolute; right: 8px; bottom: 132px; background: #fff; border-radius: 999px; padding: 0 9px 0 14px; height: 38px; display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; box-shadow: 0 3px 8px rgba(20,32,26,.2); z-index: 2; }
+  .opt { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--soft); }
+  .opt > span { width: 42px; }
+  .seg.small { flex: 1; margin: 0; }
+  .seg.small span { padding: 4px 0; font-size: 11.5px; }
+  .warn { display: flex; gap: 6px; align-items: flex-start; background: #fff4dc; border-radius: 10px; padding: 7px 9px; font-size: 11.5px; margin-top: 9px; line-height: 1.35; }
+  .warn svg { color: var(--amber-deep); font-size: 15px; margin-top: 1px; }
+  .arrowbadge { width: 40px; height: 40px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; font-size: 20px; flex: none; }
+  .tiles4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .tile4 { background: var(--tile); border-radius: 12px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 10.5px; line-height: 1.2; gap: 4px; padding: 0 3px; }
+  .tile4 svg { font-size: 17px; color: var(--green); }
+  .startrow { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; margin-top: 10px; font-size: 12px; }
+  .startrow b { font-weight: 600; }
+  .startrow .chg { margin-left: auto; color: var(--green); font-weight: 600; }
+  .radio { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .radio i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); flex: none; }
+  .radio.on i { border: 6px solid var(--green); }
+  .radio small { display: block; color: var(--soft); font-size: 11px; }
+  .nearme { color: var(--green); font-weight: 600; font-size: 12px; }
+  table.words { border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; font-size: 14px; }
+  table.words th, table.words td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.words th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-nav" viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><path d="M9 9a3 3 0 1 1 4.5 2.6c-.9.5-1.5 1.2-1.5 2.4M12 18h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2.2-4.8.3 1.6 1 2.6 2 3.1C11 9 11.5 6 12 3z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.6" fill="currentColor" stroke="none"/><path d="M9 21l2.5-6 2.5 2.5V21M11.5 15l1-6 3 3.5 3 1M12.5 9L9 10.5 7.5 14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
+  <symbol id="i-journal" viewBox="0 0 24 24"><path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 3v18M11 8h4M11 12h4"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+</svg>
+
+<style>
+  .drawer { position: absolute; left: 0; right: 0; bottom: 0; background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 18px rgba(20,32,26,.18); padding: 6px 16px 18px; z-index: 3; }
+  .grab { width: 38px; height: 4px; border-radius: 2px; background: #cfc8b8; margin: 2px auto 10px; }
+  .dhead { display: flex; gap: 10px; align-items: flex-start; }
+  .dhead img { width: 38px; height: 51px; flex: none; }
+  .dhead .t { font-family: var(--serif); font-size: 18px; font-weight: 700; line-height: 1.2; }
+  .dhead .m { color: var(--soft); font-size: 12px; margin-top: 2px; }
+  .status { font-weight: 600; font-size: 13.5px; margin: 10px 0 9px; }
+  .link { color: var(--green); font-weight: 600; font-size: 12.5px; text-align: center; margin-top: 9px; }
+  .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+  .act { background: #f3f0e8; border-radius: 13px; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; text-align: center; line-height: 1.15; }
+  .act svg { color: var(--green); font-size: 16px; }
+  .act small { color: var(--soft); font-size: 9.5px; }
+  .vrow { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .vrow small { display: block; color: var(--soft); font-size: 11px; }
+  .sel { position: absolute; width: 40px; height: 40px; border-radius: 50%; background: rgba(31,143,58,.18); border: 2px solid var(--green); }
+  .screen.wide { width: 620px; }
+  .tablet { width: 620px; height: 400px; border-radius: 26px; background: #111; padding: 8px; box-sizing: border-box; box-shadow: 0 18px 44px rgba(0,0,0,.25); }
+  .tablet .vp { border-radius: 19px; }
+  .tablet .drawer { left: 50%; right: auto; width: 380px; transform: translateX(-50%); }
+  .xs { width: 24px; height: 24px; border-radius: 50%; background: var(--tile); display: grid; place-items: center; font-size: 12px; color: var(--soft); flex: none; }
+  .sechead { display: flex; justify-content: space-between; align-items: baseline; }
+  .sechead a { color: var(--green); font-weight: 600; font-size: 11.5px; }
+  .delta { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .delta.far { color: var(--amber-deep); }
+  .tools2 { display: flex; gap: 8px; align-items: center; margin: 11px 0 4px; }
+  .tools2 .seg { flex: 1; margin: 0; }
+  .mapbtn { display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .mapbtn svg { color: var(--green); }
+  .btn.disabled { background: #cfd8d1; color: #fff; }
+  .numdot { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: var(--green); border: 2px solid #fff; color: #fff; display: grid; place-items: center; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,.25); box-sizing: border-box; z-index: 2; }
+  .toppill { position: absolute; top: 46px; left: 12px; right: 56px; background: var(--hint); color: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; text-align: center; z-index: 2; }
+  .tag.ch { background: #fde5c8; color: #8a4d0c; }
+</style>
+
+<header>
+  <h1>Library drawer and walk planner, version 3</h1>
+  <p>
+    For approval before building. Dashed orange outlines mark what's new or changed. Names and distances are examples, set out like your
+    case: one library 1 km east, one 1 km west, and three more about 1.2 km west.
+  </p>
+</header>
+
+<h2 class="group">1. Tapping a library opens its details straight away</h2>
+<div class="screens">
+
+  <div class="screen">
+    <h3><span class="tag">New</span> Drawer, as it opens</h3>
+    <p class="note">No small card first. The drawer slides up with everything you need: the visit button, a past visit and the four actions. The map stays visible above it, with the library ringed. Tap the map or swipe down to close.</p>
+    <div class="phone"><div class="vp schematic">
+      <svg class="map" viewBox="0 0 284 651" aria-hidden="true"><rect width="284" height="651" fill="#f4f1e9"/><g stroke="#d6dbe7" stroke-width="9"><path d="M0 120H284M0 260H284M0 400H284M0 540H284"/><path d="M50 0V651M150 0V651M240 0V651"/></g><g stroke="#e6e2d6" stroke-width="4"><path d="M0 190H284M0 330H284M0 470H284M100 0V651M195 0V651"/></g><rect x="160" y="420" width="70" height="40" fill="#dfeccf"/></svg>
+      <div class="sel" style="left:121px;top:166px"></div>
+      <img class="pin" style="left:130px;top:170px" src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt="">
+      <img class="pin" style="left:40px;top:90px" src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+      <img class="pin" style="left:220px;top:250px" src="../../apps/mobile/assets/markers/marker-large-old@3x.png" alt="">
+      <div class="controls"><div class="fab"><svg class="i"><use href="#i-menu"/></svg></div></div>
+      <div class="drawer hl">
+        <div class="grab"></div>
+        <div class="dhead"><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><div class="t">Neighbourhood Free Library</div><div class="m">390 m away</div></div><div class="x"><svg class="i"><use href="#i-close"/></svg></div></div>
+        <div class="status">Not visited yet</div>
+        <div class="btn primary"><svg class="i"><use href="#i-check"/></svg>I visited</div>
+        <div class="link">Add a past visit</div>
+        <div class="acts">
+          <div class="act"><svg class="i"><use href="#i-walk"/></svg>Directions<small>Google Maps</small></div>
+          <div class="act"><svg class="i"><use href="#i-route"/></svg>Walk from here</div>
+          <div class="act"><svg class="i"><use href="#i-journal"/></svg>Street Library<small>website</small></div>
+          <div class="act"><svg class="i"><use href="#i-up"/></svg>Share</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3><span class="tag">New</span> Drawer pulled up</h3>
+    <p class="note">If you've been there before, your visit history is further down: drag the drawer up (or scroll) to see it. It stops just below the top of the screen. The ⋯ for "Clear visit history" sits beside ✕, as now.</p>
+    <div class="phone"><div class="vp schematic">
+      <svg class="map" viewBox="0 0 284 651" aria-hidden="true"><rect width="284" height="651" fill="#f4f1e9"/><g stroke="#d6dbe7" stroke-width="9"><path d="M0 120H284M0 260H284M0 400H284M0 540H284"/><path d="M50 0V651M150 0V651M240 0V651"/></g><g stroke="#e6e2d6" stroke-width="4"><path d="M0 190H284M0 330H284M0 470H284M100 0V651M195 0V651"/></g><rect x="160" y="420" width="70" height="40" fill="#dfeccf"/></svg>
+      <img class="pin" style="left:130px;top:20px" src="../../apps/mobile/assets/markers/marker-large-recent@3x.png" alt="">
+      <div class="drawer hl" style="top:70px">
+        <div class="grab"></div>
+        <div class="dhead"><img src="../../apps/mobile/assets/markers/marker-large-recent@3x.png" alt=""><div class="grow"><div class="t">Books at the Box</div><div class="m">810 m away</div></div><div class="x"><svg class="i"><use href="#i-menu"/></svg></div><div class="x"><svg class="i"><use href="#i-close"/></svg></div></div>
+        <div class="status">Visited 12 days ago · 3 visits</div>
+        <div class="btn primary"><svg class="i"><use href="#i-check"/></svg>I visited</div>
+        <div class="link">Add a past visit</div>
+        <div class="acts">
+          <div class="act"><svg class="i"><use href="#i-walk"/></svg>Directions<small>Google Maps</small></div>
+          <div class="act"><svg class="i"><use href="#i-route"/></svg>Walk from here</div>
+          <div class="act"><svg class="i"><use href="#i-journal"/></svg>Street Library<small>website</small></div>
+          <div class="act"><svg class="i"><use href="#i-up"/></svg>Share</div>
+        </div>
+        <div class="section">YOUR VISITS</div>
+        <div class="vrow"><div>11 Oct 2026<small>12 days ago</small></div><span class="xs"><svg class="i"><use href="#i-close"/></svg></span></div>
+        <div class="vrow"><div>20 Aug 2026<small>2 months ago</small></div><span class="xs"><svg class="i"><use href="#i-close"/></svg></span></div>
+        <div class="vrow"><div>2 Jun 2026<small>4 months ago</small></div><span class="xs"><svg class="i"><use href="#i-close"/></svg></span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen wide">
+    <h3><span class="tag">New</span> On a tablet, or a phone on its side</h3>
+    <p class="note" style="min-height:0">The drawer stops growing at about 560 dp wide and sits in the middle at the bottom, so buttons don't stretch across the whole screen. On a sideways phone it covers at most 85% of the height and scrolls.</p>
+    <div class="tablet"><div class="vp schematic">
+      <svg class="map" viewBox="0 0 604 384" preserveAspectRatio="none" aria-hidden="true"><rect width="604" height="384" fill="#f4f1e9"/><g stroke="#d6dbe7" stroke-width="9"><path d="M0 80H604M0 200H604M0 320H604"/><path d="M90 0V384M260 0V384M430 0V384M560 0V384"/></g></svg>
+      <img class="pin" style="left:290px;top:40px" src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt="">
+      <div class="drawer hl">
+        <div class="grab"></div>
+        <div class="dhead"><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><div class="t">Neighbourhood Free Library</div><div class="m">390 m away</div></div><div class="x"><svg class="i"><use href="#i-close"/></svg></div></div>
+        <div class="status">Not visited yet</div>
+        <div class="btn primary"><svg class="i"><use href="#i-check"/></svg>I visited</div>
+        <div class="acts">
+          <div class="act"><svg class="i"><use href="#i-walk"/></svg>Directions</div>
+          <div class="act"><svg class="i"><use href="#i-route"/></svg>Walk from here</div>
+          <div class="act"><svg class="i"><use href="#i-journal"/></svg>Street Library</div>
+          <div class="act"><svg class="i"><use href="#i-up"/></svg>Share</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+
+<h2 class="group">2. Planning a walk: what each library adds</h2>
+<div class="screens">
+
+  <div class="screen">
+    <h3><span class="tag ch">Changed</span> Nothing ticked yet</h3>
+    <p class="note">Before you tick anything, the list is sorted by distance from the start, as now. The new <b>Pick on map</b> button lets you choose on the map instead. Closing the planner with ✕ forgets the ticks.</p>
+    <div class="phone"><div class="vp dim">
+      <div class="panel">
+        <div class="phead"><h4>Plan a walk</h4><div class="x"><svg class="i"><use href="#i-close"/></svg></div></div>
+        <div class="startrow"><span>Start and finish:</span><b>My location</b><span class="chg">Change</span></div>
+        <div class="tools2"><div class="seg"><span>All</span><span class="on">To visit</span></div><div class="mapbtn hl"><svg class="i"><use href="#i-map"/></svg>Pick on map</div></div>
+        <div class="section">DISTANCE FROM THE START</div>
+        <div class="list">
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>East Street Library</b><small>Not visited yet</small></div><div class="dist">1.0 km</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>West Corner Books</b><small>Not visited yet</small></div><div class="dist">1.0 km</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>Park Lane Library</b><small>Not visited yet</small></div><div class="dist">1.2 km</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>Rose Street Box</b><small>Not visited yet</small></div><div class="dist">1.2 km</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-old@3x.png" alt=""><div class="grow"><b>The Little Book Nook</b><small>Visited 8 months ago</small></div><div class="dist">1.3 km</div></div>
+        </div>
+        <div class="foot">
+          <div class="summary">Tick up to 9 libraries to visit</div>
+          <div class="btn disabled"><svg class="i"><use href="#i-map"/></svg>Show route</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3><span class="tag">New</span> One ticked: "In this walk"</h3>
+    <p class="note">Ticked libraries move up into <b>In this walk</b>, with ✕ to take one out and <b>Clear</b> for all. The rest are sorted by how much <b>longer</b> each makes the walk: the western ones add +250 m, and the eastern one drops to the bottom at +2.6 km, in amber.</p>
+    <div class="phone"><div class="vp dim">
+      <div class="panel">
+        <div class="phead"><h4>Plan a walk</h4><div class="x"><svg class="i"><use href="#i-close"/></svg></div></div>
+        <div class="startrow"><span>Start and finish:</span><b>My location</b><span class="chg">Change</span></div>
+        <div class="tools2"><div class="seg"><span>All</span><span class="on">To visit</span></div><div class="mapbtn"><svg class="i"><use href="#i-map"/></svg>Pick on map</div></div>
+        <div class="hl" style="margin-top:8px">
+          <div class="sechead"><div class="section" style="margin:6px 0 2px">IN THIS WALK · 1</div><a>Clear</a></div>
+          <div class="item"><div class="check on"><svg class="i"><use href="#i-check"/></svg></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>West Corner Books</b><small>1.0 km from the start</small></div><span class="xs"><svg class="i"><use href="#i-close"/></svg></span></div>
+        </div>
+        <div class="section hl">ADD MORE · EXTRA WALKING</div>
+        <div class="list">
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>Park Lane Library</b><small>Not visited yet</small></div><div class="delta">+250 m</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>Rose Street Box</b><small>Not visited yet</small></div><div class="delta">+300 m</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-old@3x.png" alt=""><div class="grow"><b>The Little Book Nook</b><small>Visited 8 months ago</small></div><div class="delta">+450 m</div></div>
+          <div class="item"><div class="check"></div><img src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt=""><div class="grow"><b>East Street Library</b><small>Not visited yet</small></div><div class="delta far">+2.6 km</div></div>
+        </div>
+        <div class="foot">
+          <div class="opt"><span>Order</span><div class="seg small"><span class="on">Set order</span><span>As I go</span></div></div>
+          <div class="opt"><span>Finish</span><div class="seg small"><span class="on">Where I started</span><span>Last library</span></div></div>
+          <div class="summary"><b>1 library</b> · about 2.4–3.6 km · straight-line estimate</div>
+          <div class="btn primary"><svg class="i"><use href="#i-map"/></svg>Show route</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3><span class="tag">New</span> Pick on map</h3>
+    <p class="note">The planner shrinks to a bar at the bottom. Tap a library to add it (it becomes a green tick); tap again to take it out. A dashed line shows the rough shape of the walk so far. <b>List</b> goes back to the full planner with the same selection.</p>
+    <div class="phone"><div class="vp schematic">
+      <svg class="map" viewBox="0 0 284 651" aria-hidden="true"><rect width="284" height="651" fill="#f4f1e9"/><g stroke="#d6dbe7" stroke-width="9"><path d="M0 120H284M0 260H284M0 400H284M0 540H284"/><path d="M50 0V651M150 0V651M240 0V651"/></g><g stroke="#e6e2d6" stroke-width="4"><path d="M0 190H284M0 330H284M0 470H284M100 0V651M195 0V651"/></g><rect x="160" y="420" width="70" height="40" fill="#dfeccf"/></svg>
+      <svg class="map" viewBox="0 0 284 651" style="pointer-events:none"><path d="M150 300 L52 286 L40 238 L150 300" fill="none" stroke="#1f8f3a" stroke-width="3" stroke-dasharray="6 6" opacity=".8"/><circle cx="150" cy="300" r="7" fill="#2f7ae5" stroke="#fff" stroke-width="3"/></svg>
+      <div class="toppill hl">Tap libraries to add them to the walk</div>
+      <div class="numdot hl" style="left:39px;top:273px"><svg class="i"><use href="#i-check"/></svg></div>
+      <div class="numdot hl" style="left:27px;top:225px"><svg class="i"><use href="#i-check"/></svg></div>
+      <img class="pin" style="left:60px;top:180px" src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt="">
+      <img class="pin" style="left:20px;top:330px" src="../../apps/mobile/assets/markers/marker-large-old@3x.png" alt="">
+      <img class="pin" style="left:248px;top:280px" src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt="">
+      <div class="card hl" style="bottom:14px">
+        <div style="font-size:12px;color:var(--soft);text-align:center;margin-bottom:8px"><b style="color:var(--ink)">2 libraries</b> · about 2.6–3.9 km</div>
+        <div class="btns" style="margin-top:0">
+          <div class="btn ghost round"><svg class="i"><use href="#i-close"/></svg></div>
+          <div class="btn ghost"><svg class="i"><use href="#i-list"/></svg>List</div>
+          <div class="btn primary"><svg class="i"><use href="#i-map"/></svg>Show route</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+
+<h2 class="group">3. The map</h2>
+<div class="screens">
+
+  <div class="screen">
+    <h3><span class="tag ch">Changed</span> Menu</h3>
+    <p class="note"><b>To visit</b> leaves the map menu, and the "To visit only" pill goes with it: the amber closed-door markers already stand out. <b>Nearby</b> becomes <b>Nearby libraries</b>. The list and planner keep their own All / To visit choice.</p>
+    <div class="phone"><div class="vp schematic">
+      <svg class="map" viewBox="0 0 284 651" aria-hidden="true"><rect width="284" height="651" fill="#f4f1e9"/><g stroke="#d6dbe7" stroke-width="9"><path d="M0 120H284M0 260H284M0 400H284M0 540H284"/><path d="M50 0V651M150 0V651M240 0V651"/></g><g stroke="#e6e2d6" stroke-width="4"><path d="M0 190H284M0 330H284M0 470H284M100 0V651M195 0V651"/></g><rect x="160" y="420" width="70" height="40" fill="#dfeccf"/></svg>
+      <img class="pin" style="left:60px;top:210px" src="../../apps/mobile/assets/markers/marker-large-never@3x.png" alt="">
+      <img class="pin" style="left:140px;top:330px" src="../../apps/mobile/assets/markers/marker-large-fresh@3x.png" alt="">
+      <div class="scrim"></div>
+      <div class="dial hl">
+        <div class="fab"><svg class="i"><use href="#i-close"/></svg></div>
+        <div class="dpill">Nearby libraries<svg class="i"><use href="#i-list"/></svg></div>
+        <div class="dpill">Plan a walk<svg class="i"><use href="#i-route"/></svg></div>
+        <div class="dpill">My visits<svg class="i"><use href="#i-journal"/></svg></div>
+        <div class="fab"><svg class="i"><use href="#i-help"/></svg></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen" style="width:600px">
+    <h3><span class="tag ch">Changed</span> Less grouping, and how "extra walking" is worked out</h3>
+    <table class="words" style="margin-top:8px">
+      <tr><th>What</th><th>Now</th><th>Proposed</th></tr>
+      <tr><td>Markers grouped when closer than</td><td>44 px</td><td>30 px</td></tr>
+      <tr><td>Grouping stops at zoom</td><td>13 (a whole suburb)</td><td>11 (a few suburbs), so single markers show sooner</td></tr>
+      <tr><td>Extra walking for a library</td><td>None</td><td>The cheapest place to slot it into the walk so far (between two stops, or at the start or end), in straight lines × 1.3, the same factor as the estimate. Worked out on the phone: no Mapbox calls while you choose.</td></tr>
+      <tr><td>"Far" (amber)</td><td>None</td><td>Adds more than 1 km</td></tr>
+      <tr><td>When the planner closes</td><td>Ticks kept while the app is open</td><td>✕ forgets them. "Change stops" on a walk still opens with that walk's libraries.</td></tr>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

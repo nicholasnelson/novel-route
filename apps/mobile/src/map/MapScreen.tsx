@@ -1,23 +1,23 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
 import LibraryMap, { CirclesOverlay, LibraryMapHandle, MapRegion, WalkOverlay } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
-import LibraryList, { RouteRequest, StartChoice } from './overlays/LibraryList';
+import LibraryList, { estimateDraft, RouteRequest, StartChoice, startPointFor, toggleStop, WalkDraft } from './overlays/LibraryList';
 import MapKey from './overlays/MapKey';
 import YourVisits, { RecentVisit } from './overlays/YourVisits';
 import {
   CirclesCard,
   DirectionReference,
   HintCard,
-  LibraryPreviewCard,
   NearbyCard,
   UndoToast,
   WalkArrivedCard,
   WalkDoneCard,
   WalkingCard,
+  WalkPickCard,
   WalkPlanCard,
 } from './overlays/cards';
 import { estimatePlan, planWalk } from './routing';
@@ -120,6 +120,8 @@ const RECENT_VISITS = 5;
 const NEAR_YOU_M = 300;
 /** "Show on map" frames at least this far around each circle's centre. */
 const MIN_FRAME_RADIUS_M = 250;
+/** A library this close to the bottom edge of the open drawer is moved up into view. */
+const DRAWER_CLEARANCE = 40;
 /** Lets one floating panel close before the next opens (they're separate modals). */
 const PANEL_SWAP_MS = 250;
 
@@ -139,6 +141,7 @@ function useStableCallback<A extends unknown[], R>(fn: (...args: A) => R): (...a
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   const mapRef = useRef<LibraryMapHandle>(null);
 
   const [db, setDb] = useState<Db | null>(null);
@@ -156,14 +159,19 @@ export default function MapScreen() {
   const [followUser, setFollowUser] = useState(true);
   const [requestingLocation, setRequestingLocation] = useState(false);
 
+  /** The library whose drawer is open. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [drawerHeight, setDrawerHeight] = useState(0);
   const [selectedVisits, setSelectedVisits] = useState<Visit[]>([]);
   const [mapKeyOpen, setMapKeyOpen] = useState(false);
-  /** Only libraries due for a visit on the map (and in the list). Remembered between launches. */
+  /** The list and planner show only libraries due for a visit. Remembered between launches. */
   const [dueOnly, setDueOnly] = useState(false);
-  /** The list panel, open as a list or straight into the walk planner, and where it measures from. */
-  const [listOpen, setListOpen] = useState<{ planning: boolean; initialStops: string[]; start: StartChoice } | null>(null);
+  /**
+   * "Nearby libraries" (no draft) or the walk planner (a draft), and where it measures from. While
+   * planning, `onMap` swaps the list for picking libraries on the map. Closing forgets the draft.
+   */
+  const [list, setList] = useState<{ start: StartChoice; draft: WalkDraft | null; onMap: boolean } | null>(null);
+  const picking = !!list?.draft && list.onMap;
   const [menuOpen, setMenuOpen] = useState(false);
   /** A planned walk, or one in progress (saved on the phone after every change). */
   const [walk, setWalk] = useState<WalkSession | null>(null);
@@ -500,17 +508,36 @@ export default function MapScreen() {
 
   const toastLibraryTitle = toast ? libraries.find((l) => l.id === toast.libraryId)?.title : undefined;
 
-  const selectLibrary = useStableCallback((id: string) => {
-    setSelectedId(id);
-    if (seenHints && !seenHints.has('tap_library')) seeHint('tap_library');
-  });
+  const changeDraft = (change: (draft: WalkDraft) => Partial<WalkDraft>) =>
+    setList((current) => (current?.draft ? { ...current, draft: { ...current.draft, ...change(current.draft) } } : current));
 
-  const openDetail = async (id: string) => {
+  /** The library the drawer last made sure was in view (once per opening). */
+  const revealedRef = useRef<string | null>(null);
+
+  /** Opens a library's drawer, or while picking a walk on the map, adds or takes it out. */
+  const selectLibrary = useStableCallback((id: string) => {
+    if (picking) {
+      changeDraft((draft) => ({ stops: toggleStop(draft.stops, id) }));
+      return;
+    }
     // Don't show the previous library's visits while this one's load.
     if (id !== selectedId) setSelectedVisits([]);
+    revealedRef.current = null;
     setSelectedId(id);
-    setDetailOpen(true);
-    if (db) await reloadVisitState(db, id);
+    if (seenHints && !seenHints.has('tap_library')) seeHint('tap_library');
+    if (db) reloadVisitState(db, id);
+  });
+  const openDetail = selectLibrary;
+
+  /** The drawer settled: if it covers its library on the map, move the map up a little. */
+  const handleDrawerHeight = (height: number) => {
+    setDrawerHeight(height);
+    const library = selectedLibrary;
+    if (!library || !region || revealedRef.current === library.id) return;
+    revealedRef.current = library.id;
+    const { north, south } = region.bounds;
+    const y = ((north - library.latitude) / (north - south)) * window.height;
+    if (y > window.height - height - DRAWER_CLEARANCE) mapRef.current?.reveal(library, height + DRAWER_CLEARANCE);
   };
 
   const openDirections = (library: Library) => {
@@ -559,7 +586,7 @@ export default function MapScreen() {
     if (tiles.length > 0) syncTiles(db, tiles.slice(0, MAX_TILES_PER_VIEW));
   };
 
-  // --- Due filter, list, walk planner, your visits ---
+  // --- List, walk planner, your visits ---
 
   const changeDueOnly = (value: boolean) => {
     setDueOnly(value);
@@ -571,14 +598,23 @@ export default function MapScreen() {
    * is off), then the middle of the map.
    */
   const defaultStart = (): StartChoice => {
-    if (!location) return { kind: 'map' };
+    const mapStart: StartChoice = { kind: 'map', point: region?.center ?? AUSTRALIA };
+    if (!location) return mapStart;
     if (followUser || !region) return { kind: 'you' };
     const fromYou = distanceMeters(location.latitude, location.longitude, region.center.latitude, region.center.longitude);
-    return fromYou <= NEAR_YOU_M ? { kind: 'you' } : { kind: 'map' };
+    return fromYou <= NEAR_YOU_M ? { kind: 'you' } : mapStart;
+  };
+
+  const newDraft = (stops: string[] = []): WalkDraft => ({ stops, order: 'set', finish: 'start' });
+
+  /** Opens the planner. Picking on the map starts with the library drawer closed. */
+  const openPlanner = (start: StartChoice, draft: WalkDraft) => {
+    setSelectedId(null);
+    setList({ start, draft, onMap: false });
   };
 
   const pickFromList = (id: string) => {
-    setListOpen(null);
+    setList(null);
     const library = libraries.find((l) => l.id === id);
     selectLibrary(id);
     if (library) mapRef.current?.centerOn(library, LIST_PICK_ZOOM);
@@ -593,7 +629,7 @@ export default function MapScreen() {
   const libraryById = (id: string) => libraries.find((l) => l.id === id) ?? null;
 
   const showRoute = (request: RouteRequest) => {
-    setListOpen(null);
+    setList(null);
     setSelectedId(null);
     setCirclesShown(false);
     const stops = request.ids.map(libraryById).filter((l): l is Library => !!l);
@@ -701,6 +737,27 @@ export default function MapScreen() {
     // libraryById reads `libraries`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walk, walkNextId, libraries]);
+
+  // Picking a walk's libraries on the map: the straight-line walk so far, drawn as it grows.
+  const plannerStart = list ? startPointFor(list.start, libraries, location, region?.center ?? AUSTRALIA) : null;
+  const pickEstimate = useMemo(
+    () => (picking && list?.draft && plannerStart ? estimateDraft(list.draft, list.start, plannerStart, libraries) : null),
+    [picking, list, plannerStart, libraries]
+  );
+  const pickOverlay = useMemo<WalkOverlay | null>(() => {
+    if (!picking) return null;
+    return {
+      picking: true,
+      legs: pickEstimate?.plan.legs.map((leg) => ({ path: leg.path, kind: 'straight' as const, state: 'later' as const })) ?? [],
+      stops: (pickEstimate?.stops ?? []).map((library, i) => ({ id: library.id, point: library, number: i + 1, state: 'picked' as const })),
+    };
+  }, [picking, pickEstimate]);
+
+  const pickOnMap = () => {
+    setList((current) => current && { ...current, onMap: true });
+    const stops = (list?.draft?.stops ?? []).map(libraryById).filter((l): l is Library => !!l);
+    if (stops.length > 0 && plannerStart) mapRef.current?.frame([plannerStart, ...stops]);
+  };
 
   // Walking: are you at a stop still to go, and where does the arrow point?
   const arrivalRadius = ARRIVAL_RADIUS_M + Math.min(position?.accuracy ?? 0, MAX_ACCURACY_ALLOWANCE_M);
@@ -811,19 +868,18 @@ export default function MapScreen() {
   // area (slow, or still filling on the server) shows "Updating": libraries may still appear.
   let pill: StatusPillKind | null = null;
   if (dbFailed || (failedTiles && !snapshotReady)) pill = 'error';
+  else if (picking) pill = 'picking';
   else if (snapshotReady ? pendingTiles.size > 0 || slowFirstLoads > 0 : syncing || snapshotLoading) pill = 'loading';
   else if (needsZoomIn) pill = 'zoom-in';
   else if (partlyLoaded) pill = 'not-loaded';
   else if (permission && !locationGranted && !requestingLocation && seenHints?.has('location_explained')) pill = 'location-off';
-  else if (dueOnly) pill = 'due-only';
 
   const handlePillAction = () => {
     if (pill === 'error') retrySync();
     else if (pill === 'zoom-in') mapRef.current?.zoomTo(MIN_SYNC_ZOOM + 1);
     else if (pill === 'not-loaded') retrySync();
     else if (pill === 'location-off') askForLocation();
-    else if (pill === 'due-only') changeDueOnly(false);
-  };
+    };
 
   // --- Bottom slot: one card at a time, highest priority first ---
 
@@ -841,20 +897,20 @@ export default function MapScreen() {
   let tapHintVisible = false;
   if (!seenHints) {
     bottomCard = null;
-  } else if (selectedLibrary) {
+  } else if (picking && list?.draft && plannerStart) {
+    const { draft, start } = list;
     bottomCard = (
-      <LibraryPreviewCard
-        library={selectedLibrary}
-        freshness={freshnessFor(summaries.get(selectedLibrary.id), now)}
-        summary={summaries.get(selectedLibrary.id)}
-        now={now}
-        distance={distanceTo(selectedLibrary)}
-        onOpen={() => openDetail(selectedLibrary.id)}
-        onLogVisit={() => logVisitNow(selectedLibrary)}
-        onDirections={() => openDirections(selectedLibrary)}
-        onClose={() => setSelectedId(null)}
+      <WalkPickCard
+        count={pickEstimate?.stops.length ?? 0}
+        range={pickEstimate ? estimateRange(pickEstimate.plan.meters / WALK_DETOUR) : null}
+        onClose={() => setList(null)}
+        onList={() => setList((current) => current && { ...current, onMap: false })}
+        onShowRoute={() => showRoute({ ids: draft.stops, start: { ...start, point: plannerStart }, order: draft.order, finish: draft.finish })}
       />
     );
+  } else if (selectedLibrary) {
+    // The drawer shows it.
+    bottomCard = null;
   } else if (walk && walk.walking && isFinished(walk)) {
     bottomCard = <WalkDoneCard visited={walk.done.length} streakWeeks={walkStreakWeeks} onDone={clearWalk} />;
   } else if (walk && walkArrivedId) {
@@ -883,7 +939,7 @@ export default function MapScreen() {
         arrowRotation={location ? normalizeDegrees(bearingDegrees(location, target) - (directionReference?.degrees ?? 0)) : 0}
         compass={!!directionReference}
         onGoogleMaps={openWalkInGoogleMaps}
-        onEdit={() => setListOpen({ planning: true, initialStops: remainingStops(walk), start: { kind: location ? 'you' : 'map' } })}
+        onEdit={() => openPlanner(location ? { kind: 'you' } : defaultStart(), { ...newDraft(remainingStops(walk)), order: walk.order, finish: walk.finish })}
         onEnd={endWalk}
       />
     );
@@ -905,11 +961,12 @@ export default function MapScreen() {
         long={isLongWalk(onStreets ? walk.meters : range[1], total)}
         loading={walkLoading}
         onStart={startWalking}
-        onEdit={() => setListOpen({
-          planning: true,
-          initialStops: walk.stops,
-          start: walk.startKind === 'library' && walk.startLibraryId ? { kind: 'library', libraryId: walk.startLibraryId } : { kind: walk.startKind },
-        })}
+        onEdit={() => openPlanner(
+          walk.startKind === 'library' && walk.startLibraryId
+            ? { kind: 'library', libraryId: walk.startLibraryId }
+            : { kind: walk.startKind, point: walk.start },
+          { stops: walk.stops, order: walk.order, finish: walk.finish }
+        )}
         onClose={clearWalk}
       />
     );
@@ -1000,15 +1057,16 @@ export default function MapScreen() {
   }, [tapHintVisible, seeHint]);
 
   const topOffset = insets.top + 8;
+  const detailOpenHeight = selectedLibrary && !picking ? drawerHeight : 0;
   const mapPadding = useMemo(
-    () => ({ top: topOffset + 44, bottom: bottomHeight + insets.bottom + 16 }),
-    [topOffset, bottomHeight, insets.bottom]
+    () => ({ top: topOffset + 44, bottom: Math.max(bottomHeight + insets.bottom + 16, detailOpenHeight) }),
+    [topOffset, bottomHeight, insets.bottom, detailOpenHeight]
   );
   const followPadding = useMemo(
     () => ({ top: topOffset + 44, bottom: FOLLOW_BOTTOM_PADDING + insets.bottom }),
     [topOffset, insets.bottom]
   );
-  const detailLibrary = detailOpen ? selectedLibrary : null;
+  const detailLibrary = picking ? null : selectedLibrary;
   const selectedSummary = selectedId ? summaries.get(selectedId) : undefined;
 
   return (
@@ -1021,8 +1079,7 @@ export default function MapScreen() {
         selectedId={selectedId}
         loadedTiles={loadedTiles}
         allLoaded={snapshotReady}
-        dueOnly={dueOnly}
-        walk={walkOverlay}
+        walk={pickOverlay ?? walkOverlay}
         circles={circlesShown ? circles : null}
         initialCenter={AUSTRALIA}
         initialZoom={AUSTRALIA_ZOOM}
@@ -1050,20 +1107,18 @@ export default function MapScreen() {
       <View style={[styles.controls, { top: topOffset + 40, right: insets.right + 12 }]}>
         <MapMenu
           open={menuOpen}
-          toVisitOnly={dueOnly}
           onToggle={() => {
             setMenuOpen((open) => !open);
             if (seenHints && !seenHints.has('menu')) seeHint('menu');
           }}
-          onNearby={() => { setMenuOpen(false); setListOpen({ planning: false, initialStops: [], start: defaultStart() }); }}
-          onPlanWalk={() => { setMenuOpen(false); setListOpen({ planning: true, initialStops: [], start: defaultStart() }); }}
-          onToggleToVisit={() => changeDueOnly(!dueOnly)}
+          onNearby={() => { setMenuOpen(false); setList({ start: defaultStart(), draft: null, onMap: false }); }}
+          onPlanWalk={() => { setMenuOpen(false); openPlanner(defaultStart(), newDraft()); }}
           onMyVisits={() => { setMenuOpen(false); openVisits(); }}
           onHelp={() => { setMenuOpen(false); setMapKeyOpen(true); }}
         />
       </View>
 
-      {locationGranted && !followUser && !menuOpen && (
+      {locationGranted && !followUser && !menuOpen && !detailLibrary && (
         <View style={[styles.centreOnMe, { right: insets.right + 12, bottom: insets.bottom + 22 + bottomHeight }]}>
           <CentreOnMe onPress={() => setFollowUser(true)} />
         </View>
@@ -1074,7 +1129,7 @@ export default function MapScreen() {
         pointerEvents="box-none"
         onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}
       >
-        {toast && !detailOpen && (
+        {toast && !detailLibrary && (
           <UndoToast
             message={toastLibraryTitle ? S.visit.marked(toastLibraryTitle) : S.visit.markedShort}
             onUndo={undoLastVisit}
@@ -1113,18 +1168,21 @@ export default function MapScreen() {
         onDirections={() => detailLibrary && openDirections(detailLibrary)}
         onWalkFromHere={() => {
           if (!detailLibrary) return;
-          const libraryId = detailLibrary.id;
-          setDetailOpen(false);
-          setTimeout(() => setListOpen({ planning: true, initialStops: [], start: { kind: 'library', libraryId } }), PANEL_SWAP_MS);
+          openPlanner({ kind: 'library', libraryId: detailLibrary.id }, newDraft([detailLibrary.id]));
         }}
-        onClose={() => setDetailOpen(false)}
+        onClose={deselectLibrary}
+        onHeightChange={handleDrawerHeight}
       />
 
       <LibraryList
-        visible={listOpen !== null}
-        planning={listOpen?.planning ?? false}
-        initialStops={listOpen?.initialStops ?? []}
-        initialStart={listOpen?.start ?? { kind: 'you' }}
+        visible={list !== null && !list.onMap}
+        start={list?.start ?? { kind: 'you' }}
+        onStartChange={(start) => setList((current) => current && { ...current, start })}
+        draft={list?.draft ?? null}
+        onDraftChange={(change) => changeDraft(() => change)}
+        onToggleStop={(id) => changeDraft((draft) => ({ stops: toggleStop(draft.stops, id) }))}
+        onBeginPlanning={() => setList((current) => current && { ...current, draft: newDraft() })}
+        onPickOnMap={pickOnMap}
         libraries={libraries}
         summaries={summaries}
         now={now}
@@ -1134,7 +1192,7 @@ export default function MapScreen() {
         onDueOnlyChange={changeDueOnly}
         onSelectLibrary={pickFromList}
         onShowRoute={showRoute}
-        onClose={() => setListOpen(null)}
+        onClose={() => setList(null)}
       />
 
       <YourVisits
