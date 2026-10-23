@@ -22,7 +22,7 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
   /** The draggable top part (title, close button). */
   header: React.ReactNode;
   children: React.ReactNode;
-  /** Height of the content to show when it opens (null until measured: then it shows it all). */
+  /** Height of the content to show when it opens (null until measured: it opens once known). */
   peek: number | null;
   resetKey: string;
   onClose(): void;
@@ -39,9 +39,9 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
 
   const maxHeight = Math.max(200, window.height - insets.top - TOP_GAP);
   const fullHeight = Math.min(headerHeight + contentHeight, maxHeight);
-  const peekHeight = peek === null ? fullHeight : Math.min(headerHeight + peek + insets.bottom, fullHeight);
+  const peekHeight = Math.min(headerHeight + (peek ?? 0) + insets.bottom, fullHeight);
   const canExpand = fullHeight - peekHeight > 24;
-  const measured = headerHeight > 0 && contentHeight > 0;
+  const measured = headerHeight > 0 && contentHeight > 0 && peek !== null;
   const target = !measured ? 0 : expandedKey === resetKey || !canExpand ? fullHeight : peekHeight;
 
   const animateTo = (value: number, then?: () => void) => {
@@ -118,7 +118,9 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
       <Animated.View
         style={[
           styles.drawer,
-          { height, marginLeft: insets.left, marginRight: insets.right },
+          { marginLeft: insets.left, marginRight: insets.right },
+          // Measured first at its natural size (invisible), then it opens to the measured height.
+          measured ? { height } : { maxHeight, opacity: 0 },
         ]}
       >
         <View {...dragHandlers} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
@@ -128,11 +130,11 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-          onContentSizeChange={(_, h) => setContentHeight(h)}
+          accessibilityElementsHidden={!measured}
           // Scrolling to the end of a peeking drawer pulls it up, so the rest is easy to find.
           onScrollEndDrag={(e) => { if (canExpand && e.nativeEvent.contentOffset.y > 0) setExpandedKey(resetKey); }}
         >
-          {children}
+          <View onLayout={(e) => setContentHeight(e.nativeEvent.layout.height + insets.bottom + 20)}>{children}</View>
         </ScrollView>
       </Animated.View>
     </View>
@@ -163,6 +165,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   scroll: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
   },
 });
