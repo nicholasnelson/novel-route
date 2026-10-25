@@ -356,6 +356,15 @@ button.button {
   margin: 0;
 }
 
+/* Walks and visits: laid out like the steps (under the first two), not numbered. */
+.extras {
+  padding: 0 0 96px;
+}
+
+.extra-list h2::before {
+  content: none;
+}
+
 /* Doors */
 .doors {
   background: var(--paper-deep);
