@@ -28,10 +28,10 @@ const visited = (id: string, daysAgo: number): VisitSummary => ({
 });
 
 describe('isDue / visitedToday', () => {
-  it('treats never-visited and 30+ day old visits as due', () => {
+  it('treats never-visited and visits over a week old as due', () => {
     expect(isDue(undefined, NOW)).toBe(true);
-    expect(isDue(visited('a', 10), NOW)).toBe(false);
-    expect(isDue(visited('a', 31), NOW)).toBe(true);
+    expect(isDue(visited('a', 6), NOW)).toBe(false);
+    expect(isDue(visited('a', 8), NOW)).toBe(true);
   });
 
   it('knows whether the last visit was today (local time)', () => {

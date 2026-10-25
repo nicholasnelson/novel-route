@@ -32,7 +32,7 @@
   <main class="wrap">
    <div class="doc">
     <h1>Privacy policy</h1>
-    <p class="meta">Effective 16 October 2026</p>
+    <p class="meta">Effective 26 October 2026</p>
 
     <p>
       This policy explains what information the Novel Route app (“the app”) uses, where it goes,
@@ -43,7 +43,7 @@
     <h2>The short version</h2>
     <ul>
       <li>There are no accounts, ads or analytics, and we don't sell your data.</li>
-      <li>Your location and visit history stay on your phone.</li>
+      <li>Your visit history stays on your phone. So does your exact position, except when you plan a walk from where you are: then it's sent once to the map provider to work out the walking route.</li>
       <li>To show libraries and the map, the app sends the <em>approximate area</em> you're looking at to the library data service and the map provider. It doesn't send your exact position.</li>
       <li>If the app crashes, a crash report (with no location and no IP address) is sent to our error-tracking service so we can fix it.</li>
     </ul>
@@ -55,11 +55,15 @@
     <ul>
       <li>show where you are on the map;</li>
       <li>load the street libraries around you;</li>
-      <li>point you to the nearest library that's due for a visit, within 2&nbsp;km; and</li>
+      <li>point you to the nearest library that's due for a visit, within 2&nbsp;km;</li>
+      <li>plan walks that start from where you are; and</li>
       <li>offer to log a visit when you're within about 30 to 50&nbsp;metres (depending on GPS accuracy) of a library.</li>
     </ul>
     <p>
       Your precise location is processed on your device and isn't sent to us or stored by us.
+      The one exception is planning a walk that starts from your location: the app then sends that
+      position once, with the libraries in the walk, to Mapbox to work out the walking route. It
+      isn't sent while you walk.
       The app doesn't use your location in the background. You can withdraw location permission
       at any time in your phone's settings; the map still works without it.
     </p>
@@ -92,8 +96,8 @@
           </tr>
           <tr>
             <td><a href="https://www.mapbox.com/legal/privacy">Mapbox</a></td>
-            <td>Requests for the map tiles you view. When you plan a walk, the locations of the libraries in it (never your own position)</td>
-            <td>To draw the map and the walking route between those libraries. Mapbox usage telemetry is turned off in the app.</td>
+            <td>Requests for the map tiles you view. When you plan a walk, the locations of the libraries in it and where the walk starts, which is your position if you plan it from your location</td>
+            <td>To draw the map and work out the walking route. Mapbox usage telemetry is turned off in the app.</td>
           </tr>
           <tr>
             <td><a href="https://sentry.io/privacy/">Sentry</a> (crash reporting, data stored in the EU)</td>

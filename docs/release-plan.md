@@ -81,7 +81,7 @@ Content to cover (must match the Data safety form):
 
 Data safety form (Play Console) answers to give:
 - **Location — approximate**: collected, shared with service providers (library data service, Mapbox) for app functionality; not stored by us; not optional for the core feature.
-- **Location — precise**: used on device only, not collected (never leaves the device).
+- **Location — precise**: collected (from the first build after 1.2.0, 2026-10-26), only when you plan a walk from your location: sent once to Mapbox (a service provider, so not "shared") to work out the walking route; not stored by us; optional (walks can start from the map or a library); app functionality.
 - **App activity — visit history**: stays on device; not collected.
 - **App info and performance — crash logs and diagnostics**: collected (Sentry) for app functionality/analytics of crashes; not shared for advertising.
 - **Device or other IDs**: not collected (Sentry has `sendDefaultPii` off and IP storage disabled).

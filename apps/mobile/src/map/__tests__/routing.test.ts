@@ -29,23 +29,20 @@ function mockMapbox(visitOrder: number[]) {
 beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}));
 
 describe('planWalk', () => {
-  it('starting from you: a straight leg to the first stop, footpaths after, back to you; your position is never sent', async () => {
-    const fetchMock = mockMapbox([0, 1, 2]);
+  it('starting from you: on footpaths from where you are and back, as a Mapbox round trip', async () => {
+    const fetchMock = mockMapbox([0, 1, 2, 3]);
     const walk = await planWalk(start, stops, { finish: start }, 'pk.test');
     const url = fetchMock.mock.calls[0][0];
-    // One way from the first stop to the last (the one nearest home), not back to the first.
-    expect(url).toContain('roundtrip=false&source=first&destination=last');
-    expect(url).not.toContain('138.600000,-34.930000');
+    // Your position is the first point (the privacy policy says so), then the libraries.
+    expect(url).toContain('/walking/138.600000,-34.930000;');
+    expect(url).toContain('roundtrip=true&source=first');
     expect(walk.source).toBe('streets');
     expect(walk.order).toHaveLength(3);
-    expect(walk.legs).toHaveLength(4); // a straight line to the first stop, footpaths between stops, a straight line home
-    expect(walk.legs[0].kind).toBe('straight');
+    expect(walk.legs).toHaveLength(4); // to each stop, then home
+    expect(walk.legs.every((l) => l.kind === 'streets')).toBe(true);
     expect(walk.legs[0].path[0]).toEqual(lngLat(start));
-    expect(walk.legs[1].kind).toBe('streets');
-    expect(walk.legs[2].kind).toBe('streets');
-    expect(walk.legs[3].kind).toBe('straight');
-    expect(walk.legs[3].path[1]).toEqual(lngLat(start));
-    expect(walk.meters).toBeGreaterThan(2400);
+    expect(walk.legs[3].path[walk.legs[3].path.length - 1]).toEqual(lngLat(start));
+    expect(walk.meters).toBe(2400);
   });
 
   it('starting at a library: on footpaths from the start, the library first, round trip via Mapbox', async () => {
@@ -59,11 +56,21 @@ describe('planWalk', () => {
     expect(walk.legs).toHaveLength(4);
   });
 
-  it('finishing at the last library: one way, ending where the phone worked out', async () => {
-    const fetchMock = mockMapbox([0, 1, 2]);
+  it('finishing at the last library: one way from you, ending where the phone worked out', async () => {
+    const fetchMock = mockMapbox([0, 1, 2, 3]);
     const walk = await planWalk(start, stops, { finish: null }, 'pk.test');
-    expect(fetchMock.mock.calls[0][0]).toContain('roundtrip=false&source=first&destination=last');
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain('roundtrip=false&source=first&destination=last');
+    expect(url).toContain('/walking/138.600000,-34.930000;');
     expect(walk.legs).toHaveLength(3);
+    expect(walk.legs.every((l) => l.kind === 'streets')).toBe(true);
+  });
+
+  it('routes a single library from you', async () => {
+    const fetchMock = mockMapbox([0, 1]);
+    const walk = await planWalk(start, [stops[0]], { finish: start }, 'pk.test');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(walk.legs).toHaveLength(2);
   });
 
   it('falls back to the on-device estimate when Mapbox fails or is unreachable', async () => {
@@ -73,9 +80,9 @@ describe('planWalk', () => {
     expect(await planWalk(start, stops, { finish: start }, 'pk.test')).toEqual(estimatePlan(start, stops, { finish: start }));
   });
 
-  it("doesn't call Mapbox for a single stop or without a token", async () => {
+  it("doesn't call Mapbox for a walk that is only its start library, or without a token", async () => {
     const fetchMock = mockMapbox([0]);
-    await planWalk(start, [stops[0]], { finish: start }, 'pk.test');
+    await planWalk(stops[0], [stops[0]], { finish: stops[0], startStop: 0 }, 'pk.test');
     await planWalk(start, stops, { finish: start }, undefined);
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -63,7 +63,7 @@ Rendering: each library feature carries a `freshness` property, and the Mapbox `
 ## Nearby card (replaced the nearby prompt)
 
 The original plan was a modal prompt within 100 m. What shipped is a bottom card with no modals (details in [ux.md](./ux.md) "Nearby", constants in `apps/mobile/src/store/nearby.ts`):
-- **Approaching:** the nearest *due* library (never visited, or last visited more than **30 days** ago) within **2 km**, with distance and a direction arrow.
+- **Approaching:** the nearest *due* library (never visited, or last visited more than **7 days** ago; `DUE_AFTER_DAYS`) within **2 km**, with distance and a direction arrow.
 - **Arrived:** within **30 m** plus up to 20 m for reported GPS accuracy, for any library you haven't logged today (due or not), the card becomes "You're here · Log visit". Logging from it records `source: 'nearby_prompt'`.
 - A light haptic tick on arrival, at most once per library per calendar day (persisted in `nearby_prompts`).
 - One card at a time; if several libraries qualify, the nearest.

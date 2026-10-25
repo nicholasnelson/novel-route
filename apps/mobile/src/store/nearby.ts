@@ -10,7 +10,7 @@ export const MAX_ACCURACY_ALLOWANCE_M = 20;
 /** The approaching card only considers libraries this close. */
 export const NEARBY_SEARCH_RADIUS_M = 2000;
 /** A visited library is "due" again once the last visit is older than this. */
-export const DUE_AFTER_DAYS = 30;
+export const DUE_AFTER_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

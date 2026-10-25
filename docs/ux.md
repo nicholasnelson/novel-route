@@ -50,7 +50,7 @@ Tapping the preview card (or "Details") opens the **library detail** as a floati
 
 The modal alert goes. Instead, a small card at the bottom of the map does two jobs:
 
-- **Approaching** — shows the nearest library that's *due* (never visited, or last visited more than 30 days ago) within 2 km:
+- **Approaching** — shows the nearest library that's *due* (never visited, or last visited more than 7 days ago; 30 days until 2026-10-26) within 2 km:
   `[doors icon]  Flinders St Library   260 m  ↗`
   - The arrow points to the library **relative to where you're facing**, using the compass heading (`Location.watchHeadingAsync`), like Google Maps' heading beam. The location puck also shows the heading beam (`LocationPuck` `puckBearing="heading"`).
     - Battery cost is small next to the screen and GPS that are already on. Subscribe only while the app is in the foreground and the card is visible.
@@ -133,7 +133,7 @@ Mockups: `docs/ux/features-mockup.html`. Three more round buttons under "show my
 - **Due only** hides libraries visited in the last 30 days (only "never" and "over 30 days" remain). The button turns amber and a pill says "Due for a visit only · Show all". Remembered between launches (`kv` `map_due_only`).
 - **Libraries near you** (`overlays/LibraryList.tsx`): the 50 nearest, from you or, without location, the middle of the map; status line, distance and a north-up arrow. **All / Due** is the same setting as the map filter. Tapping a row closes the list and selects the library on the map. The accessible alternative to the markers.
 - **Plan a walk**: the list turns into checkboxes with the 5 nearest due libraries ticked, up to 9 (Google Maps' limit: 9 stops plus a destination). The footer gives a straight-line estimate. **Show route** draws the walk with numbered stops and a bottom card: "Start in Google Maps" opens walking directions through the stops in order (from wherever Maps puts you; our link never contains your position), and the list button reopens the planner.
-  - Route (`map/routing.ts`): online, one Mapbox Optimization API request (walking, round trip) with **only the libraries' positions**, starting from the stop nearest you (picked on the phone); the legs between you and that stop are straight-line estimates. The line follows footpaths. Offline or on any error, the order is the exact shortest straight-line round trip, worked out on the phone (`geo/walk.ts`, Held-Karp), with distance × 1.3 for streets at 4.8 km/h, drawn as dashed straight lines. The card says which ("along footpaths" / "straight-line estimate").
+  - Route (`map/routing.ts`): online, one Mapbox Optimization API request (walking, round trip) with **only the libraries' positions**, starting from the stop nearest you (picked on the phone); the legs between you and that stop are straight-line estimates. *Since 2026-10-26 the walk's start is sent too (your position, once per plan, for a walk from you; covered by the privacy policy), so every leg follows footpaths.* The line follows footpaths. Offline or on any error, the order is the exact shortest straight-line round trip, worked out on the phone (`geo/walk.ts`, Held-Karp), with distance × 1.3 for streets at 4.8 km/h, drawn as dashed straight lines. The card says which ("along footpaths" / "straight-line estimate").
 - **Your visits** (`overlays/YourVisits.tsx`): weekly streak (calendar weeks, Monday to Sunday, with at least one visit; the streak only breaks after a whole week without one), best streak and the last 12 weeks; libraries visited, visits, visits this month; your circles; the 5 latest visits (tap opens the library).
 - **Your circles** (`geo/circles.ts`), with "Show on map" (filled and dashed circles plus a bottom card):
   - **Cleared**: the largest circle centred on a visited library with no unvisited library inside (its edge reaches the nearest one); of those, the one holding the most visited libraries, then the larger. Counting libraries first stops one remote visit winning with a huge empty circle.
@@ -166,6 +166,11 @@ Mockup: `docs/ux/planner-v2-mockup.html`. Replaces the preview card (§2), the m
 - **Pick on map**: the planner shrinks to a bottom card (libraries, estimate, ✕, **List**, **Show route**) and a pill says "Tap libraries to add them to the walk". Tapping a library adds it (a green tick in place of its marker) or takes it out; a dashed line shows the straight-line walk so far. Same selection as the list. No clustering while picking. "The middle of the map" as a start is fixed when chosen, so panning while picking doesn't move it.
 - **Menu**: **Nearby libraries** (was Nearby); **To visit** is gone from the map (the amber closed-door markers already stand out). The list and planner keep **All / To visit** (`kv` `map_due_only`).
 - **Clustering**: markers group within 30 px (was 44) and only up to zoom 11 (was 13).
+
+### 9. Walks from your position, and "To visit" after a week (2026-10-26)
+
+- **Routes from you**: the Mapbox request now starts at the walk's start point (your position, or the fixed middle of the map), so the way to the first library and the way home follow footpaths instead of dashed straight guesses. Your position is sent once per plan; "As I go" re-plans start from the library you're at. The privacy policy (effective 26 October 2026) and the Data safety answers in `docs/release-plan.md` say so.
+- **To visit** (due) is now any library not visited in the last **7 days** (`DUE_AFTER_DAYS`, was 30). The doors still close on the old timetable (wide open under 30 days), so a library visited 10 days ago has open doors but counts as to visit.
 
 ## Later (not in this pass)
 
