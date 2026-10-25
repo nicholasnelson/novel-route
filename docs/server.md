@@ -21,6 +21,7 @@ Status: **deployed** (2026-10-07) at `https://api.novelroute.app` (the `workers.
 - SQLite: Cloudflare D1 if on Workers, plain SQLite file if on Node.
 - Host: **Cloudflare Workers + D1** (free tier), with the Workers rate limiting binding.
 - **Confirmed on deploy:** the Street Library endpoint accepts requests from Cloudflare's network (Adelaide: 3 cells / 37 libraries from one call; Melbourne: 2 cells / 28 libraries). If that ever changes (cells stuck `pending`, `wrangler tail` shows upstream errors), the same Hono app can run on Node with SQLite on a small VM.
+- **Placement pinned to Sydney** (`"placement"` in `wrangler.jsonc`, since 2026-10-26). A Worker normally runs in the data centre nearest the caller, and calls from US data centres (Play pre-launch test devices) got HTTP 403 from Street Library on 22–24 Oct while the cron's calls kept working. Pinned, every Street Library call leaves from Australia, and D1 (primary in Oceania) is close too. The edge cache then lives in the placed location rather than in each caller's data centre.
 
 ## Tiles and coverage circles
 

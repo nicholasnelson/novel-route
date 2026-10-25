@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // Run in Sydney whoever is asking: Street Library answered calls from US data centres (Play
+  // pre-launch testers) with HTTP 403, and the D1 primary is in Oceania anyway.
+  "placement": { "mode": "targeted", "region": "aws:ap-southeast-2" },
   // Served only at api.novelroute.app (Cloudflare creates the DNS record and certificate). Not on
   // workers.dev: the edge cache doesn't work there, so every snapshot request would read all of D1.
   "routes": [{ "pattern": "api.novelroute.app", "custom_domain": true }],
