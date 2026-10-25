@@ -129,7 +129,7 @@ export function NearbyCard({ state, freshness, summary, now, reference, onPress,
           <Ionicons name="checkmark-circle" size={30} color={colors.green} />
           <View style={styles.grow}>
             <Text style={styles.kicker}>All caught up</Text>
-            <Text style={styles.body}>You&apos;ve visited every library near you this month.</Text>
+            <Text style={styles.body}>You&apos;ve visited every library near you this week.</Text>
           </View>
           <CloseButton onPress={onDismiss} label="Dismiss" />
         </View>

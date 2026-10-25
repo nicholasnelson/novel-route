@@ -20,10 +20,10 @@ describe('freshnessFor', () => {
 
   it('buckets by days since the last visit', () => {
     expect(freshnessFor(summary(0), NOW)).toBe('fresh');
-    expect(freshnessFor(summary(29.9), NOW)).toBe('fresh');
-    expect(freshnessFor(summary(30), NOW)).toBe('recent');
-    expect(freshnessFor(summary(181.9), NOW)).toBe('recent');
-    expect(freshnessFor(summary(182), NOW)).toBe('old');
+    expect(freshnessFor(summary(6.9), NOW)).toBe('fresh');
+    expect(freshnessFor(summary(7), NOW)).toBe('recent');
+    expect(freshnessFor(summary(29.9), NOW)).toBe('recent');
+    expect(freshnessFor(summary(30), NOW)).toBe('old');
   });
 });
 

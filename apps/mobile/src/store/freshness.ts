@@ -4,8 +4,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Upper bounds (exclusive) for each freshness bucket, measured from the last visit. */
 export const FRESHNESS_THRESHOLDS = {
-  freshDays: 30,
-  recentDays: 182,
+  freshDays: 7,
+  recentDays: 30,
 };
 
 /** Accent colour per state (matches the marker artwork in scripts/build-markers.mjs). */
@@ -18,9 +18,9 @@ export const FRESHNESS_COLORS: Record<Freshness, string> = {
 
 export const FRESHNESS_LABELS: Record<Freshness, string> = {
   never: 'Not visited yet',
-  fresh: 'Visited in the last month',
-  recent: 'Visited in the last six months',
-  old: 'Not visited for over six months',
+  fresh: 'Visited in the last week',
+  recent: 'Visited in the last month',
+  old: 'Not visited for over a month',
 };
 
 export function freshnessFor(summary: VisitSummary | undefined, now: number): Freshness {

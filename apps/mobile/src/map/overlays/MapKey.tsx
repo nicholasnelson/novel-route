@@ -25,7 +25,7 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
         <Text style={styles.lead}>
-          Doors open when you visit a library, and slowly close over the months as it&apos;s time to go back.
+          Doors open when you visit a library, and close again over the following weeks as it&apos;s time to go back.
         </Text>
         {STATES.map((state) => (
           <View key={state} style={styles.row}>

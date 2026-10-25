@@ -44,9 +44,9 @@ Derived values (computed with a single `GROUP BY library_id` query, cached in me
 | State | Colour |
 |-------|--------|
 | Never visited | Red |
-| Visited < 30 days ago | Bright green |
-| Visited 30 days – 6 months ago | Mid green |
-| Visited > 6 months ago | Pale / desaturated green |
+| Visited < 7 days ago | Bright green |
+| Visited 7–30 days ago | Mid green |
+| Visited > 30 days ago | Pale / desaturated green |
 
 Rendering: each library feature carries a `freshness` property, and the Mapbox `CircleLayer` picks the colour with a `match` expression (see maps.md). Thresholds live in one config object so they're easy to tune. A boolean-only view (red/green) can be offered as a map filter/toggle.
 

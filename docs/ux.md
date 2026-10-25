@@ -94,9 +94,11 @@ The keeper's description was dropped on 2026-10-12. In a random sample of 60, ab
 | State | Doors | Colour |
 |---|---|---|
 | Not visited yet | Closed | Warm amber — an invitation, not an error |
-| Visited < 30 days | Wide open, books visible | Rich green |
-| Visited 30 days – 6 months | Half open | Mid green |
-| Visited > 6 months | Just ajar | Faded sage |
+| Visited < 7 days | Wide open, books visible | Rich green |
+| Visited 7–30 days | Half open | Mid green |
+| Visited > 30 days | Just ajar | Faded sage |
+
+(Until 2026-10-26: < 30 days, 30 days – 6 months, older.)
 
 The metaphor: **a visit opens the doors, and they slowly swing shut over the months** — a gentle "time to go back". The post's foot is the exact location (icon anchored at the bottom).
 
@@ -170,7 +172,7 @@ Mockup: `docs/ux/planner-v2-mockup.html`. Replaces the preview card (§2), the m
 ### 9. Walks from your position, and "To visit" after a week (2026-10-26)
 
 - **Routes from you**: the Mapbox request now starts at the walk's start point (your position, or the fixed middle of the map), so the way to the first library and the way home follow footpaths instead of dashed straight guesses. Your position is sent once per plan; "As I go" re-plans start from the library you're at. The privacy policy (effective 26 October 2026) and the Data safety answers in `docs/release-plan.md` say so.
-- **To visit** (due) is now any library not visited in the last **7 days** (`DUE_AFTER_DAYS`, was 30). The doors still close on the old timetable (wide open under 30 days), so a library visited 10 days ago has open doors but counts as to visit.
+- **To visit** (due) is now any library not visited in the last **7 days** (`DUE_AFTER_DAYS`, was 30). The doors now follow the same week: wide open under 7 days (not yet due), half open to 30 days, then just ajar (`FRESHNESS_THRESHOLDS`, was 30 days and 6 months).
 
 ## Later (not in this pass)
 
