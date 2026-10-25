@@ -80,7 +80,7 @@ Content to cover (must match the Data safety form):
 - No accounts, no ads, no analytics. Crash reports go to Sentry (EU): error, stack trace, app version, device model, OS version; no IP (Sentry setting), location scrubbed on device (`packages/shared/src/scrub.ts`).
 
 Data safety form (Play Console) answers to give:
-- **Location — approximate**: collected, shared with service providers (library data service, Mapbox) for app functionality; not stored by us; not optional for the core feature.
+- **Location — approximate**: collected, sent to service providers (our library data service, Mapbox; not "shared") for app functionality; not stored by us; **optional**: with location permission the app loads the grid square around you, and without it nothing derived from your position is sent (the map still works). The area you pan to is always requested, but that's where you look, not where you are.
 - **Location — precise**: collected (from the first build after 1.2.0, 2026-10-26), only when you plan a walk from your location: sent once to Mapbox (a service provider, so not "shared") to work out the walking route; not stored by us; optional (walks can start from the map or a library); app functionality.
 - **App activity — visit history**: stays on device; not collected.
 - **App info and performance — crash logs and diagnostics**: collected (Sentry) for app functionality/analytics of crashes; not shared for advertising.
