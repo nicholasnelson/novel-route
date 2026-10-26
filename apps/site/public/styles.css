@@ -555,9 +555,75 @@ button.button {
   color: var(--ink);
 }
 
+/* "Seeing …?" help under each step: a question that opens to the fix and a screenshot. */
 .checklist .step-help {
   margin: 14px 0 0;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+}
+
+.step-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.step-help[open] {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--paper-deep);
+}
+
+.step-help[open] summary {
+  margin-bottom: 8px;
+}
+
+.checklist .step-help p,
+.checklist .step-help li {
+  color: var(--ink);
+}
+
+.step-help ul {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+}
+
+.step-help img {
+  display: block;
+  width: min(240px, 100%);
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--shot-border);
+}
+
+/* Near the top of the testers page: where people get stuck. */
+.heads-up {
+  margin: 20px 0 24px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--notice);
+  border: 1px solid var(--notice-line);
+  line-height: 1.45;
+}
+
+.heads-up strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.heads-up p {
+  margin: 0 0 8px;
+}
+
+.doc .heads-up ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.doc .heads-up li {
+  margin-bottom: 4px;
 }
 
 .restart {

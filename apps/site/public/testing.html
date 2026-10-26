@@ -48,11 +48,36 @@
       Android phone and the Google account you use for the Play Store. Two steps, about two minutes:
     </p>
 
+    <div class="heads-up" role="note">
+      <strong>Please take it slowly</strong>
+      <p>
+        Google's sign-up has a couple of confusing screens, and a few people have got stuck. Read each
+        step before tapping, and if you see one of these, there's a quick fix:
+      </p>
+      <ul>
+        <li><a href="#help-permission">&ldquo;You don't have permission to access this content&rdquo;</a> when joining the group (step 1)</li>
+        <li><a href="#help-not-found">&ldquo;Item not found&rdquo;</a> on Google Play (step 2)</li>
+      </ul>
+    </div>
+
     <ol class="checklist" id="checklist">
       <li id="step-1">
         <h2>Join the testers group</h2>
         <p>This is what gives your Google account access to the test. Without it, step 2 won't work.</p>
         <a class="button" id="join" href="https://groups.google.com/g/novel-route-testers" target="_blank" rel="noopener">Join the group</a>
+        <details class="step-help" id="help-permission">
+          <summary>Seeing &ldquo;You don't have permission to access this content&rdquo;?</summary>
+          <p>
+            That page means you're not signed in to Google there. It often happens when the link was opened
+            from Facebook or Messenger. Either:
+          </p>
+          <ul>
+            <li>tap <strong>Sign in</strong> at the top right of that page and use the Google account your Play Store uses, then tap <em>Join group</em>; or</li>
+            <li>open this page in your phone's normal browser (such as Chrome) and start again.</li>
+          </ul>
+          <img src="images/help-no-permission.webp" width="408" height="430" loading="lazy"
+               alt="The Google Groups page for Novel Route Testers saying You don't have permission to access this content, with a blue Sign in button at the top right">
+        </details>
         <div class="step-note" id="confirm" hidden>
           <p>
             <strong>Did it work?</strong> Once you've joined, the group page no longer shows a
@@ -75,10 +100,23 @@
           tap <em>download it on Google Play</em> to install Novel Route.
         </p>
         <a class="button" href="https://play.google.com/apps/testing/app.novelroute" target="_blank" rel="noopener">Open the testing page</a>
-        <p class="step-help">
-          <strong>Seeing &ldquo;Item not found&rdquo;?</strong> Check you joined the group with the same
-          Google account as your Play Store. If you did, Google Play hasn't caught up yet: try again a bit later.
-        </p>
+        <details class="step-help" id="help-not-found">
+          <summary>Seeing &ldquo;Item not found&rdquo;?</summary>
+          <p>Google Play doesn't know you're a tester yet. That's one of two things:</p>
+          <ul>
+            <li>
+              <strong>You haven't joined the group yet</strong>, or joined with a different Google account
+              from your Play Store. Go back to step 1. (To check which account your Play Store uses, tap your
+              picture at the top right of the Play Store app.)
+            </li>
+            <li>
+              <strong>You joined with the right account just now.</strong> Google can take up to an hour to
+              catch up. Have a cuppa and try again later.
+            </li>
+          </ul>
+          <img src="images/help-item-not-found.webp" width="464" height="492" loading="lazy"
+               alt="Google Play showing a sleepy satellite, the words Item not found, and a Try again button">
+        </details>
       </li>
     </ol>
     <p class="restart" id="restart" hidden>Want to go through the steps again? <button type="button" class="link-button" id="start-again">Start again</button></p>
@@ -113,10 +151,6 @@
         phone model, so a report can be matched to what you saw. It never includes your location.
       </li>
       <li>Or email <a href="mailto:hello@novelroute.app?subject=Testing%20Novel%20Route">hello@novelroute.app</a>.</li>
-      <li>
-        About a week in, a five-question survey will be posted in the
-        <a href="https://groups.google.com/g/novel-route-testers">testers group</a>. If you get the group's emails, it'll arrive that way too.
-      </li>
     </ul>
 
     <h2>Leaving</h2>

@@ -4,13 +4,17 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
 
-  // --- Opened inside Facebook, Instagram or Messenger: their browsers aren't signed in to Google.
+  // --- Opened inside another app's browser (Facebook, Messenger, Instagram and other Android apps'
+  // built-in browsers, which show up as "wv"): it isn't signed in to Google, so joining shows
+  // "You don't have permission". Gmail and Chrome custom tabs share Chrome's sign-in and aren't caught.
   var ua = navigator.userAgent || '';
-  var inApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Orca-Android/i.test(ua);
+  var named = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Orca-Android/i.test(ua);
+  var inApp = named || (/Android/i.test(ua) && /; wv\)/.test(ua));
   if (inApp) {
-    var name = /Instagram/i.test(ua) ? 'Instagram' : /Messenger|Orca/i.test(ua) ? 'Messenger' : 'Facebook';
+    var name = /Instagram/i.test(ua) ? "Instagram's" : /Messenger|Orca/i.test(ua) ? "Messenger's"
+      : named ? "Facebook's" : "another app's";
     $('inapp-text').textContent =
-      "You're in " + name + "'s own browser, which isn't signed in to your Google account, so joining won't work here.";
+      "You're in " + name + " built-in browser, which isn't signed in to your Google account, so joining won't work here.";
     if (/Android/i.test(ua)) {
       // Hands the page to Chrome; the menu instruction stays as a fallback.
       $('inapp-open').hidden = false;
@@ -45,6 +49,18 @@
     write(''); render('');
     $('step-1').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+
+  // The "Seeing …?" help: a link to one (from the notice at the top) opens it.
+  function openHelp() {
+    var help = location.hash && document.getElementById(location.hash.slice(1));
+    if (help && help.tagName === 'DETAILS') help.open = true;
+  }
+  window.addEventListener('hashchange', openHelp);
+  // Tapping the same link twice doesn't change the hash, so open it on the tap too.
+  document.querySelectorAll('a[href^="#help-"]').forEach(function (link) {
+    link.addEventListener('click', function () { document.getElementById(link.hash.slice(1)).open = true; });
+  });
+  openHelp();
 
   var state = read();
   render(state);
