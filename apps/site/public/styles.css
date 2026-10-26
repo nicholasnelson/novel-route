@@ -561,22 +561,52 @@ button.button {
   font-size: 0.95rem;
 }
 
+/* A full-width box that's easy to tap, with a chevron that turns when it opens. */
+.step-help {
+  border-radius: 12px;
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+}
+
 .step-help summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 14px;
   cursor: pointer;
   font-weight: 600;
-  color: var(--link);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--ink);
 }
 
-.step-help[open] {
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--paper-deep);
+.step-help summary::-webkit-details-marker {
+  display: none;
 }
 
-.step-help[open] summary {
-  margin-bottom: 8px;
+.step-help summary::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 0.15s;
+}
+
+.step-help[open] summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.step-help > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.step-help > :last-child {
+  margin-bottom: 14px;
 }
 
 .checklist .step-help p,
@@ -585,8 +615,8 @@ button.button {
 }
 
 .step-help ul {
-  margin: 0 0 12px;
-  padding-left: 1.2em;
+  margin: 0 14px 12px;
+  padding-left: 1.4em;
 }
 
 .step-help img {
@@ -595,6 +625,54 @@ button.button {
   height: auto;
   border-radius: 10px;
   border: 1px solid var(--shot-border);
+}
+
+/* Step 2: what each Google Play screen looks like, with what to tap. */
+.checklist .play-steps {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Pictures in one row (bottoms lined up), what to tap in the next, so the captions start level. */
+  grid-template-rows: auto auto;
+  gap: 8px 14px;
+  counter-reset: play;
+}
+
+.doc .play-steps li {
+  counter-increment: play;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+}
+
+
+
+/* Same-size frames: each picture fits inside, on white like Google Play's pages. */
+.play-steps img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 7 / 5;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--shot-border);
+}
+
+.play-steps span::before {
+  content: counter(play) ". ";
+  font-weight: 700;
+  color: var(--green);
+}
+
+.checklist .stuck {
+  margin: 14px 0 0;
+  font-size: 0.9rem;
 }
 
 /* Near the top of the testers page: where people get stuck. */
@@ -736,6 +814,32 @@ button.button {
 @media (max-width: 480px) {
   body {
     font-size: 17px;
+  }
+
+  /* Phones: the Google Play pictures one under another, each beside what to tap. */
+  .checklist .play-steps {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    gap: 16px;
+  }
+
+  .doc .play-steps li {
+    grid-row: auto;
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+
+
+  .doc .checklist > li {
+    padding-left: 18px;
+  }
+
+  .checklist > li::before {
+    position: static;
+    margin-bottom: 8px;
   }
 
   .step-list li {
