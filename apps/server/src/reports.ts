@@ -40,6 +40,33 @@ export async function addReport(db: D1Database, libraryId: string, kind: ReportK
     .run();
 }
 
+/** Reports a day before an alert goes to Sentry (`REPORT_ALERT_PER_DAY` overrides it). */
+export const DEFAULT_REPORT_ALERT_PER_DAY = 500;
+const DAY_KEY = 'reports_day:';
+
+/**
+ * Count today's reports (UTC) in `meta`, one row a day kept for a week. Returns the new count, so
+ * the caller can alert when it reaches the threshold: a spike is the sign of fake reports.
+ */
+export async function countReportToday(db: D1Database, now: number): Promise<number> {
+  const today = isoDay(now);
+  const row = await db
+    .prepare(
+      `INSERT INTO meta (key, value) VALUES (?, '1')
+       ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+       RETURNING value`
+    )
+    .bind(DAY_KEY + today)
+    .first<{ value: string | number }>();
+  const count = Number(row?.value ?? 1);
+  if (count === 1) {
+    await db.prepare('DELETE FROM meta WHERE key LIKE ? AND key < ?')
+      .bind(`${DAY_KEY}%`, DAY_KEY + isoDay(now - 7 * DAY_MS))
+      .run();
+  }
+  return count;
+}
+
 /** The latest seen and missing dates of every library reported in the last SIGHTINGS_MONTHS. */
 export async function recentSightings(db: D1Database, now: number): Promise<SightingRow[]> {
   const from = new Date(now);

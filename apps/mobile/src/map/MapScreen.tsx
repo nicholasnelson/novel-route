@@ -101,6 +101,12 @@ const FOLLOW_BOTTOM_PADDING = 150;
 const TAP_HINT_MS = 10000;
 /** Logging a visit from further away than this asks for confirmation. */
 const FAR_VISIT_CONFIRM_M = 200;
+/**
+ * Shared-visit reports only come from someone at the library: a visit marked now within this
+ * distance, or "Couldn't find it?" from this close. Past visits and visits marked from afar stay
+ * on the phone (fewer mistaken or made-up reports).
+ */
+const REPORT_NEAR_M = 200;
 const HOUR_MS = 60 * 60 * 1000;
 /** Loaded/not-loaded status is only worked out while the view spans at most this many tiles. */
 const MAX_VIEW_TILES = 150;
@@ -542,7 +548,11 @@ export default function MapScreen() {
     try {
       const visit = await logVisit(db, libraryId, source, visitedAt);
       if (!visit) return;
-      queueReport(db, 'seen', visit.id, libraryId, visit.visitedAt).catch(() => {});
+      const library = libraries.find((l) => l.id === libraryId);
+      const distance = library ? distanceTo(library) : null;
+      if (visitedAt === undefined && distance !== null && distance <= REPORT_NEAR_M) {
+        queueReport(db, 'seen', visit.id, libraryId, visit.visitedAt).catch(() => {});
+      }
       cancelMissingReports(db, libraryId).catch(() => {});
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setToast(visit);
@@ -1288,8 +1298,9 @@ export default function MapScreen() {
         }}
         onUndoDelete={async (visit) => {
           if (!db) return;
+          // Its report (if it had one) was cancelled with the deletion; where it was marked isn't
+          // known any more, so it isn't queued again.
           await restoreVisit(db, visit);
-          await queueReport(db, 'seen', visit.id, visit.libraryId, visit.visitedAt);
           await reloadVisitState(db, selectedId);
         }}
         onClearHistory={async () => {
@@ -1309,7 +1320,11 @@ export default function MapScreen() {
           selectedSighting.myMissing,
           now
         )}
-        canReportMissing={sharing && !selectedSighting?.myMissing.includes(localDateKey(now))}
+        canReportMissing={
+          sharing &&
+          !!detailLibrary && (distanceTo(detailLibrary) ?? Infinity) <= REPORT_NEAR_M &&
+          !selectedSighting?.myMissing.includes(localDateKey(now))
+        }
         missingJustReported={!!missingJust && missingJust.libraryId === selectedId}
         onReportMissing={() => detailLibrary && reportMissing(detailLibrary)}
         onUndoReportMissing={undoReportMissing}

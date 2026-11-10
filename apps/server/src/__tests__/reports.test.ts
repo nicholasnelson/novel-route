@@ -1,6 +1,6 @@
 import { SightingsResponse } from '@novel-route/shared';
 import { app } from '../index';
-import { isReportDate } from '../reports';
+import { countReportToday, isReportDate } from '../reports';
 import { markRemoved, upsertLibraries } from '../store';
 import { createTestD1 } from './helpers';
 
@@ -60,6 +60,26 @@ describe('reports', () => {
   it('has its own rate limit', async () => {
     const env = { ...(await setup()), REPORT_LIMITER: { limit: async () => ({ success: false }) } };
     expect((await report(env, { libraryId: 'sl:1', kind: 'seen', date: today() })).status).toBe(429);
+  });
+
+  it('counts reports per day and keeps a week of counts', async () => {
+    const { DB } = await setup();
+    const day = Date.UTC(2026, 10, 10, 3);
+    expect(await countReportToday(DB, day)).toBe(1);
+    expect(await countReportToday(DB, day + 1000)).toBe(2);
+    expect(await countReportToday(DB, day + 9 * DAY)).toBe(1);
+    const { results } = await DB.prepare("SELECT key FROM meta WHERE key LIKE 'reports_day:%'").all<{ key: string }>();
+    expect(results.map((r) => r.key)).toEqual(['reports_day:2026-11-19']);
+  });
+
+  it('alerts once when a day reaches the threshold', async () => {
+    const env = { ...(await setup()), REPORT_ALERT_PER_DAY: '2' };
+    const waits: Promise<unknown>[] = [];
+    const counting = { ...ctx, waitUntil: (p: Promise<unknown>) => waits.push(p) } as unknown as ExecutionContext;
+    for (let i = 0; i < 3; i++) {
+      await app.request('/v1/reports', { method: 'POST', body: JSON.stringify({ libraryId: 'sl:1', kind: 'seen', date: today() }) }, env, counting);
+    }
+    expect(waits).toHaveLength(1);
   });
 
   it('accepts local dates from a week ago to tomorrow', () => {

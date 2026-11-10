@@ -46,7 +46,7 @@ type Props = {
   onMapKey(): void;
   /** Someone else's latest sighting or "couldn't find it" (shared visits), if it's news. */
   others: { kind: 'seen' | 'missing'; text: string } | null;
-  /** Sharing is on and you haven't already reported it today, so "Couldn't find it?" is offered. */
+  /** Sharing is on, you're near it and haven't already reported it today: "Couldn't find it?" is offered. */
   canReportMissing: boolean;
   /** "Couldn't find it" was just reported here (offered for undo for a few seconds). */
   missingJustReported: boolean;

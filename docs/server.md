@@ -158,6 +158,14 @@ Single library (for deep links / detail refresh). IDs other than `sl:<number>` a
 - `GET /v1/sightings`: `[id, lastSeen, lastMissing]` for every library reported in the last 12 months (`SightingsResponse`), edge-cached for an hour. The app downloads it at most daily.
 - The monthly counts are kept for "popular libraries" later; nothing reads them yet. They're rough: one person visiting often counts each time.
 
+#### Fake reports
+
+Reports aren't authenticated: anyone could POST one. The damage is limited to a wrong "last seen" or "couldn't find it" line, and the app only sends reports for visits marked within 200 m (and "Couldn't find it?" only that close), so honest mistakes are rare. Watching for abuse:
+
+- Each report adds to a per-day count in `meta` (`reports_day:YYYY-MM-DD`, a week kept). When a day reaches `REPORT_ALERT_PER_DAY` (default 500) the Worker sends one Sentry error, "Unusual number of shared-visit reports today".
+- To clean up, reset the affected rows with `npx wrangler d1 execute novel-route --remote --command "…"`, e.g. one library's "couldn't find it" this month: `UPDATE reports SET missing_count = 0, last_missing = NULL WHERE library_id = 'sl:123' AND month = '2026-11'`, or a whole month's reports: `DELETE FROM reports WHERE month = '2026-11'`. The edge cache serves the old sightings for up to an hour, and phones keep theirs until their next daily check.
+- If it keeps happening: Play Integrity (Android) / App Attest (iOS) tokens with each report would show it came from the real app on a real device (Future, below).
+
 ### `GET /v1/config`
 
 Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported app version, a message banner. Lets us switch base style or show a notice without an app release.

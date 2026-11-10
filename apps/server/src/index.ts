@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { ConfigResponse, isValidTile, ReportRequest, SightingsResponse } from '@novel-route/shared';
 import { getHealth, getTileData, toApiLibrary, UpstreamError } from './cache';
 import { checkIn, initMonitoring, reportError } from './monitoring';
-import { addReport, isReportDate, recentSightings } from './reports';
+import { addReport, countReportToday, DEFAULT_REPORT_ALERT_PER_DAY, isReportDate, recentSightings } from './reports';
 import { runSeeds } from './seeds';
 import { getLibrary, snapshotParts } from './store';
 
@@ -12,6 +12,8 @@ export type Env = {
   RATE_LIMITER?: RateLimit;
   /** A tighter limit for POST /v1/reports, each of which is a D1 write. */
   REPORT_LIMITER?: RateLimit;
+  /** Reports in a day (UTC) that send an alert to Sentry; default DEFAULT_REPORT_ALERT_PER_DAY. */
+  REPORT_ALERT_PER_DAY?: string;
   MAP_STYLE_URL?: string;
   MIN_APP_VERSION?: string;
   MESSAGE?: string;
@@ -146,6 +148,11 @@ app.post('/v1/reports', async (c) => {
   const library = await getLibrary(c.env.DB, libraryId);
   if (!library || library.removed_at !== null) return c.json({ error: 'Not found' }, 404);
   await addReport(c.env.DB, libraryId, kind, date);
+  // Far more reports than usual in a day suggests fake ones (docs/server.md "Fake reports").
+  const threshold = Number(c.env.REPORT_ALERT_PER_DAY) || DEFAULT_REPORT_ALERT_PER_DAY;
+  if ((await countReportToday(c.env.DB, Date.now())) === threshold) {
+    c.executionCtx.waitUntil(reportError(new Error(`Unusual number of shared-visit reports today: ${threshold}`), { where: 'reports' }));
+  }
   return c.body(null, 204);
 });
 
