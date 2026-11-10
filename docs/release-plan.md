@@ -167,7 +167,7 @@ Plan:
 
 ### Phase 4 — Production
 - [ ] Check Mapbox usage against the free tier before launch
-- [ ] `eas submit` service account configured (`eas.json` → `submit.production`)
+- [x] `eas submit` service account configured (2026-11-10): Google Cloud project `novel-route`, service account `eas-submit` with Play Console access to Novel Route only (release to testing tracks, nothing for production); its key is stored only in EAS credentials. `submit.production` sends to the **internal** track as a **draft**, so nothing reaches testers until it's rolled out in Play Console. From WSL: `eas submit -p android --profile production --path ~/builds/<file>.aab`.
 - [ ] Production release
 
 ---
