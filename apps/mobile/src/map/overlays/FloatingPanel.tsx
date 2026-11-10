@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius, shadow, makeStyles, usePalette } from '../../ui/theme';
+import { radius, shadow, makeStyles } from '../../ui/theme';
 
 /** Margin of map left visible around the panel, so it reads as floating over the map. */
 const MARGIN = 16;

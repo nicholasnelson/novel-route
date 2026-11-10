@@ -27,7 +27,7 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
         <Text style={styles.lead}>
-          Doors open when you visit a library, and close again over the following weeks as it&apos;s time to go back.
+          Doors open when you visit, then close over the following weeks as it&apos;s time to go back.
         </Text>
         {STATES.map((state) => (
           <View key={state} style={styles.row}>
@@ -44,10 +44,10 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
         </View>
 
         <Text style={styles.heading}>Using Novel Route</Text>
-        <Text style={styles.paragraph}>• Tap a library to see what&apos;s there, get directions or mark it as visited.</Text>
+        <Text style={styles.paragraph}>• Tap a library for directions or to mark a visit.</Text>
         <Text style={styles.paragraph}>
-          • The card at the bottom points you to the nearest library to visit. A solid green arrow
-          points the way you&apos;re facing; a pale one points relative to the map (north is up).
+          • The bottom card points to the nearest library to visit. A solid arrow follows the way you&apos;re
+          facing; a pale one follows the map (north up).
         </Text>
         <Text style={styles.paragraph}>• When you&apos;re standing at one, mark your visit in one tap.</Text>
         <Text style={styles.paragraph}>
@@ -70,8 +70,8 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
 
         <Text style={styles.heading}>About</Text>
         <Text style={styles.paragraph}>
-          Library locations come from Street Library Australia. Novel Route is an independent project and isn&apos;t
-          affiliated with Street Library Australia. Look after a library that isn&apos;t on the map?{' '}
+          Library locations come from Street Library Australia; Novel Route isn&apos;t affiliated with them. Look
+          after a library that isn&apos;t on the map?{' '}
           <Text style={styles.link} onPress={() => Linking.openURL(REGISTER_LIBRARY_URL).catch(() => {})}>Register it with them</Text>.
         </Text>
         <Text style={[styles.paragraph, styles.link]} onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>

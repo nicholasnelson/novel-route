@@ -84,7 +84,7 @@ import {
   watchHeading,
   watchPosition,
 } from '../location/location';
-import { makeStyles, usePalette } from '../ui/theme';
+import { makeStyles } from '../ui/theme';
 
 /** Starting view until we know where the user is: the whole of Australia. */
 const AUSTRALIA: LatLng = { latitude: -27.5, longitude: 134 };
@@ -1103,7 +1103,7 @@ export default function MapScreen() {
     bottomCard = (
       <HintCard
         title="Find libraries near you"
-        body="Novel Route uses your location to show nearby street libraries and to let you mark a visit when you arrive. It stays on your phone."
+        body="To show libraries near you and let you mark a visit when you arrive. Your location stays on your phone."
         actions={[
           { label: 'Not now', onPress: () => seeHint('location_explained') },
           { label: 'Allow', primary: true, onPress: () => { seeHint('location_explained'); askForLocation(); } },
@@ -1129,8 +1129,8 @@ export default function MapScreen() {
       <HintCard
         body={
           <Text style={styles.hintText}>
-            <Text style={styles.hintStrong}>Tap a library</Text> to see what&apos;s there, get directions or mark it
-            as visited. Closed doors mean you haven&apos;t been yet.
+            <Text style={styles.hintStrong}>Tap a library</Text> for directions or to mark a visit. Closed doors mean
+            you haven&apos;t been yet.
           </Text>
         }
         onDismiss={() => seeHint('tap_library')}
@@ -1140,7 +1140,7 @@ export default function MapScreen() {
     bottomCard = (
       <HintCard
         title="The doors are open"
-        body="Marking a visit opens a library's doors. They stay wide open for a week, half open for a month, then just ajar: a reminder there might be new books to find."
+        body="Marking a visit opens a library's doors: wide open for a week, half open for a month, then just ajar."
         onDismiss={() => seeHint('doors')}
       />
     );

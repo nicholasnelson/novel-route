@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, GestureResponderEvent, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { shadow, makeStyles, usePalette } from '../../ui/theme';
+import { shadow, makeStyles } from '../../ui/theme';
 
 const MAX_WIDTH = 560;
 /** Space left above the drawer when it's pulled all the way up. */

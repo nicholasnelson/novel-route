@@ -274,12 +274,9 @@ function ListContent({
         </Pressable>
       </View>
 
-      {!planning && start.kind === 'map' && (
+      {!planning && start.kind === 'map' && you && (
         <Text style={styles.note}>
-          {S.list.aroundMapNote}{' '}
-          {you && (
-            <Text style={styles.link} onPress={() => onStartChange({ kind: 'you' })} accessibilityRole="link">{S.list.nearMe}</Text>
-          )}
+          <Text style={styles.link} onPress={() => onStartChange({ kind: 'you' })} accessibilityRole="link">{S.list.nearMe}</Text>
         </Text>
       )}
 
