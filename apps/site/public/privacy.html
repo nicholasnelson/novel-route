@@ -44,7 +44,7 @@
     <ul>
       <li>There are no accounts, ads or analytics, and we don't sell your data.</li>
       <li>Your visit history stays on your phone. So does your exact position, except when you plan a walk from where you are: then it's sent once to the map provider to work out the walking route.</li>
-      <li>When you mark a visit, or that you couldn't find a library, the app later tells our server which library and which day, with no name, account or ID, so other visitors can see when it was last seen. You can turn this off.</li>
+      <li>When you mark a visit, or that a library wasn't there, the app later tells our server which library and which day, with no name, account or ID, so other readers can see when it was last seen. You can turn this off.</li>
       <li>To show libraries and the map, the app sends the <em>approximate area</em> you're looking at to the library data service and the map provider. It doesn't send your exact position.</li>
       <li>If the app crashes, a crash report (with no location and no IP address) is sent to our error-tracking service so we can fix it.</li>
     </ul>
@@ -81,12 +81,12 @@
 
     <h3>Shared visits</h3>
     <p>
-      So that everyone can see when a library was last seen (or that someone couldn't find it),
-      the app sends our server a short report when you mark a visit or tap “Couldn't find it?”:
+      So that everyone can see when a library was last seen (or that it was reported not there),
+      the app sends our server a short report when you mark a visit or tap “Not there?”:
       the library and the date, with no time, no name, no account and no device or user ID. Reports wait at
       least an hour and are sent one at a time, a few minutes apart, so they don't show what time
       you were there or arrive together. Only visits you mark at the library (within about
-      200&nbsp;metres, using your location on the phone) are reported, and “Couldn't find it?” is
+      200&nbsp;metres, using your location on the phone) are reported, and “Not there?” is
       only offered there; past visits you add later aren't reported. Deleting a visit before its
       report is sent cancels it.
     </p>
@@ -94,7 +94,7 @@
       Our server doesn't store the reports or your IP address (Cloudflare's request logs, deleted
       within 7 days, include the IP address of a request but not what a report says). It only
       keeps, for each library and
-      month, how many times it was seen or couldn't be found and the latest date of each, and
+      month, how many times it was seen or reported not there and the latest date of each, and
       shares the latest dates with everyone using the app. The app explains this before the first
       report is sent. You can turn it off at any time with “Share what I find” in My visits, which
       also drops anything not yet sent; reports already sent can't be removed, because nothing

@@ -77,9 +77,9 @@ describe('report queue', () => {
 
 describe('describeSighting', () => {
   it('shows whichever is newer: seen or not found', () => {
-    expect(describeSighting({ seen: date(21), missing: null }, null, [], NOW)).toEqual({ kind: 'seen', text: 'Last seen by someone 21 days ago' });
-    expect(describeSighting({ seen: date(41), missing: date(1) }, null, [], NOW)).toEqual({ kind: 'missing', text: "Someone couldn't find it yesterday" });
-    expect(describeSighting({ seen: date(0), missing: date(1) }, null, [], NOW)?.text).toBe('Last seen by someone today');
+    expect(describeSighting({ seen: date(21), missing: null }, null, [], NOW)).toEqual({ kind: 'seen', text: 'Last seen by a reader 21 days ago' });
+    expect(describeSighting({ seen: date(41), missing: date(1) }, null, [], NOW)).toEqual({ kind: 'missing', text: 'Reported not there yesterday' });
+    expect(describeSighting({ seen: date(0), missing: date(1) }, null, [], NOW)?.text).toBe('Last seen by a reader today');
   });
 
   it('only shows news since your own last visit, and never your own report', () => {
@@ -95,7 +95,7 @@ describe('describeSighting', () => {
   });
 
   it('ignores a missing report within 30 days of someone seeing it', () => {
-    expect(describeSighting({ seen: date(20), missing: date(2) }, null, [], NOW)?.text).toBe('Last seen by someone 20 days ago');
+    expect(describeSighting({ seen: date(20), missing: date(2) }, null, [], NOW)?.text).toBe('Last seen by a reader 20 days ago');
     expect(describeSighting({ seen: date(40), missing: date(2) }, null, [], NOW)?.kind).toBe('missing');
   });
 });

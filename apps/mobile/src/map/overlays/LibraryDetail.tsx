@@ -257,7 +257,7 @@ function DetailContent({
               <>
                 <Text style={styles.linkDot}>·</Text>
                 <Pressable onPress={onReportMissing} accessibilityRole="button" hitSlop={8} style={styles.rowLink}>
-                  <Text style={styles.noteLink}>{S.sharing.couldntFind}</Text>
+                  <Text style={styles.noteLink}>{S.sharing.notThere}</Text>
                 </Pressable>
               </>
             )}

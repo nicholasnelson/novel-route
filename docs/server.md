@@ -160,10 +160,10 @@ Single library (for deep links / detail refresh). IDs other than `sl:<number>` a
 
 #### Fake reports
 
-Reports aren't authenticated: anyone could POST one. The damage is limited to a wrong "last seen" or "couldn't find it" line, and the app only sends reports for visits marked within 200 m (and "Couldn't find it?" only that close), so honest mistakes are rare. Watching for abuse:
+Reports aren't authenticated: anyone could POST one. The damage is limited to a wrong "last seen" or "reported not there" line, and the app only sends reports for visits marked within 200 m (and "Not there?" only that close), so honest mistakes are rare. Watching for abuse:
 
 - Each report adds to a per-day count in `meta` (`reports_day:YYYY-MM-DD`, a week kept). When a day reaches `REPORT_ALERT_PER_DAY` (default 500) the Worker sends one Sentry error, "Unusual number of shared-visit reports today".
-- To clean up, reset the affected rows with `npx wrangler d1 execute novel-route --remote --command "…"`, e.g. one library's "couldn't find it" this month: `UPDATE reports SET missing_count = 0, last_missing = NULL WHERE library_id = 'sl:123' AND month = '2026-11'`, or a whole month's reports: `DELETE FROM reports WHERE month = '2026-11'`. The edge cache serves the old sightings for up to an hour, and phones keep theirs until their next daily check.
+- To clean up, reset the affected rows with `npx wrangler d1 execute novel-route --remote --command "…"`, e.g. one library's "not there" reports this month: `UPDATE reports SET missing_count = 0, last_missing = NULL WHERE library_id = 'sl:123' AND month = '2026-11'`, or a whole month's reports: `DELETE FROM reports WHERE month = '2026-11'`. The edge cache serves the old sightings for up to an hour, and phones keep theirs until their next daily check.
 - If it keeps happening: Play Integrity (Android) / App Attest (iOS) tokens with each report would show it came from the real app on a real device (Future, below).
 
 ### `GET /v1/config`

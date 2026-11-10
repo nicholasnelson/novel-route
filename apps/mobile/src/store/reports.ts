@@ -118,8 +118,8 @@ function dateToTime(date: string): number {
 }
 
 /**
- * The drawer's line about other people: "Last seen by someone 21 days ago" or "Someone couldn't
- * find it yesterday", whichever is newer. Only news since your own last visit (so it's never just
+ * The drawer's line about other readers: "Last seen by a reader 21 days ago" or "Reported not there
+ * yesterday", whichever is newer. Only news since your own last visit (so it's never just
  * your visit), never your own "couldn't find it", nothing over a year old (60 days for "couldn't
  * find it"), and a "couldn't find it" within 30 days of a sighting is ignored.
  */
@@ -143,8 +143,8 @@ export function describeSighting(
       ? sighting.missing
       : null;
   if (missing && (!seen || missing > seen)) {
-    return { kind: 'missing', text: `Someone couldn't find it ${relativeDay(dateToTime(missing), now)}` };
+    return { kind: 'missing', text: `Reported not there ${relativeDay(dateToTime(missing), now)}` };
   }
-  if (seen) return { kind: 'seen', text: `Last seen by someone ${relativeDay(dateToTime(seen), now)}` };
+  if (seen) return { kind: 'seen', text: `Last seen by a reader ${relativeDay(dateToTime(seen), now)}` };
   return null;
 }
