@@ -64,6 +64,8 @@ const MIGRATIONS: string[] = [
     send_after INTEGER NOT NULL,
     sent       INTEGER NOT NULL DEFAULT 0
   );
+  -- One report per library, kind and day: a second visit that day, or a deletion undone, adds nothing.
+  CREATE UNIQUE INDEX outbox_report ON outbox (library_id, kind, date);
   CREATE TABLE sightings (
     library_id TEXT PRIMARY KEY,
     seen       TEXT,

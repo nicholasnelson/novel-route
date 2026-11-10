@@ -178,19 +178,19 @@ Mockup: `docs/ux/planner-v2-mockup.html`. Replaces the preview card (§2), the m
 
 Mockup: `docs/ux/feedback-nov-mockup.html`, from closed-test feedback (`docs/testing-log.md`).
 
-- **Door timings**: the hint after your first visit gives the real timings (wide open for a week, half open for a month, then ajar; it said "over the months"). The library drawer has a line under "Last visited" counting down to the next change, "Doors wide open for 4 more days" / "until tomorrow" / "until later today", "Doors half open for 12 more days", "Doors just ajar: time for another visit" (`freshness.ts` `describeDoors`, calendar days). Tapping it opens the map key.
+- **Door timings**: the hint after your first visit gives the real timings (wide open for a week, half open for a month, then ajar; it said "over the months"). The library drawer has a line under "Last visited" counting down while it's not yet due, "Doors wide open for 4 more days" / "until tomorrow" / "until later today", then "Doors half open: ready for another visit" (it's "To visit" by then), "Doors just ajar: time for another visit" (`freshness.ts` `describeDoors`, calendar days). Tapping it opens the map key.
 - **Finish on the pick card**: once a library is picked on the map, the card has the same **Finish: Where I started / Last library** choice as the list (shared draft).
-- **Clusters**: a white badge whose ring is green for the share of libraries visited, in eighths rounded down, and amber for the rest (images `cluster-0…8` from `npm run build:markers`). Grouping only where markers would overlap: radius 20 dp (was 30), up to zoom 15 (was 11).
+- **Clusters**: a white badge whose ring is green for the share of libraries visited, in eighths rounded down, and amber for the rest (images `cluster-0…8` from `npm run build:markers`). Grouping only where markers would overlap: radius 24 dp (was 30), up to zoom 15 (was 11); badges are 32 to 40 dp so they don't pile up at that distance (review, 2026-11-10).
 - **Map view kept**: when the app goes to the background it saves where the map was looking (`kv` `map_camera`); if Android closed it and you come back within an hour, the map opens there instead of jumping to you.
 
 ### 11. Shared visits and "Couldn't find it?" (2026-11-10)
 
 Mockup: `docs/ux/shared-visits-mockup.html`. On by default.
 
-- Marking a visit (today or up to 7 days back) queues an anonymous report: library and date, no time or ID (`store/reports.ts`, `outbox` table). It's sent at least an hour later (plus up to an hour at random) while the app is open, one request each (`data/reports.ts`), and never before the sharing card has been seen. Deleting or undoing the visit before then cancels it; sent reports can't be taken back.
-- **Couldn't find it?** under "Add a past visit" (not when you visited today, not with sharing off) queues a `missing` report; the drawer then shows "Thanks: we'll let others know" with Undo.
-- **Sharing card** (hint `sharing`), after the doors hint or a first "Couldn't find it": what's sent and how to turn it off, with **Don't share** / **OK**. Existing users see it on their next open.
-- **Drawer line**: "Last seen by someone 21 days ago" or, in amber, "Someone couldn't find it yesterday", whichever is newer; only if it's after your own last visit, never your own report, and within a year. Last-seen dates come from `GET /v1/sightings` at most daily (`sightings` table).
+- Marking a visit (today or up to 7 days back) queues an anonymous report: library and date, no time or ID (`store/reports.ts`, `outbox` table). It's sent at least an hour later (plus up to an hour at random) while the app is open, one at a time, 2 to 5 minutes apart (`data/reports.ts`), and never before the sharing card has been seen. One report per library, kind and day (a unique index): a second visit that day adds nothing. Deleting or undoing the visit before then cancels it; sent reports can't be taken back.
+- **Couldn't find it?** on the same row as "Add a past visit" (not when you visited today, already reported it today, or have sharing off). It always asks first ("Couldn't find this library?"), then queues a `missing` report; "Thanks: we'll let others know" with Undo shows for a few seconds. Marking a visit there withdraws an unsent one.
+- **Sharing card** (hint `sharing`) on the next app open after the first visit or report, so it doesn't follow the doors card straight away: what's sent ("to help other street library visitors", no name, account or ID) and how to turn it off, with **Don't share** / **OK**. Existing users see it on their next open.
+- **Drawer line**: "Last seen by someone 21 days ago" or, in amber, "Someone couldn't find it yesterday", whichever is newer; only if it's after your own last visit, never your own report, and within a year (60 days for "couldn't find it", which is also ignored within 30 days after someone saw the library). Last-seen dates come from `GET /v1/sightings` at most daily (`sightings` table).
 - **Share what I find** switch at the bottom of My visits; turning it off drops anything unsent.
 
 ## Later (not in this pass)

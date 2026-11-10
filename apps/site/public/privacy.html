@@ -44,7 +44,7 @@
     <ul>
       <li>There are no accounts, ads or analytics, and we don't sell your data.</li>
       <li>Your visit history stays on your phone. So does your exact position, except when you plan a walk from where you are: then it's sent once to the map provider to work out the walking route.</li>
-      <li>When you mark a visit, or that you couldn't find a library, the app later tells our server which library and which day, and nothing about you, so others can see when it was last seen. You can turn this off.</li>
+      <li>When you mark a visit, or that you couldn't find a library, the app later tells our server which library and which day, with no name, account or ID, so other visitors can see when it was last seen. You can turn this off.</li>
       <li>To show libraries and the map, the app sends the <em>approximate area</em> you're looking at to the library data service and the map provider. It doesn't send your exact position.</li>
       <li>If the app crashes, a crash report (with no location and no IP address) is sent to our error-tracking service so we can fix it.</li>
     </ul>
@@ -66,7 +66,7 @@
       position once, with the libraries in the walk, to Mapbox to work out the walking route. It
       isn't sent while you walk.
       Shared visits (below) say which library you visited and on which day, which shows you were
-      there; they're sent without anything that identifies you, and you can turn them off.
+      there; they're sent with no name, account or ID, and you can turn them off.
       The app doesn't use your location in the background. You can withdraw location permission
       at any time in your phone's settings; the map still works without it.
     </p>
@@ -83,14 +83,14 @@
     <p>
       So that everyone can see when a library was last seen (or that someone couldn't find it),
       the app sends our server a short report when you mark a visit or tap “Couldn't find it?”:
-      the library and the date, with no time, no account and no device or user ID. Reports wait at
-      least an hour before they're sent, each in its own request, so they don't show what time you
-      were there. Only visits from the last week are reported; deleting a visit before
+      the library and the date, with no time, no name, no account and no device or user ID. Reports wait at
+      least an hour and are sent one at a time, a few minutes apart, so they don't show what time
+      you were there or arrive together. Only visits from the last week are reported; deleting a visit before
       its report is sent cancels it.
     </p>
     <p>
-      Our server doesn't store the reports or your IP address (Cloudflare's request logs, kept for
-      a few days, may include the IP address of a request but not what a report says). It only
+      Our server doesn't store the reports or your IP address (Cloudflare's request logs, deleted
+      within 7 days, include the IP address of a request but not what a report says). It only
       keeps, for each library and
       month, how many times it was seen or couldn't be found and the latest date of each, and
       shares the latest dates with everyone using the app. The app explains this before the first
@@ -147,8 +147,9 @@
     </div>
     <p>
       Our server doesn't store anything about you: no IP addresses, and no record of who looked at
-      which areas. (It does keep which areas' library listings it has cached and when, with nothing
-      linking them to a person.) Cloudflare keeps short-lived request logs (including IP addresses) for
+      which areas. (It does keep which areas' library listings it has cached and when, and the
+      per-library counts from shared visits described above, with nothing linking them to a
+      person.) Cloudflare keeps short-lived request logs (including IP addresses) for
       running and protecting the service; we don't use them for anything else, and they're
       deleted within 7 days.
     </p>

@@ -139,7 +139,6 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
           onPress={() => onSharingChange(!sharing)}
           accessibilityRole="switch"
           accessibilityState={{ checked: sharing }}
-          accessibilityHint={S.sharing.switchNote}
           style={styles.switchRow}
         >
           <View style={styles.grow}>

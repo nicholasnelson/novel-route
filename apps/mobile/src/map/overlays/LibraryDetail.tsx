@@ -46,10 +46,10 @@ type Props = {
   onMapKey(): void;
   /** Someone else's latest sighting or "couldn't find it" (shared visits), if it's news. */
   others: { kind: 'seen' | 'missing'; text: string } | null;
-  /** Sharing is on, so "Couldn't find it?" can be sent. */
+  /** Sharing is on and you haven't already reported it today, so "Couldn't find it?" is offered. */
   canReportMissing: boolean;
-  /** "Couldn't find it" was reported here this session (offered for undo). */
-  missingReported: boolean;
+  /** "Couldn't find it" was just reported here (offered for undo for a few seconds). */
+  missingJustReported: boolean;
   onReportMissing(): void;
   onUndoReportMissing(): void;
   onClose(): void;
@@ -101,7 +101,7 @@ function DetailContent({
   onMapKey,
   others,
   canReportMissing,
-  missingReported,
+  missingJustReported,
   onReportMissing,
   onUndoReportMissing,
   onClose,
@@ -213,7 +213,7 @@ function DetailContent({
             <Pressable
               onPress={onMapKey}
               accessibilityRole="button"
-              accessibilityHint="Opens the map key"
+              accessibilityLabel={`${doors}. Map key`}
               hitSlop={6}
               style={({ pressed }) => [styles.doors, pressed && styles.pressed]}
             >
@@ -249,16 +249,21 @@ function DetailContent({
           ) : (
             <PrimaryButton label={S.visit.iVisited} icon="checkmark" onPress={onLogVisit} />
           )}
-          <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
-            <Text style={styles.linkCentered}>{S.visit.addPastVisit}</Text>
-          </Pressable>
-          {canReportMissing && !today && !missingReported && (
-            <Pressable onPress={onReportMissing} accessibilityRole="button" hitSlop={8}>
-              <Text style={styles.noteLink}>{S.sharing.couldntFind}</Text>
+          <View style={styles.linkRow}>
+            <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8} style={styles.rowLink}>
+              <Text style={styles.linkInRow}>{S.visit.addPastVisit}</Text>
             </Pressable>
-          )}
-          {missingReported && (
-            <View style={styles.undoBar}>
+            {canReportMissing && !today && !missingJustReported && (
+              <>
+                <Text style={styles.linkDot}>·</Text>
+                <Pressable onPress={onReportMissing} accessibilityRole="button" hitSlop={8} style={styles.rowLink}>
+                  <Text style={styles.noteLink}>{S.sharing.couldntFind}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+          {missingJustReported && (
+            <View style={styles.undoBar} accessibilityLiveRegion="polite">
               <Text style={styles.undoText}>{S.sharing.thanks}</Text>
               <Pressable onPress={onUndoReportMissing} accessibilityRole="button" hitSlop={10}>
                 <Text style={styles.undoAction}>{S.sharing.undo}</Text>
@@ -454,20 +459,36 @@ const styles = StyleSheet.create({
     color: colors.amberText,
     fontWeight: '600',
   },
+  linkRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    columnGap: 8,
+    marginTop: 4,
+  },
+  rowLink: {
+    minHeight: TOUCH - 4,
+    justifyContent: 'center',
+  },
+  linkInRow: {
+    color: colors.green,
+    fontWeight: '600',
+  },
+  linkDot: {
+    color: colors.inkSoft,
+  },
   noteLink: {
-    textAlign: 'center',
-    fontSize: 14,
     fontWeight: '600',
     color: colors.inkSoft,
-    paddingVertical: 6,
   },
   doors: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 5,
-    paddingVertical: 4,
-    marginBottom: 8,
+    minHeight: TOUCH - 4,
+    marginBottom: 2,
   },
   doorsText: {
     fontSize: 14,

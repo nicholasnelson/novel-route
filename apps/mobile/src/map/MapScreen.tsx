@@ -56,7 +56,7 @@ import { circleAreaKm2, circleRing, clearedCircle, formatArea, reachCircle } fro
 import { estimateRange, googleMapsWalkUrl, isLongWalk, MINUTES_PER_LIBRARY, totalMinutes, WALK_DETOUR } from '../geo/walk';
 import { pursuitTarget } from '../geo/pursuit';
 import { S } from '../ui/strings';
-import { ARRIVAL_RADIUS_M, getPromptedToday, markPrompted, MAX_ACCURACY_ALLOWANCE_M, nearbyCardState } from '../store/nearby';
+import { ARRIVAL_RADIUS_M, getPromptedToday, localDateKey, markPrompted, MAX_ACCURACY_ALLOWANCE_M, nearbyCardState } from '../store/nearby';
 import {
   isFinished,
   legTo,
@@ -71,8 +71,8 @@ import {
   withReplan,
 } from '../store/walkSession';
 import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
-import { cancelReport, cancelSeenReports, describeSighting, getSighting, isSharing, queueReport, setSharing as saveSharing, Sighting } from '../store/reports';
-import { refreshSightings, sendDueReports } from '../data/reports';
+import { cancelMissingReports, cancelReport, cancelSeenReports, describeSighting, getSighting, hasReports, isSharing, queueReport, setSharing as saveSharing, Sighting } from '../store/reports';
+import { refreshSightings, sendNextReport } from '../data/reports';
 import { bearingDegrees, formatDistance, normalizeDegrees } from '../geo/bearing';
 import {
   getCurrentPosition,
@@ -114,8 +114,9 @@ const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000, 15000, 15
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
 const MIN_COURSE_SPEED = 0.8;
 const UNDO_TIMEOUT_MS = 6000;
-/** How often queued shared-visit reports are checked while the app is open. */
-const REPORT_SEND_INTERVAL_MS = 5 * 60 * 1000;
+/** While the app is open, queued shared-visit reports go one at a time, this far apart (at random). */
+const REPORT_GAP_MIN_MS = 2 * 60 * 1000;
+const REPORT_GAP_MAX_MS = 5 * 60 * 1000;
 /** With the whole map on the device, a first look at an area shows "Updating" after this long. */
 const SLOW_FIRST_LOAD_MS = 1200;
 /** Zoom when a library is picked from the list. */
@@ -195,8 +196,13 @@ export default function MapScreen() {
   const [sharing, setSharingState] = useState(true);
   /** Others' last sighting of the selected library, and your own "couldn't find it" dates. */
   const [selectedSighting, setSelectedSighting] = useState<{ sighting: Sighting | null; myMissing: string[] } | null>(null);
-  /** "Couldn't find it" reported from the drawer this session, by library, for undo. */
-  const [missingReported, setMissingReported] = useState<Map<string, string>>(new Map());
+  /** A "couldn't find it" just reported from the drawer, offered for undo for a few seconds. */
+  const [missingJust, setMissingJust] = useState<{ libraryId: string; id: string } | null>(null);
+  /**
+   * The sharing card waits for the next app open after the first visit (or report), so it doesn't
+   * follow the doors card straight away. Nothing is sent before it's been seen.
+   */
+  const [sharingCardReady, setSharingCardReady] = useState(false);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [toast, setToast] = useState<Visit | null>(null);
   const [region, setRegion] = useState<MapRegion | null>(null);
@@ -337,7 +343,7 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk, savedCamera, share] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk, savedCamera, share, reported] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
           hasSnapshot(database),
@@ -348,8 +354,10 @@ export default function MapScreen() {
           loadWalk(database),
           cameraToRestore(database, Date.now()),
           isSharing(database),
+          hasReports(database),
         ]);
         setSharingState(share);
+        setSharingCardReady(hints.has('doors') || reported);
         if (cancelled) return;
         // Set in the same render as the permission, so following never starts and jumps away.
         if (savedCamera && !savedWalk?.walking) {
@@ -405,13 +413,17 @@ export default function MapScreen() {
       // Offline or rate limited: try again later. Anything else, once per run.
       if (!isConnectionError(err) && err?.status !== 429) reportOnce(err);
     };
-    const send = () => sendDueReports(db).catch(quietly);
+    // One report at a time, a few random minutes apart, so a walk's reports don't arrive together.
+    let timer: ReturnType<typeof setTimeout>;
+    const send = () => {
+      sendNextReport(db).catch(quietly);
+      timer = setTimeout(send, REPORT_GAP_MIN_MS + Math.random() * (REPORT_GAP_MAX_MS - REPORT_GAP_MIN_MS));
+    };
     send();
     refreshSightings(db)
       .then((stored) => { if (stored) reloadSelected(); })
       .catch(quietly);
-    const timer = setInterval(send, REPORT_SEND_INTERVAL_MS);
-    return () => clearInterval(timer);
+    return () => clearTimeout(timer);
   }, [db, appActive, reloadSelected]);
 
   // Keep relative times ("today", freshness colours) current while the app stays open.
@@ -531,6 +543,7 @@ export default function MapScreen() {
       const visit = await logVisit(db, libraryId, source, visitedAt);
       if (!visit) return;
       queueReport(db, 'seen', visit.id, libraryId, visit.visitedAt).catch(() => {});
+      cancelMissingReports(db, libraryId).catch(() => {});
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setToast(visit);
       await reloadVisitState(db, selectedId);
@@ -563,23 +576,39 @@ export default function MapScreen() {
     recordVisit(library.id, 'manual');
   };
 
-  const reportMissing = async (libraryId: string) => {
-    if (!db) return;
-    const id = randomUUID();
-    if (await queueReport(db, 'missing', id, libraryId, Date.now())) {
-      setMissingReported((prev) => new Map(prev).set(libraryId, id));
-    }
+  /** "Couldn't find it?": always asks first, as it's shown to everyone. */
+  const reportMissing = (library: Library) => {
+    Alert.alert(S.sharing.confirmTitle, S.sharing.confirm(library.title), [
+      { text: S.sharing.cancel, style: 'cancel' },
+      {
+        text: S.sharing.report,
+        onPress: async () => {
+          if (!db) return;
+          const id = randomUUID();
+          if (await queueReport(db, 'missing', id, library.id, Date.now())) setMissingJust({ libraryId: library.id, id });
+          await reloadVisitState(db, selectedId);
+        },
+      },
+    ]);
   };
 
-  const undoReportMissing = async (libraryId: string) => {
-    const id = missingReported.get(libraryId);
-    if (!db || !id) return;
-    await cancelReport(db, id);
-    setMissingReported((prev) => { const next = new Map(prev); next.delete(libraryId); return next; });
+  const undoReportMissing = async () => {
+    if (!db || !missingJust) return;
+    await cancelReport(db, missingJust.id);
+    setMissingJust(null);
+    await reloadVisitState(db, selectedId);
   };
+
+  // The "couldn't find it" thanks (with Undo) goes after a few seconds, like the visit toast.
+  useEffect(() => {
+    if (!missingJust) return;
+    const timer = setTimeout(() => setMissingJust(null), UNDO_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [missingJust]);
 
   const changeSharing = (on: boolean) => {
     setSharingState(on);
+    if (!on) setMissingJust(null);
     if (db) saveSharing(db, on).catch(() => {});
   };
 
@@ -968,9 +997,8 @@ export default function MapScreen() {
   const showDoorsHint = summaries.size > 0 && !seenHints?.has('doors') && !toast;
   // Once the first hints are out of the way, point out the menu.
   const showMenuHint = !!seenHints?.has('tap_library') && !seenHints?.has('menu') && !toast;
-  // After the doors hint (or a first "couldn't find it"): nothing is sent until this has been seen.
-  const showSharingHint = !!seenHints && !seenHints.has('sharing') && !toast &&
-    ((summaries.size > 0 && seenHints.has('doors')) || missingReported.size > 0);
+  // On an app open after the first visit or report (sharingCardReady): nothing is sent before it's seen.
+  const showSharingHint = !!seenHints && !seenHints.has('sharing') && !toast && sharingCardReady;
   const showNearby = nearby !== null && !(nearby.kind === 'suggestion' && suggestionDismissed);
 
   let bottomCard: React.ReactNode = null;
@@ -1281,10 +1309,10 @@ export default function MapScreen() {
           selectedSighting.myMissing,
           now
         )}
-        canReportMissing={sharing}
-        missingReported={!!selectedId && missingReported.has(selectedId)}
-        onReportMissing={() => selectedId && reportMissing(selectedId)}
-        onUndoReportMissing={() => selectedId && undoReportMissing(selectedId)}
+        canReportMissing={sharing && !selectedSighting?.myMissing.includes(localDateKey(now))}
+        missingJustReported={!!missingJust && missingJust.libraryId === selectedId}
+        onReportMissing={() => detailLibrary && reportMissing(detailLibrary)}
+        onUndoReportMissing={undoReportMissing}
         onMapKey={() => setMapKeyOpen(true)}
         onClose={deselectLibrary}
         onHeightChange={handleDrawerHeight}

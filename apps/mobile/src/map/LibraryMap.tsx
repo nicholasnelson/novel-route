@@ -473,9 +473,10 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         ref={sourceRef}
         shape={shape}
         cluster={!walk}
-        // Only libraries whose markers would overlap (about 18 dp wide zoomed out) are grouped, at
-        // any zoom up to street level; from 16 every library is its own marker.
-        clusterRadius={20}
+        // Only libraries whose markers would overlap (about 18 dp wide zoomed out, plus a little so
+        // badges don't pile up) are grouped, at any zoom up to street level; from 16 every library
+        // is its own marker.
+        clusterRadius={24}
         clusterMaxZoomLevel={15}
         clusterProperties={{ unvisited: ['+', ['get', 'unvisited']] }}
         onPress={handlePress}
@@ -493,7 +494,8 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
               'cluster-',
               ['to-string', ['floor', ['/', ['*', 8, ['-', ['get', 'point_count'], ['get', 'unvisited']]], ['get', 'point_count']]]],
             ],
-            iconSize: ['step', ['get', 'point_count'], 0.68, 10, 0.8, 50, 0.96, 200, 1.16],
+            // 32 to 40 dp: bigger badges would overlap their neighbours at the grouping distance.
+            iconSize: ['step', ['get', 'point_count'], 0.6, 10, 0.65, 50, 0.7, 200, 0.75],
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           }}

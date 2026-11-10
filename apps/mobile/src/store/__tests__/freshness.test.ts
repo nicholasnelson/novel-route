@@ -33,7 +33,7 @@ describe('describeDoors', () => {
     expect(describeDoors(summary(3), NOW)).toBe('Doors wide open for 4 more days');
     expect(describeDoors(summary(6), NOW)).toBe('Doors wide open until tomorrow');
     expect(describeDoors(summary(6.5), NOW)).toBe('Doors wide open until later today');
-    expect(describeDoors(summary(18), NOW)).toBe('Doors half open for 12 more days');
+    expect(describeDoors(summary(18), NOW)).toBe('Doors half open: ready for another visit');
     expect(describeDoors(summary(45), NOW)).toBe('Doors just ajar: time for another visit');
   });
 });

@@ -2,7 +2,7 @@ import { ReportRequest, SightingsResponse } from '@novel-route/shared';
 import { Db } from '../db/db';
 import { getSeenHints } from '../store/hints';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
-import { dueReports, isSharing, markReportSent, storeSightings } from '../store/reports';
+import { isSharing, markReportSent, nextDueReport, storeSightings } from '../store/reports';
 import { API_URL, ApiError } from './librarySync';
 
 /** Shared visits over the network (store/reports.ts has the rules). Server mode only. */
@@ -22,24 +22,25 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 }
 
 /**
- * Send the reports whose delay is up, one request each. Nothing goes until sharing has been
- * explained (the "sharing" hint) and while it's on. Stops at the first failure and tries again later.
+ * Send the next report whose delay is up. One per call: the caller waits a few random minutes
+ * between calls, so a walk's reports don't arrive together. Nothing goes until sharing has been
+ * explained (the "sharing" hint) and while it's on. A failure leaves it queued for later.
  */
-export async function sendDueReports(db: Db, now = Date.now()): Promise<void> {
+export async function sendNextReport(db: Db, now = Date.now()): Promise<void> {
   if (!API_URL) return;
   const [sharing, hints] = await Promise.all([isSharing(db), getSeenHints(db)]);
   if (!sharing || !hints.has('sharing')) return;
-  for (const report of await dueReports(db, now)) {
-    const body: ReportRequest = { libraryId: report.libraryId, kind: report.kind, date: report.date };
-    const res = await fetchWithTimeout(`${API_URL}/v1/reports`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    // 400/404 (too old, a library that's gone) won't succeed later either.
-    if (res.ok || res.status === 400 || res.status === 404) await markReportSent(db, report.id);
-    else throw new ApiError('Report', res.status);
-  }
+  const report = await nextDueReport(db, now);
+  if (!report) return;
+  const body: ReportRequest = { libraryId: report.libraryId, kind: report.kind, date: report.date };
+  const res = await fetchWithTimeout(`${API_URL}/v1/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  // 400/404 (too old, a library that's gone) won't succeed later either.
+  if (res.ok || res.status === 400 || res.status === 404) await markReportSent(db, report.id, now);
+  else throw new ApiError('Report', res.status);
 }
 
 /** Download when each library was last seen or couldn't be found, at most daily. Returns true if stored. */
