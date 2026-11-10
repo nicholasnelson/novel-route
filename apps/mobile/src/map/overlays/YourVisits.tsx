@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import FloatingPanel from './FloatingPanel';
 import { CircleRow, MarkerIcon } from './cards';
@@ -22,6 +22,9 @@ type Props = {
   reach: CircleStat | null;
   recent: RecentVisit[];
   now: number;
+  /** Shared visits ("Share what I find"). */
+  sharing: boolean;
+  onSharingChange(on: boolean): void;
   onShowCircles(): void;
   onOpenLibrary(id: string): void;
   onClose(): void;
@@ -36,7 +39,7 @@ export default function YourVisits(props: Props) {
   );
 }
 
-function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, recent, now, onShowCircles, onOpenLibrary, onClose }: Props) {
+function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, recent, now, sharing, onSharingChange, onShowCircles, onOpenLibrary, onClose }: Props) {
   const streakTitle = streak ? describeStreak(streak) : null;
   return (
     <View style={styles.fill}>
@@ -130,6 +133,27 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
         ) : (
           <Text style={styles.empty}>{S.visits.empty}</Text>
         )}
+
+        <Text style={styles.section}>{S.sharing.section}</Text>
+        <Pressable
+          onPress={() => onSharingChange(!sharing)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: sharing }}
+          accessibilityHint={S.sharing.switchNote}
+          style={styles.switchRow}
+        >
+          <View style={styles.grow}>
+            <Text style={styles.switchLabel}>{S.sharing.switchLabel}</Text>
+            <Text style={styles.switchNote}>{S.sharing.switchNote}</Text>
+          </View>
+          <Switch
+            value={sharing}
+            onValueChange={onSharingChange}
+            trackColor={{ true: colors.green, false: colors.line }}
+            thumbColor="#ffffff"
+            importantForAccessibility="no-hide-descendants"
+          />
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -311,5 +335,27 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     textAlign: 'center',
     marginTop: 20,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: TOUCH,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: '#ffffff',
+  },
+  switchLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  switchNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkSoft,
+    marginTop: 2,
   },
 });

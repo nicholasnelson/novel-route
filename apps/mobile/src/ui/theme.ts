@@ -11,6 +11,8 @@ export const colors = {
   greenTint: '#eef3ee',
   amber: '#e9a23b',
   amberDeep: '#b9721a',
+  /** Amber for text on paper (amberDeep is too light for small text). */
+  amberText: '#8a5410',
   danger: '#b42318',
   hint: '#24432f',
   toast: '#1d2721',

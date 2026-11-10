@@ -14,6 +14,18 @@ export const S = {
     centreOnMe: 'Centre on me',
     hint: 'Tap the ••• button for libraries nearby, to plan a walk, and to see your visits.',
   },
+  sharing: {
+    hintTitle: 'Help others find libraries',
+    hintBody: 'When you mark a visit (or that you couldn’t find a library), Novel Route later tells our server, so others know it’s still there. Nothing about you is sent or kept. You can turn this off in My visits.',
+    dontShare: 'Don’t share',
+    ok: 'OK',
+    couldntFind: 'Couldn’t find it?',
+    thanks: 'Thanks: we’ll let others know',
+    undo: 'Undo',
+    section: 'Sharing',
+    switchLabel: 'Share what I find',
+    switchNote: 'Tells others a library was seen, or couldn’t be found, that day. Nothing about you is sent.',
+  },
   visit: {
     iVisited: 'I visited',
     iVisitedAgain: 'I visited again',

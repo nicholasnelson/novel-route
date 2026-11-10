@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared visits mockup</title>
+<style>
+  /* Colours from apps/mobile/src/ui/theme.ts; layout as docs/ux/feedback-nov-mockup.html */
+  :root {
+    --paper: #fbf8f1; --card: #fffdf8; --ink: #1d2721; --soft: #5b665f; --line: #e7e0d0;
+    --green: #1f8f3a; --tint: #eef3ee; --tile: #f1eee6; --amber: #e9a23b;
+    --hint: #24432f; --shadow: 0 8px 18px rgba(20, 32, 26, 0.18);
+    --serif: "Noto Serif", Georgia, serif;
+    --sans: Roboto, system-ui, "Segoe UI", sans-serif;
+  }
+  body { margin: 0; background: #e8e3d8; font-family: var(--sans); color: var(--ink); }
+  header { max-width: 1240px; margin: 0 auto; padding: 28px 16px 0; }
+  h1 { font-family: var(--serif); margin: 0 0 6px; font-size: 26px; }
+  p.lead { margin: 0 0 6px; color: var(--soft); max-width: 62em; line-height: 1.5; }
+  .screens { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 28px; }
+  .screen { width: 300px; }
+  .screen h3 { font-size: 15px; margin: 0 0 4px; }
+  .screen .note { font-size: 13px; color: var(--soft); margin: 0 0 10px; min-height: 5.8em; line-height: 1.4; }
+  .hl { outline: 2px dashed #e0782f; outline-offset: 3px; border-radius: 10px; }
+
+  .phone { width: 300px; height: 560px; border-radius: 34px; background: #111; padding: 8px; box-shadow: 0 18px 44px rgba(0,0,0,.25); box-sizing: border-box; }
+  .vp { position: relative; width: 100%; height: 100%; border-radius: 27px; overflow: hidden; background: #eef0e6; font-size: 13px; }
+  .vp svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .card { position: absolute; left: 8px; right: 8px; bottom: 22px; border-radius: 18px; box-shadow: var(--shadow); padding: 12px; z-index: 3; }
+  .hint { background: var(--hint); color: #fff; }
+  .hint b { font-family: var(--serif); font-size: 15px; font-weight: 400; display: block; margin-bottom: 4px; }
+  .hint p { margin: 0; font-size: 12.5px; line-height: 1.45; color: #e6efe8; }
+  .btns { display: flex; gap: 7px; margin-top: 10px; justify-content: flex-end; }
+  .hint .btn { padding: 0 16px; height: 36px; border-radius: 999px; display: flex; align-items: center; font-weight: 600; font-size: 13px; background: rgba(255,255,255,.14); color: #fff; }
+  .hint .btn.primary { background: #fff; color: var(--hint); }
+
+  .drawer { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: var(--shadow); padding: 8px 14px; z-index: 3; }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: #d8d0bf; margin: 0 auto 10px; }
+  .dhead { display: flex; gap: 10px; align-items: flex-start; }
+  .dhead h4 { font-family: var(--serif); font-size: 17px; margin: 2px 0 2px; font-weight: 400; }
+  .meta { color: var(--soft); font-size: 12px; }
+  .status { margin: 12px 0 2px; font-size: 14px; font-weight: 600; }
+  .seen { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--soft); padding: 3px 0 8px; }
+  .seen svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .bigbtn { height: 42px; border-radius: 999px; background: var(--green); color: #fff; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 4px; }
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+  .actions div { background: var(--tile); border-radius: 12px; height: 46px; }
+
+  .panel { position: absolute; left: 10px; right: 10px; top: 34px; bottom: 30px; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px; z-index: 2; }
+  .panel h4 { font-family: var(--serif); font-size: 19px; margin: 0 0 10px; font-weight: 400; }
+  .block { background: var(--tile); border-radius: 14px; height: 70px; margin-bottom: 10px; }
+  .section { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--soft); margin: 16px 0 6px; }
+  .switchrow { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .switchrow b { display: block; font-size: 13.5px; font-weight: 600; }
+  .switchrow small { display: block; color: var(--soft); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
+  .sw { width: 36px; height: 20px; border-radius: 999px; background: var(--green); position: relative; flex: none; margin-top: 2px; }
+  .sw i { position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  table { border-collapse: collapse; font-size: 13px; max-width: 62em; }
+  td, th { border-bottom: 1px solid #d9d2c3; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Shared visits: "last seen" for every library</h1>
+  <p class="lead">When you mark a visit, the app later tells our server "this library was seen on this date": no account, no ID, nothing about you. The server keeps one last-seen date and a monthly count per library. Everyone then sees when a library was last seen, which helps with libraries that may have gone, and later lets us show popular ones.</p>
+</header>
+
+<div class="screens">
+  <div class="screen">
+    <h3>1. Told once, at your first visit</h3>
+    <p class="note">Shows after your first visit is marked (after the doors hint). Nothing is sent until it's been seen. "Don't share" turns it off; either way it doesn't show again.</p>
+    <div class="phone"><div class="vp">
+      <svg class="map" viewBox="0 0 284 544"><path d="M0 200 L284 170 M0 380 L284 410 M90 0 L120 544 M200 0 L180 544" stroke="#fff" stroke-width="10"/></svg>
+      <div class="card hint hl">
+        <b>Help others find libraries</b>
+        <p>When you mark a visit (or that you couldn't find a library), Novel Route later tells our server, so others know it's still there. Nothing about you is sent or kept. You can turn this off in My visits.</p>
+        <div class="btns"><div class="btn">Don't share</div><div class="btn primary">OK</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>2. "Last seen" in the library drawer</h3>
+    <p class="note">Under your own status. Shown only when someone saw it after your last visit (so it's never just you), within the last year.</p>
+    <div class="phone"><div class="vp">
+      <svg class="map" viewBox="0 0 284 544"><path d="M0 120 L284 100 M90 0 L120 544 M200 0 L180 544" stroke="#fff" stroke-width="10"/></svg>
+      <div class="drawer">
+        <div class="grab"></div>
+        <div class="dhead">
+          <svg width="34" height="45" viewBox="0 0 48 64"><rect x="22" y="36" width="4" height="24" rx="1" fill="#5b5f5c"/><path d="M4 20 L24 5 L44 20 Z" fill="#b9721a"/><rect x="8" y="18" width="32" height="20" rx="2" fill="#e9a23b"/><rect x="12" y="21" width="24" height="14" fill="#f6c870"/></svg>
+          <div><h4>Narrabundah Book Nook</h4><div class="meta">1.2 km away</div></div>
+        </div>
+        <div class="status">Not visited yet</div>
+        <div class="seen hl"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Last seen by someone 3 weeks ago</div>
+        <div class="bigbtn">I visited</div>
+        <div class="actions"><div></div><div></div><div></div><div></div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>2b. "Couldn't find it"</h3>
+    <p class="note">A text button under "I visited" (not counted as a visit). It sends the same kind of anonymous report. A report newer than the last sighting shows to everyone in amber; a later visit by anyone replaces it. No comment box in this pass.</p>
+    <div class="phone"><div class="vp">
+      <svg class="map" viewBox="0 0 284 544"><path d="M0 120 L284 100 M90 0 L120 544 M200 0 L180 544" stroke="#fff" stroke-width="10"/></svg>
+      <div class="drawer">
+        <div class="grab"></div>
+        <div class="dhead">
+          <svg width="34" height="45" viewBox="0 0 48 64"><rect x="22" y="36" width="4" height="24" rx="1" fill="#5b5f5c"/><path d="M4 20 L24 5 L44 20 Z" fill="#b9721a"/><rect x="8" y="18" width="32" height="20" rx="2" fill="#e9a23b"/><rect x="12" y="21" width="24" height="14" fill="#f6c870"/></svg>
+          <div><h4>Narrabundah Book Nook</h4><div class="meta">40 m away</div></div>
+        </div>
+        <div class="status">Not visited yet</div>
+        <div class="seen hl" style="color:#9a5d10"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>Someone couldn't find it 2 weeks ago</div>
+        <div class="bigbtn">I visited</div>
+        <div class="hl" style="text-align:center;color:var(--soft);font-size:13px;font-weight:600;padding:9px 0 0">Couldn't find it?</div>
+        <div class="actions" style="margin-top:8px"><div></div><div></div><div></div><div></div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>2c. After tapping it</h3>
+    <p class="note">A short toast with Undo (like marking a visit). Your own report isn't shown back to you as "someone"; the line only reflects other people's reports.</p>
+    <div class="phone"><div class="vp">
+      <svg class="map" viewBox="0 0 284 544"><path d="M0 200 L284 170 M0 380 L284 410 M90 0 L120 544 M200 0 L180 544" stroke="#fff" stroke-width="10"/></svg>
+      <div class="card hl" style="background:#1d2721;color:#fff;display:flex;justify-content:space-between;align-items:center;font-size:13px">Thanks: we'll let others know <b style="color:#8fd6a0">Undo</b></div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>3. The switch, in My visits</h3>
+    <p class="note">At the bottom of My visits (there's no settings screen). Turning it off also drops any visits still waiting to be sent.</p>
+    <div class="phone"><div class="vp">
+      <div class="panel">
+        <h4>My visits</h4>
+        <div class="block"></div>
+        <div class="block" style="height:40px"></div>
+        <div class="section">RECENT VISITS</div>
+        <div class="block" style="height:90px"></div>
+        <div class="section">SHARING</div>
+        <div class="switchrow hl">
+          <div style="flex:1"><b>Share what I find</b><small>Tells others a library was seen, or couldn't be found, that day. Nothing about you is sent.</small></div>
+          <div class="sw"><i></i></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<header>
+  <h1 style="font-size:20px">How it works (not visible)</h1>
+  <table>
+    <tr><th>What's sent</th><td>Library ID and the visit's date (no time), in the request body. Visits marked for today or the last 7 days; older past visits aren't sent. Undone or deleted before sending: dropped.</td></tr>
+    <tr><th>When</th><td>At least an hour after the visit, the next time the app is open, one request per visit (so the time you were there isn't sent, and visits aren't bundled together).</td></tr>
+    <tr><th>Server keeps</th><td>Per library and month: a count and the latest date seen. No IP, no device, no list of reports. Rate-limited per IP; dates outside the last week and unknown libraries are rejected.</td></tr>
+    <tr><th>App gets</th><td><code>GET /v1/sightings</code>: last-seen date for every library seen in the past year, checked daily with the snapshot (separate, so the snapshot isn't re-downloaded every day).</td></tr>
+    <tr><th>Couldn't find it</th><td>Same request with <code>kind: "missing"</code>. Server keeps the latest "missing" date per library. Shown as "Someone couldn't find it" only while it's newer than the last sighting. Not sent to Street Library yet: a weekly list for Mel can come later (with the reporting decision on the held branch).</td></tr>
+    <tr><th>Popular libraries</th><td>The monthly counts are stored from day one; how to show them (a "Popular" tag, sorting in Nearby) is for later. Counts are rough: one person visiting often counts each time.</td></tr>
+  </table>
+</header>
+</body>
+</html>

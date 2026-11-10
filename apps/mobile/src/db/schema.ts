@@ -53,6 +53,23 @@ const MIGRATIONS: string[] = [
     fetched_at INTEGER NOT NULL
   );
   `,
+  // 4: shared visits (store/reports.ts). Anonymous reports waiting to be sent (and your own sent
+  // "couldn't find it" reports), and when each library was last seen or missed by anyone.
+  `
+  CREATE TABLE outbox (
+    id         TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    send_after INTEGER NOT NULL,
+    sent       INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE sightings (
+    library_id TEXT PRIMARY KEY,
+    seen       TEXT,
+    missing    TEXT
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

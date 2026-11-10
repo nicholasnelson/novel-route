@@ -12,6 +12,10 @@ export const KV_KEYS = {
   dueOnly: 'map_due_only',
   /** Where the map was looking when the app last went to the background (JSON, `store/mapCamera.ts`). */
   mapCamera: 'map_camera',
+  /** "0" when shared visits are turned off (store/reports.ts). */
+  sharing: 'share_reports',
+  /** When last-seen dates were last downloaded (epoch ms). */
+  sightingsCheckedAt: 'sightings_checked_at',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {

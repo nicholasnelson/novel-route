@@ -53,6 +53,26 @@ export type SnapshotResponse = {
   libraries: SnapshotRow[];
 };
 
+/** "seen": a visit was marked. "missing": someone couldn't find the library. */
+export type ReportKind = 'seen' | 'missing';
+
+/** POST /v1/reports: one anonymous report, sent on its own (docs/server.md "Reports"). */
+export type ReportRequest = {
+  libraryId: string;
+  kind: ReportKind;
+  /** The visit's local calendar date, YYYY-MM-DD (no time). */
+  date: string;
+};
+
+/** [library id, last seen date or null, last "couldn't find it" date or null], dates YYYY-MM-DD. */
+export type SightingRow = [string, string | null, string | null];
+
+/** GET /v1/sightings: libraries reported in the last year. */
+export type SightingsResponse = {
+  generatedAt: string;
+  libraries: SightingRow[];
+};
+
 /** GET /v1/config */
 export type ConfigResponse = {
   mapStyleUrl: string | null;

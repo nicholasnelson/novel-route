@@ -44,6 +44,14 @@ type Props = {
   onWalkFromHere(): void;
   /** Opens the map key (from the doors line). */
   onMapKey(): void;
+  /** Someone else's latest sighting or "couldn't find it" (shared visits), if it's news. */
+  others: { kind: 'seen' | 'missing'; text: string } | null;
+  /** Sharing is on, so "Couldn't find it?" can be sent. */
+  canReportMissing: boolean;
+  /** "Couldn't find it" was reported here this session (offered for undo). */
+  missingReported: boolean;
+  onReportMissing(): void;
+  onUndoReportMissing(): void;
   onClose(): void;
   /** The height the drawer settles at, for keeping the library clear of it on the map. */
   onHeightChange?(height: number): void;
@@ -91,6 +99,11 @@ function DetailContent({
   onDirections,
   onWalkFromHere,
   onMapKey,
+  others,
+  canReportMissing,
+  missingReported,
+  onReportMissing,
+  onUndoReportMissing,
   onClose,
   onHeightChange,
 }: Props & { library: Library }) {
@@ -208,6 +221,16 @@ function DetailContent({
               <Ionicons name="help-circle-outline" size={17} color={colors.green} />
             </Pressable>
           )}
+          {others && (
+            <View style={styles.others}>
+              <Ionicons
+                name={others.kind === 'missing' ? 'alert-circle-outline' : 'eye-outline'}
+                size={16}
+                color={others.kind === 'missing' ? colors.amberText : colors.inkSoft}
+              />
+              <Text style={[styles.othersText, others.kind === 'missing' && styles.othersMissing]}>{others.text}</Text>
+            </View>
+          )}
 
           {today ? (
             <View>
@@ -229,6 +252,19 @@ function DetailContent({
           <Pressable onPress={pickPastDate} accessibilityRole="button" hitSlop={8}>
             <Text style={styles.linkCentered}>{S.visit.addPastVisit}</Text>
           </Pressable>
+          {canReportMissing && !today && !missingReported && (
+            <Pressable onPress={onReportMissing} accessibilityRole="button" hitSlop={8}>
+              <Text style={styles.noteLink}>{S.sharing.couldntFind}</Text>
+            </Pressable>
+          )}
+          {missingReported && (
+            <View style={styles.undoBar}>
+              <Text style={styles.undoText}>{S.sharing.thanks}</Text>
+              <Pressable onPress={onUndoReportMissing} accessibilityRole="button" hitSlop={10}>
+                <Text style={styles.undoAction}>{S.sharing.undo}</Text>
+              </Pressable>
+            </View>
+          )}
           {pickingDate && (
             <DateTimePicker value={pickingDate} mode="date" maximumDate={pickingDate} onChange={handlePastDate} />
           )}
@@ -402,6 +438,28 @@ const styles = StyleSheet.create({
   },
   statusWithDoors: {
     marginBottom: 2,
+  },
+  others: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  othersText: {
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+  othersMissing: {
+    color: colors.amberText,
+    fontWeight: '600',
+  },
+  noteLink: {
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.inkSoft,
+    paddingVertical: 6,
   },
   doors: {
     flexDirection: 'row',

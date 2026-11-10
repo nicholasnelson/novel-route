@@ -152,6 +152,12 @@ Every library the server knows, so the app has the whole map from its first laun
 
 Single library (for deep links / detail refresh). IDs other than `sl:<number>` are a 404 without a database read.
 
+### `POST /v1/reports` and `GET /v1/sightings` (shared visits)
+
+- `POST /v1/reports` takes `{ libraryId, kind: 'seen' | 'missing', date: 'YYYY-MM-DD' }` in the body (not the URL, which request logs keep). The library must exist and not be removed; the date must be from 8 days ago to tomorrow (UTC; the app sends local dates). It adds to `reports` (`0004_reports.sql`): per library and month, `seen_count`/`missing_count` and the latest `last_seen`/`last_missing`. No IP, device or individual report is stored. Its own rate limit: 10 a minute per IP (`REPORT_LIMITER`), as each is a D1 write. `204` when stored.
+- `GET /v1/sightings`: `[id, lastSeen, lastMissing]` for every library reported in the last 12 months (`SightingsResponse`), edge-cached for an hour. The app downloads it at most daily.
+- The monthly counts are kept for "popular libraries" later; nothing reads them yet. They're rough: one person visiting often counts each time.
+
 ### `GET /v1/config`
 
 Small remote config, e.g. the Mapbox style URL (see maps.md), minimum supported app version, a message banner. Lets us switch base style or show a notice without an app release.

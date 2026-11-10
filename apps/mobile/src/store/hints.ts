@@ -9,12 +9,13 @@ export type HintKey =
   | 'location_explained' // shown before the system location prompt
   | 'tap_library' // shown when libraries first appear
   | 'doors' // shown after the first logged visit
-  | 'menu'; // points out the ••• menu (nearby list, walks, your visits)
+  | 'menu' // points out the ••• menu (nearby list, walks, your visits)
+  | 'sharing'; // says visits are shared anonymously (and how to turn it off); nothing is sent before
 
 const kvKey = (hint: HintKey) => `hint:${hint}`;
 
 export async function getSeenHints(db: Db): Promise<Set<HintKey>> {
-  const keys: HintKey[] = ['location_explained', 'tap_library', 'doors', 'menu'];
+  const keys: HintKey[] = ['location_explained', 'tap_library', 'doors', 'menu', 'sharing'];
   const seen = new Set<HintKey>();
   for (const key of keys) {
     if (await getKv(db, kvKey(key))) seen.add(key);

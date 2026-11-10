@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Alert, AppState, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { randomUUID } from 'expo-crypto';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
 import LibraryMap, { CirclesOverlay, LibraryMapHandle, MapRegion, WalkOverlay } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
@@ -70,6 +71,8 @@ import {
   withReplan,
 } from '../store/walkSession';
 import { getSeenHints, HintKey, markHintSeen } from '../store/hints';
+import { cancelReport, cancelSeenReports, describeSighting, getSighting, isSharing, queueReport, setSharing as saveSharing, Sighting } from '../store/reports';
+import { refreshSightings, sendDueReports } from '../data/reports';
 import { bearingDegrees, formatDistance, normalizeDegrees } from '../geo/bearing';
 import {
   getCurrentPosition,
@@ -111,6 +114,8 @@ const PENDING_RETRY_DELAYS_MS = [3000, 4000, 6000, 8000, 10000, 12000, 15000, 15
 /** Walking pace: above this, GPS course is a better "forward" than an uncalibrated compass. */
 const MIN_COURSE_SPEED = 0.8;
 const UNDO_TIMEOUT_MS = 6000;
+/** How often queued shared-visit reports are checked while the app is open. */
+const REPORT_SEND_INTERVAL_MS = 5 * 60 * 1000;
 /** With the whole map on the device, a first look at an area shows "Updating" after this long. */
 const SLOW_FIRST_LOAD_MS = 1200;
 /** Zoom when a library is picked from the list. */
@@ -186,6 +191,12 @@ export default function MapScreen() {
   const [visitTimes, setVisitTimes] = useState<number[]>([]);
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
   const [circlesShown, setCirclesShown] = useState(false);
+  /** Shared visits (store/reports.ts): on unless turned off. */
+  const [sharing, setSharingState] = useState(true);
+  /** Others' last sighting of the selected library, and your own "couldn't find it" dates. */
+  const [selectedSighting, setSelectedSighting] = useState<{ sighting: Sighting | null; myMissing: string[] } | null>(null);
+  /** "Couldn't find it" reported from the drawer this session, by library, for undo. */
+  const [missingReported, setMissingReported] = useState<Map<string, string>>(new Map());
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [toast, setToast] = useState<Visit | null>(null);
   const [region, setRegion] = useState<MapRegion | null>(null);
@@ -247,8 +258,13 @@ export default function MapScreen() {
     const request = ++visitsRequestRef.current;
     setNow(Date.now());
     setSummaries(await getVisitSummaries(database));
-    const visits = libraryId ? await getVisits(database, libraryId) : [];
-    if (request === visitsRequestRef.current) setSelectedVisits(visits);
+    const [visits, sighting] = libraryId
+      ? await Promise.all([getVisits(database, libraryId), getSighting(database, libraryId)])
+      : [[], null];
+    if (request === visitsRequestRef.current) {
+      setSelectedVisits(visits);
+      setSelectedSighting(sighting);
+    }
   }, []);
 
   const syncTiles = useCallback(async (database: Db, requested: string[]) => {
@@ -321,7 +337,7 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk, savedCamera] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk, savedCamera, share] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
           hasSnapshot(database),
@@ -331,7 +347,9 @@ export default function MapScreen() {
           getKv(database, KV_KEYS.dueOnly),
           loadWalk(database),
           cameraToRestore(database, Date.now()),
+          isSharing(database),
         ]);
+        setSharingState(share);
         if (cancelled) return;
         // Set in the same render as the permission, so following never starts and jumps away.
         if (savedCamera && !savedWalk?.walking) {
@@ -377,6 +395,24 @@ export default function MapScreen() {
       }
     })();
   }, [db, appActive]);
+
+  const reloadSelected = useStableCallback(() => { if (db) reloadVisitState(db, selectedId); });
+  // Shared visits: send reports whose delay is up (now and every few minutes while open), and
+  // fetch when libraries were last seen, at most daily.
+  useEffect(() => {
+    if (!db || !appActive) return;
+    const quietly = (err: any) => {
+      // Offline or rate limited: try again later. Anything else, once per run.
+      if (!isConnectionError(err) && err?.status !== 429) reportOnce(err);
+    };
+    const send = () => sendDueReports(db).catch(quietly);
+    send();
+    refreshSightings(db)
+      .then((stored) => { if (stored) reloadSelected(); })
+      .catch(quietly);
+    const timer = setInterval(send, REPORT_SEND_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [db, appActive, reloadSelected]);
 
   // Keep relative times ("today", freshness colours) current while the app stays open.
   useEffect(() => {
@@ -494,6 +530,7 @@ export default function MapScreen() {
     try {
       const visit = await logVisit(db, libraryId, source, visitedAt);
       if (!visit) return;
+      queueReport(db, 'seen', visit.id, libraryId, visit.visitedAt).catch(() => {});
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setToast(visit);
       await reloadVisitState(db, selectedId);
@@ -508,6 +545,7 @@ export default function MapScreen() {
   const undoLastVisit = async () => {
     if (!db || !toast) return;
     await deleteVisit(db, toast.id);
+    await cancelReport(db, toast.id);
     setToast(null);
     await reloadVisitState(db, selectedId);
   };
@@ -523,6 +561,26 @@ export default function MapScreen() {
       return;
     }
     recordVisit(library.id, 'manual');
+  };
+
+  const reportMissing = async (libraryId: string) => {
+    if (!db) return;
+    const id = randomUUID();
+    if (await queueReport(db, 'missing', id, libraryId, Date.now())) {
+      setMissingReported((prev) => new Map(prev).set(libraryId, id));
+    }
+  };
+
+  const undoReportMissing = async (libraryId: string) => {
+    const id = missingReported.get(libraryId);
+    if (!db || !id) return;
+    await cancelReport(db, id);
+    setMissingReported((prev) => { const next = new Map(prev); next.delete(libraryId); return next; });
+  };
+
+  const changeSharing = (on: boolean) => {
+    setSharingState(on);
+    if (db) saveSharing(db, on).catch(() => {});
   };
 
   const toastLibraryTitle = toast ? libraries.find((l) => l.id === toast.libraryId)?.title : undefined;
@@ -910,6 +968,9 @@ export default function MapScreen() {
   const showDoorsHint = summaries.size > 0 && !seenHints?.has('doors') && !toast;
   // Once the first hints are out of the way, point out the menu.
   const showMenuHint = !!seenHints?.has('tap_library') && !seenHints?.has('menu') && !toast;
+  // After the doors hint (or a first "couldn't find it"): nothing is sent until this has been seen.
+  const showSharingHint = !!seenHints && !seenHints.has('sharing') && !toast &&
+    ((summaries.size > 0 && seenHints.has('doors')) || missingReported.size > 0);
   const showNearby = nearby !== null && !(nearby.kind === 'suggestion' && suggestionDismissed);
 
   let bottomCard: React.ReactNode = null;
@@ -1042,6 +1103,17 @@ export default function MapScreen() {
         title="The doors are open"
         body="Marking a visit opens a library's doors. They stay wide open for a week, half open for a month, then just ajar: a reminder there might be new books to find."
         onDismiss={() => seeHint('doors')}
+      />
+    );
+  } else if (showSharingHint) {
+    bottomCard = (
+      <HintCard
+        title={S.sharing.hintTitle}
+        body={S.sharing.hintBody}
+        actions={[
+          { label: S.sharing.dontShare, onPress: () => { changeSharing(false); seeHint('sharing'); } },
+          { label: S.sharing.ok, primary: true, onPress: () => seeHint('sharing') },
+        ]}
       />
     );
   } else if (showMenuHint) {
@@ -1183,16 +1255,19 @@ export default function MapScreen() {
         onDeleteVisit={async (visit) => {
           if (!db) return;
           await deleteVisit(db, visit.id);
+          await cancelReport(db, visit.id);
           await reloadVisitState(db, selectedId);
         }}
         onUndoDelete={async (visit) => {
           if (!db) return;
           await restoreVisit(db, visit);
+          await queueReport(db, 'seen', visit.id, visit.libraryId, visit.visitedAt);
           await reloadVisitState(db, selectedId);
         }}
         onClearHistory={async () => {
           if (!db || !selectedId) return;
           await clearVisits(db, selectedId);
+          await cancelSeenReports(db, selectedId);
           await reloadVisitState(db, selectedId);
         }}
         onDirections={() => detailLibrary && openDirections(detailLibrary)}
@@ -1200,6 +1275,16 @@ export default function MapScreen() {
           if (!detailLibrary) return;
           openPlanner({ kind: 'library', libraryId: detailLibrary.id }, newDraft([detailLibrary.id]));
         }}
+        others={selectedSighting && describeSighting(
+          selectedSighting.sighting,
+          selectedSummary ? selectedSummary.lastVisitedAt : null,
+          selectedSighting.myMissing,
+          now
+        )}
+        canReportMissing={sharing}
+        missingReported={!!selectedId && missingReported.has(selectedId)}
+        onReportMissing={() => selectedId && reportMissing(selectedId)}
+        onUndoReportMissing={() => selectedId && undoReportMissing(selectedId)}
         onMapKey={() => setMapKeyOpen(true)}
         onClose={deselectLibrary}
         onHeightChange={handleDrawerHeight}
@@ -1236,6 +1321,8 @@ export default function MapScreen() {
         reach={circleStats.reach}
         recent={recent}
         now={now}
+        sharing={sharing}
+        onSharingChange={changeSharing}
         onShowCircles={showCircles}
         onOpenLibrary={openFromVisits}
         onClose={() => setVisitsOpen(false)}

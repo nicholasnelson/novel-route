@@ -23,7 +23,7 @@ import { getKv, KV_KEYS, setKv } from '../store/kv';
  * the whole tile, which is acceptable for development only.
  */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') || null;
+export const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') || null;
 const REQUEST_TIMEOUT_MS = 15000;
 /** Tile requests in flight at once. */
 const MAX_PARALLEL_REQUESTS = 6;

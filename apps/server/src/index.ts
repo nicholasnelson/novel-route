@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import { ConfigResponse, isValidTile } from '@novel-route/shared';
+import { ConfigResponse, isValidTile, ReportRequest, SightingsResponse } from '@novel-route/shared';
 import { getHealth, getTileData, toApiLibrary, UpstreamError } from './cache';
 import { checkIn, initMonitoring, reportError } from './monitoring';
+import { addReport, isReportDate, recentSightings } from './reports';
 import { runSeeds } from './seeds';
 import { getLibrary, snapshotParts } from './store';
 
@@ -9,6 +10,8 @@ export type Env = {
   DB: D1Database;
   /** Workers rate limiting binding (optional so local tests can run without it). */
   RATE_LIMITER?: RateLimit;
+  /** A tighter limit for POST /v1/reports, each of which is a D1 write. */
+  REPORT_LIMITER?: RateLimit;
   MAP_STYLE_URL?: string;
   MIN_APP_VERSION?: string;
   MESSAGE?: string;
@@ -120,6 +123,54 @@ app.get('/v1/libraries/:id', async (c) => {
   const row = await getLibrary(c.env.DB, id);
   if (!row) return c.json({ error: 'Not found' }, 404);
   return c.json(toApiLibrary(row));
+});
+
+/**
+ * One anonymous report that a library was seen or couldn't be found on a date. The body holds
+ * the details (not the URL, which request logs keep). Stored only as per-library monthly counts.
+ */
+app.post('/v1/reports', async (c) => {
+  if (c.env.REPORT_LIMITER) {
+    const { success } = await c.env.REPORT_LIMITER.limit({ key: c.req.header('CF-Connecting-IP') ?? 'unknown' });
+    if (!success) return c.json({ error: 'Too many requests' }, 429);
+  }
+  const report = (await c.req.json().catch(() => null)) as Partial<ReportRequest> | null;
+  const { libraryId, kind, date } = report ?? {};
+  if (
+    typeof libraryId !== 'string' || !LIBRARY_ID.test(libraryId) ||
+    (kind !== 'seen' && kind !== 'missing') ||
+    typeof date !== 'string' || !isReportDate(date, Date.now())
+  ) {
+    return c.json({ error: 'Invalid report' }, 400);
+  }
+  const library = await getLibrary(c.env.DB, libraryId);
+  if (!library || library.removed_at !== null) return c.json({ error: 'Not found' }, 404);
+  await addReport(c.env.DB, libraryId, kind, date);
+  return c.body(null, 204);
+});
+
+/** Sightings change all day, but day-level dates don't need to be fresher than this. */
+const SIGHTINGS_CACHE_SECONDS = 60 * 60;
+
+/** When each library was last seen or couldn't be found, for the last year (the app checks daily). */
+app.get('/v1/sightings', async (c) => {
+  const cache = typeof caches === 'undefined' ? null : caches.default;
+  const cacheKey = new Request(new URL('/v1/sightings', c.req.url).toString());
+  const hit = await cache?.match(cacheKey);
+  let body: string;
+  if (hit) {
+    body = await hit.text();
+  } else {
+    const response: SightingsResponse = { generatedAt: new Date().toISOString(), libraries: await recentSightings(c.env.DB, Date.now()) };
+    body = JSON.stringify(response);
+    if (cache) {
+      const cached = new Response(body, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${SIGHTINGS_CACHE_SECONDS}` },
+      });
+      c.executionCtx.waitUntil(cache.put(cacheKey, cached));
+    }
+  }
+  return c.body(body, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
 });
 
 app.get('/v1/config', (c) => {
