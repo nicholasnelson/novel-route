@@ -146,14 +146,15 @@ Plan:
 - [x] Set up `hello@novelroute.app` (Cloudflare Email Routing → Gmail; used on the site and in the policy)
 - [x] Privacy policy URL in Play Console (also linked from the app's map key)
 - [x] Update the privacy policy when the server replaces the direct Street Library calls
-- [ ] Data safety form, content rating questionnaire, store listing (icon, screenshots, feature graphic)
+- [x] Data safety form (updated for shared visits 2026-11-10), content rating questionnaire, store listing (icon, screenshots, feature graphic)
 - [x] Confirm target API level and 16 KB page size compliance with the upgraded SDK (build 8: target and compile SDK 36, min 24; all 40 64-bit native libraries 16 KB aligned; checked 2026-10-17)
 - [x] Google Group `novel-route-testers` created (settings above)
 - [x] Google Group set as the closed track's testers (2026-10-09)
 - [x] Testers page (https://novelroute.app/testing) and in-app *Send feedback*
 - [ ] Play testing feedback channel set to hello@novelroute.app
-- [ ] Week-one survey (Google Form, five questions)
-- [ ] Closed test track live with ≥12 opted-in testers
+- [x] ~~Week-one survey~~ dropped: feedback collected individually from testers instead (2026-11-10)
+- [x] Closed test track live with ≥12 opted-in testers for 14 days (production access available 2026-11-10)
+- [x] Street Library Australia's OK for the app and its use of their data (2026-11-10)
 
 ### Phase 3 — Server (in parallel with Phase 2)
 - [x] Monorepo: `apps/mobile`, `apps/server`, `apps/site`, `packages/shared`

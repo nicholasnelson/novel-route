@@ -15,9 +15,11 @@ the track the feedback came through: Internal Test, Closed Test, Open Test or Pr
 | 2026-10-09 | Internal testing starts (build 2) with a small email list of testers. |
 | 2026-10-09 | Closed test (Alpha) submitted with build 5; approved and published the same day. Testers join through the Google Group; Australia only. |
 | 2026-10-12 | Discussed with Street Library sharing the test with its members (newsletter and socials). |
+| 2026-10 | Street Library Australia shared the test with a group of librarians in its network. |
 |  | 12th tester opted in (14-day clock starts): _to fill in_ |
-|  | Day-7 survey sent: _to fill in_ |
-|  | Production access applied for: _to fill in_ |
+| – | No survey: feedback was collected individually from testers (email, in-app *Send feedback*, conversations), and the features and fixes added during the test came from their stories of how they use street libraries. |
+| 2026-11-10 | 1.3.0 (build 20) approved for closed testing the same evening. |
+|  | Production access applied for: _to fill in_ (answers drafted in `docs/production-access.md`) |
 
 ## Feedback and changes
 
