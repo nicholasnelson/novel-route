@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { reportError } from '../monitoring/sentry';
+import { makeStyles } from './theme';
 
 type State = { error: Error | null };
 
@@ -19,50 +20,52 @@ export default class ErrorBoundary extends React.Component<React.PropsWithChildr
 
   render() {
     if (!this.state.error) return this.props.children;
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Something went wrong</Text>
-        <Text style={styles.body}>Your visit history is saved on this device.</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => this.setState({ error: null })}
-          accessibilityRole="button"
-        >
-          <Text style={styles.buttonText}>Try again</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <ErrorScreen onRetry={() => this.setState({ error: null })} />;
   }
 }
 
-const styles = StyleSheet.create({
+function ErrorScreen({ onRetry }: { onRetry(): void }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Something went wrong</Text>
+      <Text style={styles.body}>Your visit history is saved on this device.</Text>
+      <TouchableOpacity style={styles.button} onPress={onRetry} accessibilityRole="button">
+        <Text style={styles.buttonText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const useStyles = makeStyles((colors) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: '#fff',
+    backgroundColor: colors.paper,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 8,
+    color: colors.ink,
   },
   body: {
     fontSize: 15,
-    color: '#555',
+    color: colors.inkSoft,
     marginBottom: 20,
     textAlign: 'center',
   },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.green,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
   buttonText: {
-    color: '#fff',
+    color: colors.onGreen,
     fontSize: 16,
     fontWeight: '600',
   },
-});
+}));

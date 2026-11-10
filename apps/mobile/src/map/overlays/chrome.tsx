@@ -1,13 +1,14 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, shadow, TOUCH } from '../../ui/theme';
+import { radius, shadow, TOUCH, makeStyles, usePalette } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
 export type StatusPillKind = 'loading' | 'error' | 'zoom-in' | 'not-loaded' | 'location-off' | 'picking';
 
 /** Small status message under the status bar. `onAction` retries, fixes location, or opens the link. */
 export function StatusPill({ kind, onAction }: { kind: StatusPillKind; onAction(): void }) {
+  const styles = useStyles();
   switch (kind) {
     case 'loading':
       return (
@@ -68,6 +69,8 @@ export function MapMenu({ open, onToggle, onNearby, onPlanWalk, onMyVisits, onHe
   onMyVisits(): void;
   onHelp(): void;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <View style={styles.menu}>
       <Pressable
@@ -99,6 +102,8 @@ export function MapMenu({ open, onToggle, onNearby, onPlanWalk, onMyVisits, onHe
 }
 
 function MenuPill({ label, icon, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress(): void }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.menuPill, pressed && styles.pressed]}>
       <Text style={styles.menuText}>{label}</Text>
@@ -109,6 +114,8 @@ function MenuPill({ label, icon, onPress }: { label: string; icon: keyof typeof 
 
 /** Shown only when the map isn't centred on you; moves it back. */
 export function CentreOnMe({ onPress }: { onPress(): void }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.menuPill, pressed && styles.pressed]}>
       <Text style={styles.menuText}>{S.menu.centreOnMe}</Text>
@@ -117,7 +124,7 @@ export function CentreOnMe({ onPress }: { onPress(): void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,4 +182,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.8,
   },
-});
+}));

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dark mode mockup</title>
+<style>
+  /* Dark colours from the website (apps/site/public/styles.css, prefers-color-scheme: dark). */
+  :root {
+    --paper: #171a17; --card: #1c201c; --ink: #ece8de; --soft: #aaa597; --line: #2f342e;
+    --green: #35a853; --button-ink: #0f1410; --link: #7fd197; --tint: #23302a; --amber: #e9a23b;
+    --amber-text: #f0b45a; --hint: #24432f; --map: #1b2230; --road: #2a3346; --water: #121a28;
+    --shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+    --serif: "Noto Serif", Georgia, serif; --sans: Roboto, system-ui, "Segoe UI", sans-serif;
+  }
+  body { margin: 0; background: #e8e3d8; font-family: var(--sans); color: #1d2721; }
+  header { max-width: 1240px; margin: 0 auto; padding: 28px 16px 0; }
+  h1 { font-family: var(--serif); margin: 0 0 6px; font-size: 26px; }
+  p.lead { margin: 0 0 6px; color: #5b665f; max-width: 62em; line-height: 1.5; }
+  .screens { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-wrap: wrap; gap: 28px; }
+  .screen { width: 300px; }
+  .screen h3 { font-size: 15px; margin: 0 0 4px; }
+  .screen .note { font-size: 13px; color: #5b665f; margin: 0 0 10px; min-height: 4.4em; line-height: 1.4; }
+  .phone { width: 300px; height: 600px; border-radius: 34px; background: #111; padding: 8px; box-shadow: 0 18px 44px rgba(0,0,0,.25); box-sizing: border-box; }
+  .vp { position: relative; width: 100%; height: 100%; border-radius: 27px; overflow: hidden; background: var(--map); font-size: 13px; color: var(--ink); }
+  .vp svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .status { position: absolute; top: 8px; left: 16px; right: 16px; display: flex; justify-content: space-between; font-size: 11px; color: #cfd5e0; z-index: 4; }
+
+  .fab { position: absolute; right: 10px; top: 46px; width: 38px; height: 38px; border-radius: 50%; background: var(--card); box-shadow: var(--shadow); display: grid; place-items: center; color: var(--ink); font-size: 18px; z-index: 3; }
+  .dial { position: absolute; right: 10px; top: 46px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 3; }
+  .dpill { display: flex; align-items: center; gap: 9px; background: var(--card); color: var(--ink); border-radius: 999px; padding: 0 12px 0 14px; height: 36px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 2; }
+
+  .card { position: absolute; left: 8px; right: 8px; bottom: 22px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 12px; z-index: 3; border: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--link); }
+  .title { font-family: var(--serif); font-size: 15px; }
+  .sub { color: var(--soft); font-size: 12px; margin-top: 2px; }
+  .btn { height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+  .btn.primary { background: var(--green); color: var(--button-ink); }
+  .btn.ghost { background: var(--tint); color: var(--ink); }
+  .arrow { width: 36px; height: 36px; border-radius: 50%; background: var(--tint); color: var(--link); display: grid; place-items: center; font-weight: 700; }
+
+  .drawer { position: absolute; left: 0; right: 0; bottom: 0; height: 330px; background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: var(--shadow); padding: 8px 14px; z-index: 3; border-top: 1px solid var(--line); }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: #3a403a; margin: 0 auto 10px; }
+  .x { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink); margin-left: auto; }
+  .status-line { margin: 12px 0 2px; font-size: 15px; font-weight: 600; }
+  .doors { color: var(--link); font-weight: 600; font-size: 13px; padding: 4px 0; }
+  .seen { color: var(--soft); font-size: 13px; padding: 2px 0 8px; }
+  .links { text-align: center; font-size: 13px; font-weight: 600; padding: 10px 0 0; }
+  .links span { color: var(--link); } .links i { color: var(--soft); font-style: normal; }
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+  .actions div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; height: 54px; font-size: 10.5px; color: var(--ink); display: grid; place-items: center; text-align: center; }
+
+  .panel { position: absolute; left: 10px; right: 10px; top: 34px; bottom: 30px; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px; z-index: 3; border: 1px solid var(--line); }
+  .panel h4 { font-family: var(--serif); font-size: 19px; margin: 0 0 10px; font-weight: 400; }
+  .streak { background: var(--hint); border-radius: 14px; padding: 10px 12px; }
+  .streak b { font-family: var(--serif); font-size: 18px; font-weight: 400; }
+  .weeks { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; margin-top: 8px; }
+  .weeks i { height: 12px; border-radius: 3px; background: rgba(255,255,255,.14); } .weeks i.v { background: #8fd6a0; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; text-align: center; }
+  .stat b { display: block; font-family: var(--serif); font-size: 18px; font-weight: 400; } .stat small { color: var(--soft); font-size: 10.5px; }
+  .section { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--soft); margin: 14px 0 6px; }
+  .item { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .item small { display: block; color: var(--soft); font-size: 11px; }
+  table { border-collapse: collapse; font-size: 13px; max-width: 62em; }
+  td, th { border-bottom: 1px solid #d9d2c3; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; border: 1px solid #8884; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dark mode, following the phone</h1>
+  <p class="lead">When the phone is set to dark (or switches at night), the app follows: Mapbox's night lighting for the map, and the website's dark colours for every card, panel and button. Light mode is unchanged. There's no setting in the app; it just follows Android.</p>
+</header>
+
+<div class="screens">
+  <div class="screen">
+    <h3>1. Map and nearby card</h3>
+    <p class="note">Mapbox Standard's "night" lighting. The library markers keep their colours (they stand out more). Group badges get a dark centre so they don't glare.</p>
+    <div class="phone"><div class="vp">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <svg class="map" viewBox="0 0 284 584">
+        <rect width="284" height="584" fill="#1b2230"/>
+        <path d="M0 470 Q80 430 160 480 T284 460 V584 H0Z" fill="#121a28"/>
+        <g stroke="#2a3346" stroke-width="9" fill="none"><path d="M0 170 L284 140"/><path d="M0 330 L284 360"/><path d="M80 0 L110 584"/><path d="M200 0 L180 584"/></g>
+        <g stroke="#232b3b" stroke-width="4" fill="none"><path d="M0 250 L284 240"/><path d="M140 0 L150 584"/></g>
+        <circle cx="146" cy="300" r="8" fill="#5b9cf0" stroke="#e8eefc" stroke-width="3"/>
+        <!-- markers -->
+        <g transform="translate(52 190)"><rect x="9" y="17" width="3" height="16" fill="#9aa"/><path d="M1 9 L10.5 2 L20 9Z" fill="#b9721a"/><rect x="3" y="8" width="15" height="10" rx="1" fill="#e9a23b"/></g>
+        <g transform="translate(212 260)"><rect x="9" y="17" width="3" height="16" fill="#9aa"/><path d="M1 9 L10.5 2 L20 9Z" fill="#146b2c"/><rect x="3" y="8" width="15" height="10" rx="1" fill="#1f8f3a"/><rect x="0" y="9" width="4" height="8" fill="#4cb565"/><rect x="17" y="9" width="4" height="8" fill="#4cb565"/></g>
+        <g transform="translate(118 90)"><rect x="9" y="17" width="3" height="16" fill="#9aa"/><path d="M1 9 L10.5 2 L20 9Z" fill="#b9721a"/><rect x="3" y="8" width="15" height="10" rx="1" fill="#e9a23b"/></g>
+        <!-- cluster: dark disc, ring 6/8 green -->
+        <g transform="translate(222 110)"><circle r="17" fill="#1c201c"/><circle r="17" fill="none" stroke="#e9a23b" stroke-width="4"/><circle r="17" fill="none" stroke="#35a853" stroke-width="4" stroke-dasharray="80 107" transform="rotate(-90)"/><text y="5" text-anchor="middle" font-size="13" font-weight="700" fill="#ece8de" font-family="Roboto, sans-serif">8</text></g>
+      </svg>
+      <div class="fab">•••</div>
+      <div class="card">
+        <div class="row">
+          <svg width="26" height="35" viewBox="0 0 48 64"><rect x="22" y="36" width="4" height="24" fill="#9aa"/><path d="M4 20 L24 5 L44 20 Z" fill="#b9721a"/><rect x="8" y="18" width="32" height="20" rx="2" fill="#e9a23b"/></svg>
+          <div style="flex:1"><div class="kicker">NEAREST TO VISIT</div><div class="title">Kingston Street Library</div><div class="sub">Not visited yet</div></div>
+          <div style="text-align:right"><b>350 m</b><div class="arrow" style="margin-top:4px">→</div></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>2. Library drawer</h3>
+    <p class="note">Dark paper and cards; green buttons with dark text (white on this green is too faint); links in the website's light green.</p>
+    <div class="phone"><div class="vp">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <svg class="map" viewBox="0 0 284 584"><rect width="284" height="584" fill="#1b2230"/><g stroke="#2a3346" stroke-width="9"><path d="M0 120 L284 100"/><path d="M90 0 L120 584"/></g></svg>
+      <div class="drawer">
+        <div class="grab"></div>
+        <div class="row">
+          <svg width="34" height="45" viewBox="0 0 48 64"><rect x="22" y="36" width="4" height="24" fill="#9aa"/><path d="M4 20 L24 5 L44 20 Z" fill="#146b2c"/><rect x="8" y="18" width="32" height="20" rx="2" fill="#1f8f3a"/><path d="M12 21 L5 19 L5 37 L12 35 Z M36 21 L43 19 L43 37 L36 35 Z" fill="#8fd6a0"/></svg>
+          <div><div class="title" style="font-size:17px">Lygon Street Library</div><div class="sub">120 m away</div></div>
+          <div class="x">✕</div>
+        </div>
+        <div class="status-line">Last visited 3 days ago · 2 visits</div>
+        <div class="doors">Doors wide open for 4 more days ⓘ</div>
+        <div class="seen">👁 Last seen by a reader yesterday</div>
+        <div class="btn ghost">✓ Visited today</div>
+        <div class="links"><span>Add a past visit</span> <i>·</i> <i>Not there?</i></div>
+        <div class="actions"><div>Directions</div><div>Walk from here</div><div>Street Library</div><div>Share</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>3. Menu</h3>
+    <p class="note">Pills on dark cards over a darker scrim.</p>
+    <div class="phone"><div class="vp">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <svg class="map" viewBox="0 0 284 584"><rect width="284" height="584" fill="#1b2230"/><g stroke="#2a3346" stroke-width="9"><path d="M0 200 L284 170"/><path d="M90 0 L120 584"/><path d="M200 0 L180 584"/></g></svg>
+      <div class="scrim"></div>
+      <div class="dial">
+        <div class="fab" style="position:static">✕</div>
+        <div class="dpill">Nearby libraries ☰</div>
+        <div class="dpill">Plan a walk ⑂</div>
+        <div class="dpill">My visits ▯</div>
+        <div class="fab" style="position:static">?</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="screen">
+    <h3>4. My visits</h3>
+    <p class="note">The streak keeps its deep green; stats and lists on dark cards.</p>
+    <div class="phone"><div class="vp">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="panel">
+        <h4>My visits</h4>
+        <div class="streak"><b>3-week streak</b><div class="weeks"><i></i><i></i><i></i><i class="v"></i><i></i><i class="v"></i><i></i><i></i><i></i><i class="v"></i><i class="v"></i><i class="v"></i></div></div>
+        <div class="stats"><div class="stat"><b>7</b><small>libraries</small></div><div class="stat"><b>12</b><small>visits</small></div><div class="stat"><b>2</b><small>this month</small></div></div>
+        <div class="section">RECENT VISITS</div>
+        <div class="item">🏠<div>The Book Worm<small>Oct 26 · 15 days ago</small></div></div>
+        <div class="item">🏠<div>Eucalyptus<small>Oct 26 · 15 days ago</small></div></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<header>
+  <h1 style="font-size:20px">Colours</h1>
+  <table>
+    <tr><th>Use</th><th>Light (now)</th><th>Dark</th></tr>
+    <tr><td>Background (drawers, panels)</td><td><span class="sw" style="background:#fbf8f1"></span> #fbf8f1</td><td><span class="sw" style="background:#171a17"></span> #171a17</td></tr>
+    <tr><td>Cards</td><td><span class="sw" style="background:#fffdf8"></span> #fffdf8</td><td><span class="sw" style="background:#1c201c"></span> #1c201c</td></tr>
+    <tr><td>Text / soft text</td><td>#1d2721 / #5b665f</td><td>#ece8de / #aaa597</td></tr>
+    <tr><td>Buttons</td><td>green #1f8f3a, white text</td><td>green #35a853, dark text #0f1410</td></tr>
+    <tr><td>Links, kickers</td><td>#1f8f3a</td><td>#7fd197</td></tr>
+    <tr><td>Amber text ("Reported not there")</td><td>#8a5410</td><td>#f0b45a</td></tr>
+    <tr><td>Map</td><td>Mapbox Standard, faded, day</td><td>Mapbox Standard, faded, night</td></tr>
+  </table>
+  <p class="lead" style="margin-top:12px">Also: the system date picker and dialogs follow the phone (app.json <code>userInterfaceStyle: automatic</code>), and the start-up screen gets a dark background. That's a native change, so it ships in a new build.</p>
+</header>
+</body>
+</html>

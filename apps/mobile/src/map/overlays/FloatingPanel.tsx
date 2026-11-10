@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadow } from '../../ui/theme';
+import { radius, shadow, makeStyles, usePalette } from '../../ui/theme';
 
 /** Margin of map left visible around the panel, so it reads as floating over the map. */
 const MARGIN = 16;
@@ -16,6 +16,7 @@ export default function FloatingPanel({ visible, onClose, children }: {
   onClose(): void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
@@ -37,7 +38,7 @@ export default function FloatingPanel({ visible, onClose, children }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: 'center',
@@ -56,4 +57,4 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...shadow,
   },
-});
+}));

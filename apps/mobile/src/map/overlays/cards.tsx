@@ -8,7 +8,7 @@ import { compassPoint, formatDistance, normalizeDegrees } from '../../geo/bearin
 import { formatDuration, MAX_WALK_STOPS } from '../../geo/walk';
 import { S } from '../../ui/strings';
 import { LARGE_MARKER_IMAGES } from '../markerImages';
-import { colors, radius, shadow, TOUCH } from '../../ui/theme';
+import { radius, shadow, TOUCH, makeStyles, usePalette } from '../../ui/theme';
 
 /** White rounded card that sits in the bottom slot over the map. */
 export function BottomCard({ children, style, onPress, accessibilityLabel }: {
@@ -17,6 +17,7 @@ export function BottomCard({ children, style, onPress, accessibilityLabel }: {
   onPress?: () => void;
   accessibilityLabel?: string;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -47,6 +48,8 @@ export function PrimaryButton({ label, onPress, icon, style, disabled }: {
   style?: ViewStyle;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable
       onPress={onPress}
@@ -55,7 +58,7 @@ export function PrimaryButton({ label, onPress, icon, style, disabled }: {
       accessibilityState={disabled ? { disabled } : undefined}
       style={({ pressed }) => [styles.primaryButton, disabled && styles.primaryButtonDisabled, style, pressed && styles.pressed]}
     >
-      {icon && <Ionicons name={icon} size={18} color="#fff" />}
+      {icon && <Ionicons name={icon} size={18} color={colors.onGreen} />}
       <Text style={styles.primaryButtonText}>{label}</Text>
     </Pressable>
   );
@@ -69,6 +72,8 @@ export function SecondaryButton({ label, onPress, icon, style, hint }: {
   /** What happens beyond the label, for screen readers (e.g. "Opens Google Maps"). */
   hint?: string;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable
       onPress={onPress}
@@ -83,6 +88,8 @@ export function SecondaryButton({ label, onPress, icon, style, hint }: {
 }
 
 function CloseButton({ onPress, label }: { onPress: () => void; label: string }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={10} style={styles.close}>
       <Ionicons name="close" size={20} color={colors.inkSoft} />
@@ -107,6 +114,8 @@ type NearbyCardProps = {
 };
 
 export function NearbyCard({ state, freshness, summary, now, reference, onPress, onLogVisit, onDismiss }: NearbyCardProps) {
+  const styles = useStyles();
+  const colors = usePalette();
   if (state.kind === 'arrived') {
     return (
       <BottomCard onPress={onPress} accessibilityLabel={`You're at ${state.library.title}. Open details`}>
@@ -161,7 +170,7 @@ export function NearbyCard({ state, freshness, summary, now, reference, onPress,
             <Ionicons
               name="arrow-up"
               size={18}
-              color={reference ? '#fff' : colors.green}
+              color={reference ? colors.onGreen : colors.link}
               style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}
             />
           </View>
@@ -193,6 +202,8 @@ export function WalkPlanCard({ stops, order, back, onStreets, meters, range, wal
   onEdit(): void;
   onClose(): void;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   const title = onStreets
     ? S.walk.onFootpaths(formatDistance(meters), back)
     : S.walk.estimated(`${formatDistance(range[0])}–${formatDistance(range[1])}`, back);
@@ -233,6 +244,7 @@ export function WalkPickCard({ count, range, options, onClose, onList, onShowRou
   onList(): void;
   onShowRoute(): void;
 }) {
+  const styles = useStyles();
   return (
     <BottomCard>
       <Text style={styles.pickSummary} accessibilityLiveRegion="polite">
@@ -266,6 +278,8 @@ export function WalkingCard({ visited, total, nextTitle, walkLeft, straightLine,
   onEdit(): void;
   onEnd(): void;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   const parts = [walkLeft !== null ? S.walk.walkLeft(formatDistance(walkLeft)) : null, S.walk.straightLine(formatDistance(straightLine))];
   return (
     <BottomCard>
@@ -279,7 +293,7 @@ export function WalkingCard({ visited, total, nextTitle, walkLeft, straightLine,
           <Ionicons
             name="arrow-up"
             size={22}
-            color={compass ? '#fff' : colors.green}
+            color={compass ? colors.onGreen : colors.link}
             style={{ transform: [{ rotate: `${arrowRotation}deg` }] }}
           />
         </View>
@@ -304,6 +318,7 @@ export function WalkArrivedCard({ number, total, library, freshness, summary, no
   onVisited(): void;
   onSkip(): void;
 }) {
+  const styles = useStyles();
   return (
     <BottomCard>
       <View style={styles.row}>
@@ -324,6 +339,7 @@ export function WalkArrivedCard({ number, total, library, freshness, summary, no
 
 /** Every stop visited or skipped. */
 export function WalkDoneCard({ visited, streakWeeks, onDone }: { visited: number; streakWeeks: number; onDone(): void }) {
+  const styles = useStyles();
   return (
     <BottomCard>
       <Text style={styles.kicker}>{S.walk.doneKicker}</Text>
@@ -337,6 +353,8 @@ export function WalkDoneCard({ visited, streakWeeks, onDone }: { visited: number
 }
 
 function RoundButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress(): void }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable
       onPress={onPress}
@@ -356,6 +374,7 @@ export function CirclesCard({ cleared, reach, onClose }: {
   reach: { area: string; libraries: number } | null;
   onClose(): void;
 }) {
+  const styles = useStyles();
   return (
     <BottomCard>
       <View style={styles.row}>
@@ -377,6 +396,7 @@ export function CircleRow({ kind, label, area, libraries, detail }: {
   libraries: number;
   detail?: string;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.circleRow} accessible accessibilityLabel={`${label} circle: ${area}, ${libraries} libraries. ${detail ?? ''}`}>
       <View style={[styles.swatch, kind === 'cleared' ? styles.swatchCleared : styles.swatchReach]} />
@@ -397,6 +417,7 @@ export function HintCard({ title, body, actions, onDismiss }: {
   actions?: { label: string; onPress: () => void; primary?: boolean }[];
   onDismiss?: () => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.card, styles.hint]} accessibilityRole="summary">
       <View style={styles.row}>
@@ -431,6 +452,7 @@ export function HintCard({ title, body, actions, onDismiss }: {
 // --- Undo toast ---
 
 export function UndoToast({ message, onUndo }: { message: string; onUndo(): void }) {
+  const styles = useStyles();
   return (
     <View style={[styles.card, styles.toast]} accessibilityLiveRegion="polite">
       <Text style={styles.toastText}>{message}</Text>
@@ -443,7 +465,7 @@ export function UndoToast({ message, onUndo }: { message: string; onUndo(): void
 
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.card,
@@ -471,7 +493,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    color: colors.green,
+    color: colors.link,
     marginBottom: 1,
   },
   title: {
@@ -536,7 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
   },
   primaryButtonText: {
-    color: '#fff',
+    color: colors.onGreen,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -578,7 +600,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     alignItems: 'flex-start',
-    backgroundColor: '#fff4dc',
+    backgroundColor: colors.amberTint,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -682,4 +704,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-});
+}));

@@ -18,7 +18,7 @@ import { LatLng, Library, VisitSummary } from '../types';
 import { freshnessFor } from '../store/freshness';
 import { circleRing, GeoCircle } from '../geo/circles';
 import { MAP_MARKER_IMAGES } from './markerImages';
-import { colors } from '../ui/theme';
+import { usePalette } from '../ui/theme';
 
 /**
  * The only module that imports the map library (docs/maps.md). Swapping map providers
@@ -33,6 +33,7 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
 // Mapbox Standard, configured to stay out of the way of our markers (docs/ux.md).
 const MAP_STYLE = 'mapbox://styles/mapbox/standard';
+// Night lighting in dark mode (docs/ux.md "Dark mode").
 const BASEMAP_CONFIG = {
   theme: 'faded',
   lightPreset: 'day',
@@ -41,6 +42,7 @@ const BASEMAP_CONFIG = {
   show3dObjects: false,
   show3dBuildings: false,
 } as const;
+const BASEMAP_CONFIG_NIGHT = { ...BASEMAP_CONFIG, lightPreset: 'night' } as const;
 
 const FOLLOW_ZOOM = 16;
 /** How long the camera must be still before the visible region is reported (and loaded). */
@@ -144,6 +146,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
   },
   ref
 ) {
+  const colors = usePalette();
   const cameraRef = useRef<React.ElementRef<typeof Camera>>(null);
   const sourceRef = useRef<ShapeSource>(null);
 
@@ -386,7 +389,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       }}
       onPress={onMapPress}
     >
-      <StyleImport id="basemap" existing config={BASEMAP_CONFIG} />
+      <StyleImport id="basemap" existing config={colors.dark ? BASEMAP_CONFIG_NIGHT : BASEMAP_CONFIG} />
       <Images images={MAP_MARKER_IMAGES} />
 
       <Camera
@@ -491,7 +494,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
           style={{
             iconImage: [
               'concat',
-              'cluster-',
+              colors.clusterImage,
               ['to-string', ['floor', ['/', ['*', 8, ['-', ['get', 'point_count'], ['get', 'unvisited']]], ['get', 'point_count']]]],
             ],
             // 32 to 40 dp: bigger badges would overlap their neighbours at the grouping distance.
@@ -546,9 +549,9 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         <CircleLayer
           id="walk-stop-badges"
           style={{
-            circleColor: ['match', ['get', 'state'], 'done', '#ffffff', 'skipped', '#c9cfc9', colors.green],
+            circleColor: ['match', ['get', 'state'], 'done', colors.surface, 'skipped', colors.dark ? colors.grab : '#c9cfc9', colors.green],
             circleRadius: ['case', ['==', ['get', 'state'], 'next'], 14, 12],
-            circleStrokeColor: ['match', ['get', 'state'], 'done', colors.green, '#ffffff'],
+            circleStrokeColor: ['match', ['get', 'state'], 'done', colors.green, colors.surface],
             circleStrokeWidth: ['match', ['get', 'state'], 'done', 2.5, 2],
           }}
         />
@@ -557,7 +560,7 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
           style={{
             textField: ['get', 'label'],
             textSize: ['case', ['==', ['get', 'state'], 'next'], 14, 12],
-            textColor: ['match', ['get', 'state'], 'done', colors.green, 'skipped', colors.inkSoft, '#ffffff'],
+            textColor: ['match', ['get', 'state'], 'done', colors.link, 'skipped', colors.inkSoft, colors.onGreen],
             textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
             textAllowOverlap: true,
             textIgnorePlacement: true,

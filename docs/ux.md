@@ -193,9 +193,17 @@ Mockup: `docs/ux/shared-visits-mockup.html`. On by default.
 - **Drawer line**: "Last seen by a reader 21 days ago" or, in amber, "Reported not there yesterday", whichever is newer; only if it's after your own last visit, never your own report, and within a year (60 days for "not there", which is also ignored within 30 days after someone saw the library). Last-seen dates come from `GET /v1/sightings` at most daily (`sightings` table).
 - **Share what I find** switch at the bottom of My visits; turning it off drops anything unsent.
 
+### 12. Dark mode (2026-11-11)
+
+Mockup: `docs/ux/dark-mode-mockup.html`. The app follows the phone's light or dark setting; there's no switch in the app.
+
+- Colours are the website's dark tokens (`ui/theme.ts`: `usePalette()` for the palette, `makeStyles()` for styles built once per theme). Green buttons get dark text (`onGreen`: white on the brighter green is too faint); green text and icons on cards use `link` (light green).
+- The map uses Mapbox Standard's `night` light preset (still `faded`). Library markers keep their colours; group badges use `cluster-dark-N` images with a dark centre (`npm run build:markers`).
+- Hints, the streak card, toasts and status pills keep their dark backgrounds and white text in both.
+- `userInterfaceStyle: automatic` in app.json, so Android's dialogs and date picker follow the phone too; the splash screen has a dark background (both need a new build).
+
 ## Later (not in this pass)
 
-- Dark mode (Mapbox Standard's night light preset).
 - Route planning on the device along streets (offline OpenStreetMap routing): weeks of work and large downloads for a nicer line; the Mapbox route covers it online.
 
 ## Decisions (2026-10-07)

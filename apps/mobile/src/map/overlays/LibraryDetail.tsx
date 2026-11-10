@@ -18,7 +18,7 @@ import { Freshness, Library, Visit, VisitSummary } from '../../types';
 import { describeDoors, describeVisits, relativeDay } from '../../store/freshness';
 import { visitedToday } from '../../store/nearby';
 import { formatDistance } from '../../geo/bearing';
-import { colors, radius, TOUCH } from '../../ui/theme';
+import { radius, TOUCH, makeStyles, usePalette } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
 type Props = {
@@ -107,6 +107,8 @@ function DetailContent({
   onClose,
   onHeightChange,
 }: Props & { library: Library }) {
+  const styles = useStyles();
+  const colors = usePalette();
   const [menuOpen, setMenuOpen] = useState(false);
   const [lastDeleted, setLastDeleted] = useState<Visit | null>(null);
   // The date the past-visit picker opened on (iOS). Fixed while it's open: a new value re-renders
@@ -347,6 +349,8 @@ function Action({ icon, label, caption, hint, onPress }: {
   hint?: string;
   onPress(): void;
 }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <Pressable
       onPress={onPress}
@@ -363,7 +367,7 @@ function Action({ icon, label, caption, hint, onPress }: {
 
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -386,7 +390,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',
@@ -396,7 +400,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 56,
     right: 66,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.line,
@@ -472,7 +476,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   linkInRow: {
-    color: colors.green,
+    color: colors.link,
     fontWeight: '600',
   },
   linkDot: {
@@ -493,7 +497,7 @@ const styles = StyleSheet.create({
   doorsText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.green,
+    color: colors.link,
   },
   doneButton: {
     minHeight: TOUCH - 4,
@@ -507,11 +511,11 @@ const styles = StyleSheet.create({
   doneText: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.green,
+    color: colors.link,
   },
   linkCentered: {
     textAlign: 'center',
-    color: colors.green,
+    color: colors.link,
     fontWeight: '600',
     marginTop: 12,
   },
@@ -529,7 +533,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 64,
     borderRadius: 16,
-    backgroundColor: '#f3f0e8',
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
@@ -602,4 +606,4 @@ const styles = StyleSheet.create({
     color: colors.toastAction,
     fontWeight: '700',
   },
-});
+}));

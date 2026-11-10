@@ -10,7 +10,7 @@ function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <StatusBar style="dark" />
+        <StatusBar style="auto" />
         <MapScreen />
       </ErrorBoundary>
     </SafeAreaProvider>

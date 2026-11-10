@@ -6,7 +6,7 @@ import { MarkerIcon } from './cards';
 import { sendFeedback } from '../../feedback';
 import { FRESHNESS_LABELS } from '../../store/freshness';
 import { Freshness } from '../../types';
-import { colors } from '../../ui/theme';
+import { makeStyles, usePalette } from '../../ui/theme';
 
 const STATES: Freshness[] = ['never', 'fresh', 'recent', 'old'];
 
@@ -15,6 +15,8 @@ export const REGISTER_LIBRARY_URL = 'https://streetlibrary.org.au/';
 
 /** Map legend plus a few lines on what the app does. */
 export default function MapKey({ visible, onClose }: { visible: boolean; onClose(): void }) {
+  const styles = useStyles();
+  const colors = usePalette();
   return (
     <FloatingPanel visible={visible} onClose={onClose}>
       <View style={styles.header}>
@@ -82,7 +84,7 @@ export default function MapKey({ visible, onClose }: { visible: boolean; onClose
 
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,7 +141,7 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 3,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -162,7 +164,7 @@ const styles = StyleSheet.create({
   feedbackText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.green,
+    color: colors.link,
   },
   heading: {
     fontSize: 17,
@@ -179,8 +181,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   link: {
-    color: colors.green,
+    color: colors.link,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
-});
+}));

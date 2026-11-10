@@ -10,7 +10,7 @@ import { isDue } from '../../store/nearby';
 import { bearingDegrees, compassPoint, formatDistance } from '../../geo/bearing';
 import { estimateRange, extraMeters, FAR_EXTRA_METERS, MAX_WALK_STOPS, WALK_DETOUR } from '../../geo/walk';
 import { estimatePlan, PlannedWalk } from '../routing';
-import { colors, radius, TOUCH } from '../../ui/theme';
+import { radius, TOUCH, makeStyles, usePalette } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
 /** The list shows this many libraries (the nearest, or the least extra walking). */
@@ -114,6 +114,8 @@ function ListContent({
   onShowRoute,
   onClose,
 }: Props) {
+  const styles = useStyles();
+  const colors = usePalette();
   const planning = draft !== null;
   const [choosingStart, setChoosingStart] = useState(false);
   const [pickingLibrary, setPickingLibrary] = useState(false);
@@ -183,7 +185,7 @@ function ListContent({
       >
         {planning && !pickingLibrary && (
           <View style={[styles.check, checked && styles.checkOn]}>
-            {checked && <Ionicons name="checkmark" size={16} color="#fff" />}
+            {checked && <Ionicons name="checkmark" size={16} color={colors.onGreen} />}
           </View>
         )}
         <MarkerIcon freshness={freshnessFor(summary, now)} size={22} />
@@ -230,7 +232,7 @@ function ListContent({
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
           >
             <View style={[styles.check, styles.checkOn]}>
-              <Ionicons name="checkmark" size={16} color="#fff" />
+              <Ionicons name="checkmark" size={16} color={colors.onGreen} />
             </View>
             <MarkerIcon freshness={freshnessFor(summary, now)} size={22} />
             <View style={styles.grow}>
@@ -395,6 +397,7 @@ function ListContent({
 }
 
 function Choice({ label, note, on, disabled, onPress }: { label: string; note: string; on: boolean; disabled?: boolean; onPress(): void }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -419,6 +422,7 @@ export function Option<T extends string>({ label, value, choices, onChange }: {
   choices: [T, string][];
   onChange(value: T): void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.option}>
       <Text style={styles.optionLabel}>{label}</Text>
@@ -441,7 +445,7 @@ export function Option<T extends string>({ label, value, choices, onChange }: {
 
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   fill: {
     flexShrink: 1,
   },
@@ -463,7 +467,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',
@@ -476,7 +480,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   link: {
-    color: colors.green,
+    color: colors.link,
     fontWeight: '600',
   },
   startRow: {
@@ -490,7 +494,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
   startLabel: {
     fontSize: 12,
@@ -553,7 +557,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
   mapButtonText: {
     fontSize: 14,
@@ -562,7 +566,7 @@ const styles = StyleSheet.create({
   },
   segments: {
     flexDirection: 'row',
-    backgroundColor: '#f1eee6',
+    backgroundColor: colors.muted,
     borderRadius: radius.pill,
     padding: 3,
     marginHorizontal: 18,
@@ -577,7 +581,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentOn: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     elevation: 1,
   },
   segmentText: {
@@ -665,12 +669,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#f1eee6',
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pick: {
-    color: colors.green,
+    color: colors.link,
     fontWeight: '700',
   },
   empty: {
@@ -715,4 +719,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
   },
-});
+}));

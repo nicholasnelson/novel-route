@@ -76,25 +76,29 @@ for (const state of Object.keys(STATES)) {
     }
   }
 }
-// Cluster badges: a white disc in a ring that is green for the share of libraries visited (in
-// eighths, rounded down) and amber for the rest. 54 dp at icon size 1; the map scales them by count.
+// Cluster badges: a white disc (dark in dark mode, cluster-dark-N) in a ring that is green for the
+// share of libraries visited (in eighths, rounded down) and amber for the rest. 54 dp at icon size 1;
+// the map scales them by count.
 const CLUSTER_SIZE = 54;
-function clusterSvg(eighths) {
+const CLUSTER_FILLS = { cluster: '#ffffff', 'cluster-dark': '#1c201c' };
+function clusterSvg(eighths, fill) {
   const c = CLUSTER_SIZE / 2;
   const r = 23.5;
   const circumference = 2 * Math.PI * r;
   const green = (circumference * eighths) / 8;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CLUSTER_SIZE} ${CLUSTER_SIZE}" width="${CLUSTER_SIZE}" height="${CLUSTER_SIZE}">
-  <circle cx="${c}" cy="${c}" r="${r}" fill="#ffffff" stroke="${STATES.never.body}" stroke-width="5"/>
+  <circle cx="${c}" cy="${c}" r="${r}" fill="${fill}" stroke="${STATES.never.body}" stroke-width="5"/>
   ${eighths > 0 ? `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#1f8f3a" stroke-width="5" stroke-dasharray="${green.toFixed(2)} ${circumference.toFixed(2)}" transform="rotate(-90 ${c} ${c})"/>` : ''}
 </svg>`;
 }
-for (let eighths = 0; eighths <= 8; eighths++) {
-  const svg = clusterSvg(eighths);
-  for (const scale of SCALES) {
-    const png = new Resvg(svg, { fitTo: { mode: 'width', value: CLUSTER_SIZE * scale } }).render().asPng();
-    const suffix = scale === 1 ? '' : `@${scale}x`;
-    writeFileSync(join(OUT_DIR, `cluster-${eighths}${suffix}.png`), png);
+for (const [name, fill] of Object.entries(CLUSTER_FILLS)) {
+  for (let eighths = 0; eighths <= 8; eighths++) {
+    const svg = clusterSvg(eighths, fill);
+    for (const scale of SCALES) {
+      const png = new Resvg(svg, { fitTo: { mode: 'width', value: CLUSTER_SIZE * scale } }).render().asPng();
+      const suffix = scale === 1 ? '' : `@${scale}x`;
+      writeFileSync(join(OUT_DIR, `${name}-${eighths}${suffix}.png`), png);
+    }
   }
 }
 

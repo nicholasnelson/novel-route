@@ -6,7 +6,7 @@
     "version": "1.3.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.novelroute"
@@ -42,7 +42,11 @@
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
-          "imageWidth": 240
+          "imageWidth": 240,
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#171a17"
+          }
         }
       ],
       "expo-sqlite",

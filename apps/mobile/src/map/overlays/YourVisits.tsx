@@ -6,7 +6,7 @@ import { CircleRow, MarkerIcon } from './cards';
 import { Freshness } from '../../types';
 import { describeStreak, Streak, streakNote } from '../../store/stats';
 import { relativeDay } from '../../store/freshness';
-import { colors, TOUCH } from '../../ui/theme';
+import { TOUCH, makeStyles, usePalette } from '../../ui/theme';
 import { S } from '../../ui/strings';
 
 export type CircleStat = { area: string; libraries: number };
@@ -40,6 +40,8 @@ export default function YourVisits(props: Props) {
 }
 
 function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, recent, now, sharing, onSharingChange, onShowCircles, onOpenLibrary, onClose }: Props) {
+  const styles = useStyles();
+  const colors = usePalette();
   const streakTitle = streak ? describeStreak(streak) : null;
   return (
     <View style={styles.fill}>
@@ -159,6 +161,7 @@ function VisitsContent({ streak, libraries, visits, thisMonth, cleared, reach, r
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
       <Text style={styles.statValue}>{value}</Text>
@@ -169,7 +172,7 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 const serif = Platform.select({ ios: 'Georgia', android: 'serif' });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   fill: {
     flexShrink: 1,
   },
@@ -190,7 +193,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',
@@ -259,7 +262,7 @@ const styles = StyleSheet.create({
   },
   stat: {
     flex: 1,
-    backgroundColor: '#f3f0e8',
+    backgroundColor: colors.muted,
     borderRadius: 14,
     paddingVertical: 10,
     alignItems: 'center',
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   circles: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 16,
@@ -304,7 +307,7 @@ const styles = StyleSheet.create({
     minHeight: TOUCH - 8,
   },
   linkText: {
-    color: colors.green,
+    color: colors.link,
     fontWeight: '600',
   },
   recent: {
@@ -344,7 +347,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   switchLabel: {
     fontSize: 15,
@@ -357,4 +360,4 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     marginTop: 2,
   },
-});
+}));

@@ -84,7 +84,7 @@ import {
   watchHeading,
   watchPosition,
 } from '../location/location';
-import { colors } from '../ui/theme';
+import { makeStyles, usePalette } from '../ui/theme';
 
 /** Starting view until we know where the user is: the whole of Australia. */
 const AUSTRALIA: LatLng = { latitude: -27.5, longitude: 134 };
@@ -153,6 +153,7 @@ function useStableCallback<A extends unknown[], R>(fn: (...args: A) => R): (...a
 }
 
 export default function MapScreen() {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const mapRef = useRef<LibraryMapHandle>(null);
@@ -1376,7 +1377,7 @@ export default function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.paper,
@@ -1412,4 +1413,4 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
   },
-});
+}));

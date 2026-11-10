@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, GestureResponderEvent, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, shadow } from '../../ui/theme';
+import { shadow, makeStyles, usePalette } from '../../ui/theme';
 
 const MAX_WIDTH = 560;
 /** Space left above the drawer when it's pulled all the way up. */
@@ -29,6 +29,7 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
   /** The height it settles at, for keeping the map clear of it. */
   onHeightChange?(height: number): void;
 }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -141,7 +142,7 @@ export default function BottomDrawer({ header, children, peek, resetKey, onClose
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
@@ -161,11 +162,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#d3ccbd',
+    backgroundColor: colors.grab,
     marginTop: 8,
   },
   scroll: {
     flexGrow: 0,
     flexShrink: 1,
   },
-});
+}));
