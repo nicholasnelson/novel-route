@@ -44,7 +44,13 @@ export class ApiError extends Error {
  */
 export function isConnectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  return err.name === 'AbortError' || (err instanceof TypeError && /network request failed/i.test(err.message));
+  return (
+    err.name === 'AbortError' ||
+    (err instanceof TypeError && /network request failed/i.test(err.message)) ||
+    // Expo's fetch rejects every network failure (offline, DNS, reset, cancelled, our own timeout
+    // aborting it) as "fetch failed: …"; error statuses come back as responses, not rejections.
+    err.message.startsWith('fetch failed')
+  );
 }
 
 export function tileFor(latitude: number, longitude: number): string {

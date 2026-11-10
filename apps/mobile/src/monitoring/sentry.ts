@@ -41,7 +41,18 @@ export function reportOnce(error: unknown) {
   const key = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   if (reported.has(key)) return;
   reported.add(key);
-  Sentry.captureException(error, { tags: { area: 'sync' } });
+  Sentry.captureException(error, { tags: { area: 'sync' }, fingerprint: ['sync', syncFingerprint(error)] });
+}
+
+/**
+ * Native module errors all have the same stack (expo-modules-core's CodedError constructor), so
+ * Sentry put unrelated problems in one issue (NOVEL-ROUTE-MOBILE-3). Group by the most specific
+ * "Caused by" line instead, with numbers taken out so one problem stays one issue.
+ */
+export function syncFingerprint(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const lines = message.split('\n').map((line) => line.replace(/^→ Caused by: /, '').trim()).filter(Boolean);
+  return (lines[lines.length - 1] ?? '').replace(/\d+/g, 'N').slice(0, 120);
 }
 
 export const wrapApp = Sentry.wrap;

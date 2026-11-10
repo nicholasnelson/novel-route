@@ -121,6 +121,19 @@ describe('refreshTiles (server mode)', () => {
     expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: false, pending: [], failed: [ADELAIDE, NORTH] });
     expect(mockReportOnce).not.toHaveBeenCalled();
   });
+
+  it("does not report Expo fetch's network failures (NOVEL-ROUTE-MOBILE-3)", async () => {
+    const { refreshTiles, isConnectionError } = loadSync('https://api.example');
+    const db = await createTestDb();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch = jest.fn()
+      .mockRejectedValueOnce(new Error('fetch failed: java.net.UnknownHostException: Unable to resolve host "api.novelroute.app"'))
+      .mockRejectedValueOnce(new Error('fetch failed: The operation was aborted.')) as unknown as typeof fetch;
+    expect(await refreshTiles(db, [ADELAIDE, NORTH], NOW)).toEqual({ updated: false, pending: [], failed: [ADELAIDE, NORTH] });
+    expect(mockReportOnce).not.toHaveBeenCalled();
+    expect(isConnectionError(new Error('fetch failed: Fetch request has been canceled'))).toBe(true);
+    expect(isConnectionError(new Error('Tile request failed: HTTP 500'))).toBe(false);
+  });
 });
 
 describe('refreshSnapshot', () => {
