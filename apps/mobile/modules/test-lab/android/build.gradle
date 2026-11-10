@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.novelroute'
+version = '1.0.0'
+
+android {
+  namespace "app.novelroute.testlab"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}

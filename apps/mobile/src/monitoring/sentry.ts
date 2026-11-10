@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react-native';
 import { scrubDeep } from '@novel-route/shared';
+import { isTestLab } from '../../modules/test-lab';
 
 /**
  * Crash reporting (errors only). Not secret: the DSN only allows sending events to this project.
@@ -12,6 +13,9 @@ export function initMonitoring() {
   Sentry.init({
     dsn: SENTRY_DSN,
     enabled: !__DEV__,
+    // Google Play's pre-launch test devices (US, emulated) report under their own environment, so
+    // alert rules set to "production" leave them out.
+    environment: isTestLab() ? 'prelaunch' : 'production',
     // Privacy: no IP address, user details or request bodies; no replays, screenshots or tracing.
     sendDefaultPii: false,
     attachScreenshot: false,
