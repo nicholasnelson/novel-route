@@ -1,4 +1,5 @@
-import { Platform, useColorScheme, ViewStyle } from 'react-native';
+import { useSyncExternalStore } from 'react';
+import { Appearance, AppState, Platform, TurboModuleRegistry, ViewStyle, type TurboModule } from 'react-native';
 
 /**
  * Shared visual language, matching the website (site/styles.css). The app follows the phone's
@@ -73,9 +74,45 @@ const dark: Palette = {
   dark: true,
 };
 
+/**
+ * The phone's setting. Appearance caches it and only updates on the activity's configuration
+ * changes, so after leaving with Back, changing the setting and reopening (same JS, new activity)
+ * it stays stale (seen on Android 16). The native module reads the current activity, so it's
+ * asked again whenever the app comes back to the front.
+ */
+const NativeAppearance = TurboModuleRegistry.get<TurboModule & { getColorScheme(): string | null }>('Appearance');
+let dark_ = Appearance.getColorScheme() === 'dark';
+
+function readScheme(): boolean {
+  try {
+    const scheme = NativeAppearance?.getColorScheme() ?? Appearance.getColorScheme();
+    return scheme === 'dark';
+  } catch {
+    return dark_;
+  }
+}
+
+const listeners = new Set<() => void>();
+
+function update(next: boolean) {
+  if (next === dark_) return;
+  dark_ = next;
+  listeners.forEach((listener) => listener());
+}
+
+Appearance.addChangeListener(({ colorScheme }) => update(colorScheme === 'dark'));
+AppState.addEventListener('change', (state) => { if (state === 'active') update(readScheme()); });
+
+function subscribeToScheme(onChange: () => void) {
+  listeners.add(onChange);
+  return () => { listeners.delete(onChange); };
+}
+
+const isDark = () => dark_;
+
 /** The palette for the phone's current light or dark setting. */
 export function usePalette(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+  return useSyncExternalStore(subscribeToScheme, isDark) ? dark : light;
 }
 
 /**
