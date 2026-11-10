@@ -473,21 +473,29 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
         ref={sourceRef}
         shape={shape}
         cluster={!walk}
-        clusterRadius={30}
-        clusterMaxZoomLevel={11}
+        // Only libraries whose markers would overlap (about 18 dp wide zoomed out) are grouped, at
+        // any zoom up to street level; from 16 every library is its own marker.
+        clusterRadius={20}
+        clusterMaxZoomLevel={15}
         clusterProperties={{ unvisited: ['+', ['get', 'unvisited']] }}
         onPress={handlePress}
         // Larger than the marker: 44 dp is about a fingertip (the marker art is smaller).
         hitbox={{ width: 44, height: 52 }}
       >
-        <CircleLayer
+        {/* The ring shows the share visited, in eighths rounded down (all green only when every
+            library in the group is visited). */}
+        <SymbolLayer
           id="library-clusters"
           filter={['has', 'point_count']}
           style={{
-            circleColor: '#ffffff',
-            circleRadius: ['step', ['get', 'point_count'], 15, 10, 18, 50, 22, 200, 27],
-            circleStrokeWidth: 3,
-            circleStrokeColor: ['case', ['>', ['get', 'unvisited'], 0], colors.amber, colors.green],
+            iconImage: [
+              'concat',
+              'cluster-',
+              ['to-string', ['floor', ['/', ['*', 8, ['-', ['get', 'point_count'], ['get', 'unvisited']]], ['get', 'point_count']]]],
+            ],
+            iconSize: ['step', ['get', 'point_count'], 0.68, 10, 0.8, 50, 0.96, 200, 1.16],
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
           }}
         />
         <SymbolLayer

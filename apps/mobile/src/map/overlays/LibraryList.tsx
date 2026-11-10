@@ -412,7 +412,8 @@ function Choice({ label, note, on, disabled, onPress }: { label: string; note: s
   );
 }
 
-function Option<T extends string>({ label, value, choices, onChange }: {
+/** A labelled row of choices (Order, Finish); also on the pick-on-map card. */
+export function Option<T extends string>({ label, value, choices, onChange }: {
   label: string;
   value: T;
   choices: [T, string][];

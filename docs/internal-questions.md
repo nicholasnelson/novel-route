@@ -19,6 +19,17 @@ worth looking harder. (2026-11-10)
 - A "Couldn't find it" button could go with it, as a count shown to others and maybe a report to
   Street Library (see the held `feature/add-missing-library` branch for the email approach).
 - Opt-in or on by default? Data safety and the privacy policy change either way.
+- Play Data safety (checked 2026-11-10 against Google's Data safety help, answer 10787469):
+  sending reports is "collection" (data transmitted off the device). Anonymity doesn't exempt
+  collection (only sharing), and storing a last-seen date per library isn't "ephemeral". It
+  would be **Location > Precise location** (an exact public place on a date; under 3 km²),
+  **collected, not shared** (our own server; Cloudflare is a service provider), purpose **App
+  functionality**, and **optional** only if everyone can turn it off. Precise location is
+  already declared (walks from your position), so the form gains a use, not a data type, but
+  its "only when planning a walk" wording in `docs/release-plan.md` changes.
+- Play's location policy wants a prominent in-app disclosure when collection isn't within the
+  user's reasonable expectation: show a one-off card at the first visit saying what's sent, with
+  the switch to turn it off.
 
 ## Donations
 

@@ -51,6 +51,20 @@ export function relativeDay(timestamp: number, now: number): string {
   return `${Math.floor(days / 365)} years ago`;
 }
 
+/**
+ * Where a visited library's doors are and when they next close a little, for the drawer:
+ * "Doors wide open for 4 more days", "Doors half open until tomorrow". Null if never visited.
+ */
+export function describeDoors(summary: VisitSummary | undefined, now: number): string | null {
+  const freshness = freshnessFor(summary, now);
+  if (freshness === 'never' || !summary) return null;
+  if (freshness === 'old') return 'Doors just ajar: time for another visit';
+  const days = freshness === 'fresh' ? FRESHNESS_THRESHOLDS.freshDays : FRESHNESS_THRESHOLDS.recentDays;
+  const daysLeft = localDayNumber(summary.lastVisitedAt + days * DAY_MS) - localDayNumber(now);
+  const left = daysLeft <= 0 ? 'until later today' : daysLeft === 1 ? 'until tomorrow' : `for ${daysLeft} more days`;
+  return `Doors ${freshness === 'fresh' ? 'wide open' : 'half open'} ${left}`;
+}
+
 /** Short status for cards: "Not visited yet" / "Last visited 3 days ago". */
 export function describeLastVisit(summary: VisitSummary | undefined, now: number): string {
   if (!summary || summary.visitCount === 0) return 'Not visited yet';

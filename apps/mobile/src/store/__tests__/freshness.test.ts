@@ -1,4 +1,4 @@
-import { describeLastVisit, describeVisits, freshnessFor, relativeDay } from '../freshness';
+import { describeDoors, describeLastVisit, describeVisits, freshnessFor, relativeDay } from '../freshness';
 import { VisitSummary } from '../../types';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -24,6 +24,17 @@ describe('freshnessFor', () => {
     expect(freshnessFor(summary(7), NOW)).toBe('recent');
     expect(freshnessFor(summary(29.9), NOW)).toBe('recent');
     expect(freshnessFor(summary(30), NOW)).toBe('old');
+  });
+});
+
+describe('describeDoors', () => {
+  it('counts down to the doors closing a little more', () => {
+    expect(describeDoors(undefined, NOW)).toBeNull();
+    expect(describeDoors(summary(3), NOW)).toBe('Doors wide open for 4 more days');
+    expect(describeDoors(summary(6), NOW)).toBe('Doors wide open until tomorrow');
+    expect(describeDoors(summary(6.5), NOW)).toBe('Doors wide open until later today');
+    expect(describeDoors(summary(18), NOW)).toBe('Doors half open for 12 more days');
+    expect(describeDoors(summary(45), NOW)).toBe('Doors just ajar: time for another visit');
   });
 });
 

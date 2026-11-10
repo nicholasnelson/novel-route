@@ -5,7 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { LatLng, Library, Visit, VisitSource, VisitSummary } from '../types';
 import LibraryMap, { CirclesOverlay, LibraryMapHandle, MapRegion, WalkOverlay } from './LibraryMap';
 import LibraryDetail from './overlays/LibraryDetail';
-import LibraryList, { estimateDraft, RouteRequest, StartChoice, startPointFor, toggleStop, WalkDraft } from './overlays/LibraryList';
+import LibraryList, { estimateDraft, Option, RouteRequest, StartChoice, startPointFor, toggleStop, WalkDraft } from './overlays/LibraryList';
 import MapKey from './overlays/MapKey';
 import YourVisits, { RecentVisit } from './overlays/YourVisits';
 import {
@@ -922,6 +922,14 @@ export default function MapScreen() {
       <WalkPickCard
         count={pickEstimate?.stops.length ?? 0}
         range={pickEstimate ? estimateRange(pickEstimate.plan.meters / WALK_DETOUR) : null}
+        options={draft.stops.length > 0 && (
+          <Option<'start' | 'last'>
+            label={S.planner.finish}
+            value={draft.finish}
+            choices={[['start', S.planner.whereStarted], ['last', S.planner.lastLibrary]]}
+            onChange={(finish) => changeDraft(() => ({ finish }))}
+          />
+        )}
         onClose={() => setList(null)}
         onList={() => setList((current) => current && { ...current, onMap: false })}
         onShowRoute={() => showRoute({ ids: draft.stops, start: { ...start, point: plannerStart }, order: draft.order, finish: draft.finish })}
@@ -1032,7 +1040,7 @@ export default function MapScreen() {
     bottomCard = (
       <HintCard
         title="The doors are open"
-        body="Marking a visit opens a library's doors. They slowly close over the months, a reminder that there might be new books to find."
+        body="Marking a visit opens a library's doors. They stay wide open for a week, half open for a month, then just ajar: a reminder there might be new books to find."
         onDismiss={() => seeHint('doors')}
       />
     );
@@ -1192,6 +1200,7 @@ export default function MapScreen() {
           if (!detailLibrary) return;
           openPlanner({ kind: 'library', libraryId: detailLibrary.id }, newDraft([detailLibrary.id]));
         }}
+        onMapKey={() => setMapKeyOpen(true)}
         onClose={deselectLibrary}
         onHeightChange={handleDrawerHeight}
       />

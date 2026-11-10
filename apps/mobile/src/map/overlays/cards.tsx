@@ -223,10 +223,12 @@ export function WalkPlanCard({ stops, order, back, onStreets, meters, range, wal
 }
 
 /** Picking a walk's libraries on the map: how it adds up so far, back to the list, or the route. */
-export function WalkPickCard({ count, range, onClose, onList, onShowRoute }: {
+export function WalkPickCard({ count, range, options, onClose, onList, onShowRoute }: {
   count: number;
   /** Straight-line estimate, or null with nothing picked yet. */
   range: [number, number] | null;
+  /** Choices shown once something is picked (Finish). */
+  options?: React.ReactNode;
   onClose(): void;
   onList(): void;
   onShowRoute(): void;
@@ -238,6 +240,7 @@ export function WalkPickCard({ count, range, onClose, onList, onShowRoute }: {
           ? S.planner.pickEstimate(S.visits.libraries(count), `${formatDistance(range[0])}–${formatDistance(range[1])}`)
           : S.planner.tickUpTo(MAX_WALK_STOPS)}
       </Text>
+      {options && <View style={styles.pickOptions}>{options}</View>}
       <View style={[styles.buttons, styles.pickButtons]}>
         <RoundButton icon="close" label={S.planner.close} onPress={onClose} />
         <SecondaryButton label={S.planner.list} icon="list" onPress={onList} style={styles.flex} />
@@ -564,6 +567,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     color: colors.inkSoft,
+  },
+  pickOptions: {
+    marginTop: 10,
   },
   pickButtons: {
     marginTop: 10,

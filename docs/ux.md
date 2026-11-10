@@ -174,6 +174,15 @@ Mockup: `docs/ux/planner-v2-mockup.html`. Replaces the preview card (§2), the m
 - **Routes from you**: the Mapbox request now starts at the walk's start point (your position, or the fixed middle of the map), so the way to the first library and the way home follow footpaths instead of dashed straight guesses. Your position is sent once per plan; "As I go" re-plans start from the library you're at. The privacy policy (effective 26 October 2026) and the Data safety answers in `docs/release-plan.md` say so.
 - **To visit** (due) is now any library not visited in the last **7 days** (`DUE_AFTER_DAYS`, was 30). The doors now follow the same week: wide open under 7 days (not yet due), half open to 30 days, then just ajar (`FRESHNESS_THRESHOLDS`, was 30 days and 6 months).
 
+### 10. Door timings, finish on the pick card, cluster rings (2026-11-10)
+
+Mockup: `docs/ux/feedback-nov-mockup.html`, from closed-test feedback (`docs/testing-log.md`).
+
+- **Door timings**: the hint after your first visit gives the real timings (wide open for a week, half open for a month, then ajar; it said "over the months"). The library drawer has a line under "Last visited" counting down to the next change, "Doors wide open for 4 more days" / "until tomorrow" / "until later today", "Doors half open for 12 more days", "Doors just ajar: time for another visit" (`freshness.ts` `describeDoors`, calendar days). Tapping it opens the map key.
+- **Finish on the pick card**: once a library is picked on the map, the card has the same **Finish: Where I started / Last library** choice as the list (shared draft).
+- **Clusters**: a white badge whose ring is green for the share of libraries visited, in eighths rounded down, and amber for the rest (images `cluster-0…8` from `npm run build:markers`). Grouping only where markers would overlap: radius 20 dp (was 30), up to zoom 15 (was 11).
+- **Map view kept**: when the app goes to the background it saves where the map was looking (`kv` `map_camera`); if Android closed it and you come back within an hour, the map opens there instead of jumping to you.
+
 ## Later (not in this pass)
 
 - Dark mode (Mapbox Standard's night light preset).

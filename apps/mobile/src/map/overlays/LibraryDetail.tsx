@@ -15,7 +15,7 @@ import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@rea
 import BottomDrawer from './BottomDrawer';
 import { MarkerIcon, PrimaryButton } from './cards';
 import { Freshness, Library, Visit, VisitSummary } from '../../types';
-import { describeVisits, relativeDay } from '../../store/freshness';
+import { describeDoors, describeVisits, relativeDay } from '../../store/freshness';
 import { visitedToday } from '../../store/nearby';
 import { formatDistance } from '../../geo/bearing';
 import { colors, radius, TOUCH } from '../../ui/theme';
@@ -42,6 +42,8 @@ type Props = {
   onDirections(): void;
   /** Plan a walk that starts (and finishes) at this library. */
   onWalkFromHere(): void;
+  /** Opens the map key (from the doors line). */
+  onMapKey(): void;
   onClose(): void;
   /** The height the drawer settles at, for keeping the library clear of it on the map. */
   onHeightChange?(height: number): void;
@@ -88,6 +90,7 @@ function DetailContent({
   onClearHistory,
   onDirections,
   onWalkFromHere,
+  onMapKey,
   onClose,
   onHeightChange,
 }: Props & { library: Library }) {
@@ -112,6 +115,7 @@ function DetailContent({
   }, [freshness, bounce]);
 
   const today = visitedToday(summary, now);
+  const doors = describeDoors(summary, now);
 
   const confirmClear = () => {
     setMenuOpen(false);
@@ -191,7 +195,19 @@ function DetailContent({
     <BottomDrawer header={header} peek={peek} resetKey={library.id} onClose={onClose} onHeightChange={onHeightChange}>
       <View style={styles.body}>
         <View onLayout={(e) => setPeek(e.nativeEvent.layout.y + e.nativeEvent.layout.height + 16)}>
-          <Text style={styles.status}>{describeVisits(summary, now)}</Text>
+          <Text style={[styles.status, doors && styles.statusWithDoors]}>{describeVisits(summary, now)}</Text>
+          {doors && (
+            <Pressable
+              onPress={onMapKey}
+              accessibilityRole="button"
+              accessibilityHint="Opens the map key"
+              hitSlop={6}
+              style={({ pressed }) => [styles.doors, pressed && styles.pressed]}
+            >
+              <Text style={styles.doorsText}>{doors}</Text>
+              <Ionicons name="help-circle-outline" size={17} color={colors.green} />
+            </Pressable>
+          )}
 
           {today ? (
             <View>
@@ -383,6 +399,22 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginTop: 8,
     marginBottom: 12,
+  },
+  statusWithDoors: {
+    marginBottom: 2,
+  },
+  doors: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  doorsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.green,
   },
   doneButton: {
     minHeight: TOUCH - 4,
