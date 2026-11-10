@@ -20,7 +20,7 @@ the track the feedback came through: Internal Test, Closed Test, Open Test or Pr
 | – | No survey: feedback was collected individually from testers (email, in-app *Send feedback*, conversations), and the features and fixes added during the test came from their stories of how they use street libraries. |
 | 2026-11-10 | 1.3.0 (build 20) approved for closed testing the same evening. |
 | 2026-11-10 | Production access applied for (16 testers; Google says reviews usually take up to 7 days). |
-| 2026-11-11 | 1.4.0 (build 24): dark mode and shorter wording; released to internal testers; closed-testing release saved, to be sent for review. Email to testers drafted (1.3.0 and 1.4.0 changes, production access applied for, feedback still welcome). |
+| 2026-11-11 | 1.4.0 (build 24): dark mode and shorter wording; released to internal testers; sent to Google for closed-testing review. Email to testers drafted (1.3.0 and 1.4.0 changes, production access applied for, feedback still welcome). |
 
 ## Feedback and changes
 
