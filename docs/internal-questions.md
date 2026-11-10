@@ -7,6 +7,19 @@ Public questions and answers live in the "Questions" section of the site (`apps/
 
 ---
 
+## "Last seen by someone" for libraries that may be gone
+
+A tester often finds libraries that no longer exist (Street Library removes them once the keeper
+can't be reached) and asked to see when another user last visited one: a recent visit means it's
+worth looking harder. (2026-11-10)
+
+- Visits are on-device only today, and the privacy policy says so. This would need the app to send
+  something per visit to our server: at most an anonymous "seen on <date>" per library, never a
+  history or anything that links visits together.
+- A "Couldn't find it" button could go with it, as a count shown to others and maybe a report to
+  Street Library (see the held `feature/add-missing-library` branch for the email approach).
+- Opt-in or on by default? Data safety and the privacy policy change either way.
+
 ## Donations
 
 Should there be a "buy me a coffee" style donation link, for people who appreciate the app on

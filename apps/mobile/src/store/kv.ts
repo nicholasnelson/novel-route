@@ -10,6 +10,8 @@ export const KV_KEYS = {
   snapshotRetryAt: 'snapshot_retry_at',
   /** "1" when the map shows only libraries due for a visit. */
   dueOnly: 'map_due_only',
+  /** Where the map was looking when the app last went to the background (JSON, `store/mapCamera.ts`). */
+  mapCamera: 'map_camera',
 } as const;
 
 export async function getKv(db: Db, key: string): Promise<string | null> {

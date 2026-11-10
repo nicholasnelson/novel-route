@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Mapbox, {
   Camera,
@@ -188,6 +188,20 @@ const LibraryMap = forwardRef<LibraryMapHandle, Props>(function LibraryMap(
       }, 50);
     },
   }));
+
+  // The starting view can arrive after the map is up (a saved view read from the database): jump to it.
+  const firstStartRef = useRef(true);
+  useEffect(() => {
+    if (firstStartRef.current) {
+      firstStartRef.current = false;
+      return;
+    }
+    cameraRef.current?.setCamera({
+      centerCoordinate: [initialCenter.longitude, initialCenter.latitude],
+      zoomLevel: initialZoom,
+      animationDuration: 0,
+    });
+  }, [initialCenter, initialZoom]);
 
   const walkStopIds = useMemo(() => new Set(walk?.stops.map((st) => st.id) ?? []), [walk]);
 

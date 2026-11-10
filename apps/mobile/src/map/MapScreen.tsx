@@ -49,6 +49,7 @@ import {
 } from '../store/visitLog';
 import { freshnessFor } from '../store/freshness';
 import { getKv, KV_KEYS, setKv } from '../store/kv';
+import { cameraToRestore, saveMapCamera } from '../store/mapCamera';
 import { streakFromVisits, visitsThisMonth } from '../store/stats';
 import { circleAreaKm2, circleRing, clearedCircle, formatArea, reachCircle } from '../geo/circles';
 import { estimateRange, googleMapsWalkUrl, isLongWalk, MINUTES_PER_LIBRARY, totalMinutes, WALK_DETOUR } from '../geo/walk';
@@ -157,6 +158,8 @@ export default function MapScreen() {
   const [heading, setHeading] = useState<Heading | null>(null);
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const [followUser, setFollowUser] = useState(true);
+  /** Where the map starts: Australia, or where it was left if the app was closed in the background. */
+  const [startCamera, setStartCamera] = useState({ center: AUSTRALIA, zoom: AUSTRALIA_ZOOM });
   const [requestingLocation, setRequestingLocation] = useState(false);
 
   /** The library whose drawer is open. */
@@ -318,7 +321,7 @@ export default function MapScreen() {
     (async () => {
       try {
         const database = await getDb();
-        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk] = await Promise.all([
+        const [libs, loaded, snapshot, visitSummaries, hints, perm, due, savedWalk, savedCamera] = await Promise.all([
           getAllLibraries(database),
           getLoadedTiles(database),
           hasSnapshot(database),
@@ -327,8 +330,14 @@ export default function MapScreen() {
           getLocationPermission(),
           getKv(database, KV_KEYS.dueOnly),
           loadWalk(database),
+          cameraToRestore(database, Date.now()),
         ]);
         if (cancelled) return;
+        // Set in the same render as the permission, so following never starts and jumps away.
+        if (savedCamera && !savedWalk?.walking) {
+          setFollowUser(false);
+          setStartCamera(savedCamera);
+        }
         setDueOnly(due === '1');
         walkRef.current = savedWalk;
         setWalk(savedWalk);
@@ -375,6 +384,16 @@ export default function MapScreen() {
     const sub = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
     return () => { clearInterval(timer); sub.remove(); };
   }, []);
+
+  // Remember the view when the app goes to the background, in case Android closes it there.
+  const saveCamera = useStableCallback(() => {
+    if (!db || !region) return;
+    saveMapCamera(db, { center: region.center, zoom: region.zoom, following: followUser, savedAt: Date.now() }).catch(() => {});
+  });
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'background') saveCamera(); });
+    return () => sub.remove();
+  }, [saveCamera]);
 
   // --- Location ---
 
@@ -1081,8 +1100,8 @@ export default function MapScreen() {
         allLoaded={snapshotReady}
         walk={pickOverlay ?? walkOverlay}
         circles={circlesShown ? circles : null}
-        initialCenter={AUSTRALIA}
-        initialZoom={AUSTRALIA_ZOOM}
+        initialCenter={startCamera.center}
+        initialZoom={startCamera.zoom}
         followUser={followUser}
         showUserLocation={locationGranted}
         showHeading={!!heading?.reliable}

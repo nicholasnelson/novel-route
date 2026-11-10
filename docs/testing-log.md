@@ -33,6 +33,11 @@ Newest last. "Build" is the first build with the change.
 | 2026-10-12 | Internal Test | Keeper descriptions were mostly stock filler and never needed (confirmed by a review of 60 random listings). | Descriptions removed from the app (still on the linked Street Library page); the whole-map download halves to ~210 KB. | 8 |
 | 2026-10-12 | Closed Test | "Looks awesome"; asked about iPhone. | None yet: iPhone noted for after the Android release. | – |
 | 2026-10-14 | Closed Test | Joining was hard: links opened in Facebook's built-in browser (not signed in to Google), people didn't realise joining the group was essential, and Play's delay before install was confusing. | Testers page rebuilt as a two-step checklist that explains why each step matters, asks people to confirm they joined, remembers progress, and in Facebook/Instagram/Messenger offers to reopen in Chrome. | (site) |
+| 2026-11-10 | Closed Test | Switching to another app and back sometimes moved the map to your position instead of where you were looking. | The map remembers where it was looking when the app goes to the background and goes back there if you return within an hour (Android often closes the app while you're in another one). | next |
+| 2026-11-10 | Closed Test | Asked how long each shade of green lasts. | None: answered (wide open under a week, half open under a month, then ajar); the map key already lists them. | – |
+| 2026-11-10 | Closed Test | "Pick on map" in the planner was found late but is what they wanted; they drive between libraries rather than walk ("travel" rather than "walk"?), and want walks to end at the last library. | None yet: "Finish: Last library" exists but only shows in the list view. Driving and wording noted. | – |
+| 2026-11-10 | Closed Test | Enjoyed seeing every visited library in their area on the planner's map, where markers aren't grouped as they are on the main map. | None yet: noted for clustering on the main map. | – |
+| 2026-11-10 | Closed Test | Often visits libraries that no longer exist; would like to see when another user last visited one. | None yet: needs shared visit data (visits stay on the phone today). See `docs/internal-questions.md`. | – |
 
 ## Other changes during testing
 
