@@ -16,7 +16,7 @@ export const S = {
   },
   sharing: {
     hintTitle: 'Help others find libraries',
-    hintBody: 'When you mark a visit (or that a library wasn’t there), Novel Route later tells our server which library and which day, to help other readers. No name, account or ID is sent. You can turn this off in My visits.',
+    hintBody: 'Visits you mark, and libraries that weren’t there, are shared anonymously (just the library and the day) so other readers know what’s still around. You can turn this off in My visits.',
     dontShare: 'Don’t share',
     ok: 'OK',
     notThere: 'Not there?',
