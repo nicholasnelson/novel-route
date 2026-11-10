@@ -155,7 +155,7 @@
     <tr><th>When</th><td>At least an hour after the visit, the next time the app is open, one request per visit (so the time you were there isn't sent, and visits aren't bundled together).</td></tr>
     <tr><th>Server keeps</th><td>Per library and month: a count and the latest date seen. No IP, no device, no list of reports. Rate-limited per IP; dates outside the last week and unknown libraries are rejected.</td></tr>
     <tr><th>App gets</th><td><code>GET /v1/sightings</code>: last-seen date for every library seen in the past year, checked daily with the snapshot (separate, so the snapshot isn't re-downloaded every day).</td></tr>
-    <tr><th>Couldn't find it</th><td>Same request with <code>kind: "missing"</code>. Server keeps the latest "missing" date per library. Shown as "Someone couldn't find it" only while it's newer than the last sighting. Not sent to Street Library yet: a weekly list for Mel can come later (with the reporting decision on the held branch).</td></tr>
+    <tr><th>Couldn't find it</th><td>Same request with <code>kind: "missing"</code>. Server keeps the latest "missing" date per library. Shown as "Someone couldn't find it" only while it's newer than the last sighting. Not sent to Street Library yet: a weekly list for Street Library can come later (with the reporting decision on the held branch).</td></tr>
     <tr><th>Popular libraries</th><td>The monthly counts are stored from day one; how to show them (a "Popular" tag, sorting in Nearby) is for later. Counts are rough: one person visiting often counts each time.</td></tr>
   </table>
 </header>

@@ -19,7 +19,7 @@ the track the feedback came through: Internal Test, Closed Test, Open Test or Pr
 |  | 12th tester opted in (14-day clock starts): _to fill in_ |
 | – | No survey: feedback was collected individually from testers (email, in-app *Send feedback*, conversations), and the features and fixes added during the test came from their stories of how they use street libraries. |
 | 2026-11-10 | 1.3.0 (build 20) approved for closed testing the same evening. |
-|  | Production access applied for: _to fill in_ (answers drafted in `docs/production-access.md`) |
+|  | Production access applied for: _to fill in_ |
 
 ## Feedback and changes
 
